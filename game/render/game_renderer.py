@@ -73,6 +73,11 @@ class GameRenderer:
             "symbol": "2X",
             "label": "TIRO DUPLO",
         },
+        "spread_shot": {
+            "color": colors.POWERUP_COLORS["spread_shot"],
+            "symbol": "5X",
+            "label": "LEQUE",
+        },
         "speed": {
             "color": colors.POWERUP_COLORS["speed"],
             "symbol": "V",
@@ -984,6 +989,11 @@ class GameRenderer:
         time_checks = [
             (ship.get_invulnerable_time(), "shield", 8.0),
             (ship.get_double_shot_time(), "double_shot", 10.0),
+            (
+                ship.get_spread_shot_time(),
+                "spread_shot",
+                Config.SPREAD_SHOT_DURATION,
+            ),
             (ship.get_speed_boost_time(), "speed", 8.0),
             (ship.mini_ships_timer, "mini_ships", 25.0),
             (ship.damage_boost_timer, "damage_boost", 8.0),

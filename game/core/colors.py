@@ -71,6 +71,7 @@ POWERUP_COOLDOWN_HASTE: Color = (0, 130, 217)  # azul-médio
 POWERUP_TIME_STOP: Color = (145, 87, 217)  # roxo
 POWERUP_CHAIN_SHOT: Color = (0, 195, 217)  # turquesa
 POWERUP_REPULSION_SHIELD: Color = (102, 255, 178)  # verde-menta
+POWERUP_SPREAD_SHOT: Color = (255, 150, 140)  # coral
 
 # Fonte ÚNICA da cor de cada power-up. Consumida pelo pickup no mundo
 # (`entities/pickups/powerup.py`) e pelo HUD (`render/game_renderer.py`), que
@@ -88,6 +89,7 @@ POWERUP_COLORS: dict[str, Color] = {
     "life": POWERUP_LIFE,
     "shield": POWERUP_SHIELD,
     "double_shot": POWERUP_DOUBLE_SHOT,
+    "spread_shot": POWERUP_SPREAD_SHOT,
     "speed": POWERUP_SPEED,
     "score": POWERUP_SCORE,
     "piercing_shot": POWERUP_PIERCING_SHOT,

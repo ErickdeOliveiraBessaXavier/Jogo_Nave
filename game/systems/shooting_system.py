@@ -21,7 +21,7 @@ from ..events import game_events as events
 
 if TYPE_CHECKING:
     from ..core.events import EventBus
-    from ..entities.player.ship import Ship
+    from ..entities.player.ship import BulletSpec, Ship
     from ..systems.entity_manager import EntityManager
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,6 @@ class ShootingSystem:
         # quanto tempo este disparo já era devido, e vira deslocamento inicial
         # das balas — ver `_apply_subframe_catchup`.
         overshoot = self._consume_shot(ship)
-        bullet_specs = ship.bullet_spawn()
         charge_factor = ship.consume_charge()
         adjusted_damage = _round_damage(
             Config.BULLET_BASE_DAMAGE
@@ -193,16 +192,29 @@ class ShootingSystem:
         is_charge_shot = ship.profile.has_charge_shot and charge_factor > 1.0
         if is_charge_shot:
             ship_id = getattr(ship.profile, "id", "")
+            # `apply_spread=False`: o charge shot não abre no leque do Spread
+            # Shot. Cada spec vira um projétil especial aqui — 5 lasers do
+            # Magneto ou 5x5 teleguiados do Caçador —, e esses já SÃO o
+            # "muitos de uma vez" da nave. O leque volta a valer no tiro
+            # normal, que é onde ele foi balanceado.
             if ship_id == "magneto":
                 self._fire_magneto_charge(
-                    ship, bullet_specs, adjusted_damage, charge_factor
+                    ship,
+                    ship.bullet_spawn(apply_spread=False),
+                    adjusted_damage,
+                    charge_factor,
                 )
                 return
             if ship_id == "cacador":
                 self._fire_cacador_charge(
-                    ship, bullet_specs, adjusted_damage, charge_factor
+                    ship,
+                    ship.bullet_spawn(apply_spread=False),
+                    adjusted_damage,
+                    charge_factor,
                 )
                 return
+
+        bullet_specs = ship.bullet_spawn()
 
         self._bus.emit(
             events.PlayerShot(
@@ -213,40 +225,47 @@ class ShootingSystem:
             )
         )
 
+        # Por DISPARO, não por bala: valem igualmente para a salva inteira, então
+        # o leque (e o Double Shot) recebem exatamente o mesmo tratamento que o
+        # tiro único — é o que faz Giant Shot valer para as cinco balas sem uma
+        # linha de código sobre leque aqui.
         size_mult = ship.bullet_size_multiplier
-        for (
-            x,
-            y,
-            direction,
-            is_piercing,
-            is_homing,
-            is_explosive,
-            is_low_ammo,
-        ) in bullet_specs:
+        fired_explosive = False
+
+        for spec in bullet_specs:
             # Tiros teleguiados levam multiplicador de dano direto. Combinados
             # com explosivo, o impacto direto fica mais forte (a explosão usa
             # EXPLOSIVE_BULLET_DAMAGE no collision system).
             bullet_damage = (
                 int(adjusted_damage * HOMING_DAMAGE_MULTIPLIER)
-                if is_homing
+                if spec.homing
                 else adjusted_damage
             )
             bullet = self._em.spawn_bullet(
-                x,
-                y,
+                spec.x,
+                spec.y,
                 damage=bullet_damage,
-                piercing=is_piercing,
-                homing=is_homing,
-                explosive=is_explosive,
-                low_ammo=is_low_ammo,
-                direction=direction,
+                piercing=spec.piercing,
+                homing=spec.homing,
+                explosive=spec.explosive,
+                low_ammo=spec.low_ammo,
+                direction=spec.direction,
                 ship_id=ship.profile.id,
                 owner_ship=ship,
                 size_multiplier=size_mult,
             )
             self._apply_subframe_catchup(bullet, overshoot)
-            if is_explosive:
-                ship.consume_explosive_shot()
+            fired_explosive = fired_explosive or spec.explosive
+
+        # Carga explosiva é gasta por DISPARO, não por bala. O upgrade entrega N
+        # cargas e o jogador as lê como N puxadas de gatilho; cobrando por bala,
+        # o MESMO upgrade duraria 10 disparos sozinho, 5 com Double Shot e 2 com
+        # o leque — o power-up de cobertura roubando munição do de dano, sem
+        # nada na tela explicando por quê. Cobrando por salva, todas as balas
+        # explodem (que é o ponto de combinar os dois) e a economia do upgrade
+        # deixa de depender de quais power-ups estão ativos junto.
+        if fired_explosive:
+            ship.consume_explosive_shot()
 
     # ------------------------------------------------------------------
     # Helpers privados
@@ -301,7 +320,7 @@ class ShootingSystem:
     def _fire_magneto_charge(
         self,
         ship: Ship,
-        bullet_specs: list[Any],
+        bullet_specs: list[BulletSpec],
         adjusted_damage: int,
         charge_factor: float,
     ) -> None:
@@ -340,7 +359,7 @@ class ShootingSystem:
     def _fire_cacador_charge(
         self,
         ship: Ship,
-        bullet_specs: list[Any],
+        bullet_specs: list[BulletSpec],
         adjusted_damage: int,
         charge_factor: float,
     ) -> None:

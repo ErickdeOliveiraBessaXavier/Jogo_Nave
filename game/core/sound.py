@@ -96,9 +96,16 @@ class SoundManager:
             self.transition_thread: threading.Thread | None = None
             self.transition_lock = threading.Lock()
             self.original_music_volume: float = self.music_volume
-            # Fator de ducking da música (1.0 = sem duck). Persistente: honrado em
-            # todo cálculo de volume, sobrevive ao avanço de rotação.
-            self.music_duck_factor: float = 1.0
+            # Fontes de ducking da música (vazio = sem duck). Precisa existir
+            # ATÉ sem áudio: `music_duck_factor` é property que lê este dict, e
+            # `music_target_volume` a consulta em todo cálculo de volume.
+            #
+            # Aqui havia `self.music_duck_factor = 1.0`, de quando o duck era um
+            # float único. Ao virar property sem setter, esta linha passou a
+            # levantar AttributeError — e ela roda justamente no `except` que
+            # deveria manter o jogo de pé sem placa de som, então a máquina sem
+            # áudio deixava de abrir o jogo em vez de abrir mudo.
+            self._music_ducks: dict[str, float] = {}
             self.music_manager = MusicManager(self)
             self.music_state_manager = self.music_manager.music_state_manager
             return

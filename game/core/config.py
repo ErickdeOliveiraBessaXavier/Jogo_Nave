@@ -41,6 +41,7 @@ class PowerUpType(Enum):
     LIFE = "life"
     SHIELD = "shield"
     DOUBLE_SHOT = "double_shot"
+    SPREAD_SHOT = "spread_shot"  # Leque de 5 tiros (ver SPREAD_SHOT_ANGLES)
     SPEED = "speed"
     SCORE = "score"
     RAINBOW = "rainbow"
@@ -147,6 +148,25 @@ class PowerUpConfig:
     POWERUP_SCORE_BONUS: int = 500
     SHIELD_DURATION: float = 8.0
     DOUBLE_SHOT_DURATION: float = 10.0
+    SPREAD_SHOT_DURATION: float = 8.0
+    # Leque do Spread Shot: deslocamentos angulares (graus) aplicados à direção
+    # base do disparo, do mais externo à esquerda ao mais externo à direita. O
+    # 0.0 do meio é o tiro central — a lista É a arma, mudar o leque é mudar
+    # esta tupla e nada mais.
+    #
+    # 8°/17° é a faixa que ainda lê como "mira": a 500px de distância os
+    # internos abrem ~70px e os externos ~150px para cada lado, o bastante para
+    # varrer um grupo sem que o jogador perca a noção de onde o tiro central
+    # vai cair. Acima de ~25° o leque vira cone de shotgun e a nave deixa de
+    # acertar qualquer coisa longe.
+    SPREAD_SHOT_ANGLES: Tuple[float, ...] = (-17.0, -8.0, 0.0, 8.0, 17.0)
+    # Custo de cadência do leque (multiplica `attack_speed_multiplier`).
+    # 5 projéteis a dano cheio e cadência cheia rendem 2,5x o DPS do tiro normal
+    # contra um alvo largo — mais que o DAMAGE_BOOST, que é o power-up
+    # explicitamente de dano. O -15% traz o pico para ~2,1x e deixa o leque
+    # pesar diferente na mão, em vez de ser um Double Shot estritamente melhor.
+    # Ganho real dele continua sendo cobertura contra grupos, não DPS de boss.
+    SPREAD_SHOT_FIRE_RATE_PENALTY: float = 0.85
     SPEED_BOOST_DURATION: float = 8.0
     RAINBOW_DURATION: float = 15.0
     PIERCING_SHOT_DURATION: float = 7.0

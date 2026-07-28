@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import math
 import random
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 import pygame
 
@@ -27,6 +28,41 @@ PARTICLE_THRUSTER_VELOCITY_X = Config.PARTICLE_THRUSTER_VELOCITY_X
 PARTICLE_THRUSTER_VELOCITY_Y = Config.PARTICLE_THRUSTER_VELOCITY_Y
 PARTICLE_THRUSTER_LIFETIME = Config.PARTICLE_THRUSTER_LIFETIME
 PARTICLE_THRUSTER_SIZE = Config.PARTICLE_THRUSTER_SIZE
+
+# Leque do Spread Shot pré-resolvido em pares (cos, sin), na ordem de
+# `Config.SPREAD_SHOT_ANGLES`. O leque é fixo, então converter graus e chamar
+# cos/sin a cada disparo seria trabalho repetido no hot path (§7) — aqui roda
+# uma vez, no import.
+SPREAD_SHOT_ROTATIONS: tuple[tuple[float, float], ...] = tuple(
+    (math.cos(math.radians(deg)), math.sin(math.radians(deg)))
+    for deg in Config.SPREAD_SHOT_ANGLES
+)
+
+class BulletSpec(NamedTuple):
+    """Uma bala a nascer: de onde, para onde, e com quais modificadores.
+
+    NamedTuple e não tupla crua porque a lista de modificadores CRESCE. Cada
+    upgrade de disparo é um campo independente aqui, e nenhum deles conhece os
+    outros — é isso que faz as combinações (leque + explosivo + teleguiado +
+    gigante) valerem sem existir código por combinação. Upgrade novo = um campo
+    com default + uma linha no `spawn_bullet`; os call sites que não o conhecem
+    seguem funcionando.
+
+    O que é por DISPARO e não por bala (tamanho do Giant Shot, dano, chain shot)
+    não mora aqui: o `ShootingSystem` lê da nave uma vez e repassa a todas as
+    balas da salva, o que já as cobre por igual.
+
+    Continua sendo uma tupla, então o desempacotamento posicional dos charge
+    shots (`for x, y, direction, *_ in specs`) segue válido.
+    """
+
+    x: float
+    y: float
+    direction: tuple[float, float]
+    piercing: bool = False
+    homing: bool = False
+    explosive: bool = False
+    low_ammo: bool = False
 
 
 class Ship:
@@ -113,6 +149,7 @@ class Ship:
 
         # Power-ups
         self.double_shot_timer: float = 0.0
+        self.spread_shot_timer: float = 0.0
         self.speed_boost_timer: float = 0.0
         self.piercing_shot_timer: float = 0.0
         self.mini_ships_timer: float = 0.0
@@ -121,6 +158,8 @@ class Ship:
         self.big_shot_timer: float = 0.0
         # Chain Shot power-up
         self.chain_shot_timer: float = 0.0
+        # Implosão (upgrade): cada acerto suga os inimigos vizinhos.
+        self.implosion_shot_timer: float = 0.0
         # Repulsion Shield power-up (Vento Constante)
         self.repulsion_shield_timer: float = 0.0
         self.repulsion_wind_streaks: list[dict[str, Any]] = []
@@ -349,6 +388,9 @@ class Ship:
             )  # Usar configuração personalizada
         if self.piercing_shot_timer > 0.0:
             multiplier *= Config.PIERCING_SHOT_ATTACK_SPEED_MULTIPLIER
+        if self.spread_shot_timer > 0.0:
+            # Custo de cadência do leque — a razão do número está na config.
+            multiplier *= Config.SPREAD_SHOT_FIRE_RATE_PENALTY
         if self.homing_shots_active:
             multiplier *= self.homing_fire_rate_penalty  # Penalidade de cadência
         if self.explosive_shots_active:
@@ -441,6 +483,9 @@ class Ship:
     def get_double_shot_time(self) -> float:
         return self.double_shot_timer
 
+    def get_spread_shot_time(self) -> float:
+        return self.spread_shot_timer
+
     def get_speed_boost_time(self) -> float:
         return self.speed_boost_timer
 
@@ -495,9 +540,21 @@ class Ship:
     def activate_repulsion_shield(self, duration: float | None = None) -> None:
         self._powerups.activate_repulsion_shield(duration)
 
+    def activate_implosion_shots(self, duration: float) -> None:
+        self._powerups.activate_implosion_shots(duration)
+
     @property
     def has_chain_shot(self) -> bool:
         return self.chain_shot_timer > 0.0
+
+    @property
+    def has_implosion_shot(self) -> bool:
+        """True enquanto os acertos desta nave geram pulsos de sucção.
+
+        Lido por bala no sistema de colisão via `owner_ship`, como o
+        `has_chain_shot`: em coop cada nave responde pelo próprio upgrade.
+        """
+        return self.implosion_shot_timer > 0.0
 
     @property
     def has_repulsion_shield(self) -> bool:
@@ -515,6 +572,11 @@ class Ship:
     def is_double_shot_active(self) -> bool:
         """True se o double shot está ativo. Use `double_shot_timer` para o tempo restante."""
         return self.double_shot_timer > 0.0
+
+    @property
+    def is_spread_shot_active(self) -> bool:
+        """True se o leque está ativo. Use `spread_shot_timer` para o tempo restante."""
+        return self.spread_shot_timer > 0.0
 
     @property
     def is_speed_boost_active(self) -> bool:
@@ -733,13 +795,57 @@ class Ship:
         """Retorna True se deve disparar automaticamente neste frame."""
         return self.auto_fire and self.auto_fire_timer == 0.0
 
-    def bullet_spawn(
-        self,
-    ) -> list[tuple[float, float, tuple[float, float], bool, bool, bool, bool]]:
-        """Retorna posições para spawn de balas.
+    def _muzzle_positions(
+        self, sprite_w: float, sprite_h: float, dual: bool
+    ) -> list[tuple[float, float]]:
+        """Bocas de saída da bala para o `facing` atual.
 
-        Returns:
-            Lista de tuplas (x, y, direction, is_piercing, is_homing, is_explosive, is_low_ammo)
+        `dual` pede as duas bocas laterais do Double Shot; sem ele, a boca
+        central. Só geometria: quantas balas saem de cada boca e em que direção
+        é decisão de `bullet_spawn`.
+        """
+        if self.facing in ("north", "south"):
+            y = self.y if self.facing == "north" else self.y + sprite_h
+            if dual:
+                return [
+                    (self.x + sprite_w * 0.2 - 3.5 + 2.2, y),
+                    (self.x + sprite_w * 0.8 - 3.5 + 2.2, y),
+                ]
+            return [(self.x + sprite_w / 2 - 3.5 + 2.2, y)]
+
+        x = self.x + sprite_w + 5 if self.facing == "east" else self.x - 15
+        if dual:
+            return [(x, self.y + sprite_h * 0.3), (x, self.y + sprite_h * 0.7)]
+        return [(x, self.y + sprite_h / 2)]
+
+    @staticmethod
+    def _fan_directions(
+        base: tuple[float, float],
+    ) -> list[tuple[float, float]]:
+        """Abre a direção base no leque do Spread Shot.
+
+        Rotação 2D pura: preserva o módulo do vetor, então as cinco balas saem
+        com a MESMA velocidade do tiro normal — muda só o rumo inicial. O termo
+        central de `SPREAD_SHOT_ROTATIONS` é (1, 0), ou seja, o tiro do meio é
+        bit a bit o tiro padrão.
+        """
+        bx, by = base
+        return [
+            (bx * cos_a - by * sin_a, bx * sin_a + by * cos_a)
+            for cos_a, sin_a in SPREAD_SHOT_ROTATIONS
+        ]
+
+    def bullet_spawn(self, apply_spread: bool = True) -> list[BulletSpec]:
+        """Monta as balas do próximo disparo.
+
+        Os modificadores são lidos uma vez e copiados IGUAIS para toda a salva —
+        é assim que leque + perfurante + teleguiado + explosivo se combinam sem
+        nenhum caso especial: cada campo do `BulletSpec` responde só pelo seu
+        upgrade e não olha os outros.
+
+        `apply_spread=False` ignora o Spread Shot: é o que os charge shots usam,
+        porque abrir o laser do Magneto ou os 5 teleguiados do Caçador em leque
+        multiplicaria projéteis que já são o "muitos de uma vez" da nave.
         """
         is_piercing = self.piercing_shot_timer > 0
         is_homing = self.homing_shots_active
@@ -753,139 +859,31 @@ class Ship:
         # Obter tamanho visual atual do sprite (leva em conta rotação 90°/270°).
         sprite_w, sprite_h = self.get_rendered_sprite_size()
 
-        if self.facing == "north":
-            if self.double_shot_timer > 0:
-                return [
-                    (
-                        self.x + sprite_w * 0.2 - 3.5 + 2.2,
-                        self.y,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                    (
-                        self.x + sprite_w * 0.8 - 3.5 + 2.2,
-                        self.y,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                ]
-            return [
-                (
-                    self.x + sprite_w / 2 - 3.5 + 2.2,
-                    self.y,
-                    facing_vector,
-                    is_piercing,
-                    is_homing,
-                    is_explosive,
-                    is_low_ammo,
-                )
-            ]
-        elif self.facing == "south":
-            if self.double_shot_timer > 0:
-                return [
-                    (
-                        self.x + sprite_w * 0.2 - 3.5 + 2.2,
-                        self.y + sprite_h,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                    (
-                        self.x + sprite_w * 0.8 - 3.5 + 2.2,
-                        self.y + sprite_h,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                ]
-            return [
-                (
-                    self.x + sprite_w / 2 - 3.5 + 2.2,
-                    self.y + sprite_h,
-                    facing_vector,
-                    is_piercing,
-                    is_homing,
-                    is_explosive,
-                    is_low_ammo,
-                )
-            ]
-        elif self.facing == "east":
-            if self.double_shot_timer > 0:
-                return [
-                    (
-                        self.x + sprite_w + 5,
-                        self.y + sprite_h * 0.3,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                    (
-                        self.x + sprite_w + 5,
-                        self.y + sprite_h * 0.7,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                ]
-            return [
-                (
-                    self.x + sprite_w + 5,
-                    self.y + sprite_h / 2,
-                    facing_vector,
-                    is_piercing,
-                    is_homing,
-                    is_explosive,
-                    is_low_ammo,
-                )
-            ]
-        else:  # west
-            offset_x = self.x - 15
-            if self.double_shot_timer > 0:
-                return [
-                    (
-                        offset_x,
-                        self.y + sprite_h * 0.3,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                    (
-                        offset_x,
-                        self.y + sprite_h * 0.7,
-                        facing_vector,
-                        is_piercing,
-                        is_homing,
-                        is_explosive,
-                        is_low_ammo,
-                    ),
-                ]
-            return [
-                (
-                    offset_x,
-                    self.y + sprite_h / 2,
-                    facing_vector,
-                    is_piercing,
-                    is_homing,
-                    is_explosive,
-                    is_low_ammo,
-                )
-            ]
+        spread = apply_spread and self.spread_shot_timer > 0.0
+        # O leque SUBSTITUI as duas bocas do Double Shot em vez de multiplicar
+        # por elas: 2 bocas x 5 direções seriam 10 balas por disparo, o dobro do
+        # que o power-up promete e uma parede sólida na tela. Com os dois ativos
+        # vale o leque, que é o mais raro dos dois. É a ÚNICA exclusividade que
+        # existe entre modificadores de disparo, e ela é de geometria (de onde a
+        # bala sai), não de comportamento do projétil.
+        muzzles = self._muzzle_positions(
+            sprite_w, sprite_h, dual=self.double_shot_timer > 0 and not spread
+        )
+        directions = self._fan_directions(facing_vector) if spread else [facing_vector]
+
+        return [
+            BulletSpec(
+                x=mx,
+                y=my,
+                direction=direction,
+                piercing=is_piercing,
+                homing=is_homing,
+                explosive=is_explosive,
+                low_ammo=is_low_ammo,
+            )
+            for mx, my in muzzles
+            for direction in directions
+        ]
 
     def draw(self, surface: pygame.Surface):
         self._renderer.draw(surface)

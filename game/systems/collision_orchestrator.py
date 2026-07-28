@@ -370,6 +370,18 @@ class CollisionOrchestrator:
                 )
             self.entity_manager.area_blasts.clear()
 
+        if self.entity_manager.implosion_pool.active:
+            ip_gain, ip_dest, ip_events = (
+                self.collisions.implosion_pulses_vs_enemies(
+                    self.entity_manager.implosion_pool.active,
+                    enemy_grid,
+                    self.entity_manager,
+                )
+            )
+            gain += ip_gain
+            destroyed += ip_dest
+            score_events.extend(ip_events)
+
         if self.entity_manager.ice_poison_zones:
             iz_gain, iz_dest, iz_events = self.collisions.ice_poison_zones_vs_entities(
                 self.entity_manager.ice_poison_zones,

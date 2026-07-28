@@ -24,11 +24,13 @@ from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.effects.emp_wave import EMPWave
 from ..entities.effects.explosion import Explosion, ExplosionType, ImpactPattern
 from ..entities.effects.explosion_pool import ExplosionPool
+from ..entities.effects.implosion_pulse import ImplosionPulsePool
 from ..entities.effects.explosive_effect import ExplosiveEffect
 from ..entities.projectiles.explosive_mine import ExplosiveMine
 from ..entities.enemies.space.eye_enemy import EyeEnemy
 from ..entities.projectiles.eye_laser import EyeLaser
 from ..entities.enemies.city.captor_emp import CaptorEMP
+from ..core.upgrades_config import IMPLOSION_SLOW_FACTOR
 from ..entities.enemies.city.core_implosion import CoreImplosion
 from ..entities.enemies.city.cyber_captor import CyberCaptor
 from ..entities.enemies.city.cyber_tank import CyberTank
@@ -205,6 +207,7 @@ class EntityManager:
         )
         self.bullet_pool = BulletPool(initial_size=50)
         self.explosion_pool = ExplosionPool(initial_size=50)
+        self.implosion_pool = ImplosionPulsePool(initial_size=24)
 
         # Grids espaciais
         self.enemy_spatial_grid: SpatialGrid[
@@ -328,6 +331,34 @@ class EntityManager:
         if vortex_t > 0.0:
             setattr(entity, "vortex_slow_timer", max(0.0, vortex_t - dt))
 
+    @staticmethod
+    def _implosion_multiplier(entity: Any) -> float:
+        """Multiplicador de velocidade pela lentidão da Implosão (upgrade).
+
+        A marca é reposta a cada frame por `implosion_pulses_vs_enemies` enquanto
+        o inimigo estiver dentro da zona; aqui só se lê. O debuff é INDEPENDENTE
+        da zona: o timer cobre a vida dela MAIS o linger, então continua
+        correndo depois de o círculo ter fechado (ver `IMPLOSION_SLOW_LINGER`).
+        """
+        imp_t = getattr(entity, "implosion_slow_timer", 0.0)
+        return IMPLOSION_SLOW_FACTOR if imp_t > 0.0 else 1.0
+
+    @staticmethod
+    def _update_implosion_linger(entity: Any, dt: float) -> None:
+        """Decrementa os dois timers da Implosão: lentidão e cooldown de dano.
+
+        O cooldown de dano vive na ENTIDADE (e não em cada pulso) para que o
+        dano da zona não escale com o número de pulsos sobrepostos — sob fogo
+        sustentado são dezenas. Aqui é onde ele anda; quem o arma é
+        `Collisions.implosion_pulses_vs_enemies`.
+        """
+        imp_t = getattr(entity, "implosion_slow_timer", 0.0)
+        if imp_t > 0.0:
+            setattr(entity, "implosion_slow_timer", max(0.0, imp_t - dt))
+        dmg_cd = getattr(entity, "implosion_damage_cd", 0.0)
+        if dmg_cd > 0.0:
+            setattr(entity, "implosion_damage_cd", max(0.0, dmg_cd - dt))
+
     @property
     def eye_enemy_count(self) -> int:
         return sum(1 for e in self.enemies if isinstance(e, EyeEnemy))
@@ -389,6 +420,7 @@ class EntityManager:
 
         effects = (
             len(self.explosion_pool.active)
+            + len(self.implosion_pool.active)
             + len(self.ice_poison_zones)
             + len(self.fire_zones)
             + len(self.electric_fields)
@@ -496,6 +528,7 @@ class EntityManager:
         _add(self.meteor_pool.active)
         _add(self.rock_glider_pool.active)
         _add(self.explosion_pool.active)
+        _add(self.implosion_pool.active)
 
         if self.boss is not None and not getattr(self.boss, "dead", False):
             k = type(self.boss).__name__
@@ -650,6 +683,22 @@ class EntityManager:
         self.air_strike_bombs.append(
             AirStrikeBomb(target_x, target_y, on_explode=on_explode, on_fall=on_fall)
         )
+
+    def spawn_implosion_pulse(self, cx: float, cy: float) -> None:
+        """Zona de controle do upgrade Implosão em `(cx, cy)`.
+
+        Só geometria e relógio: quem aplica lentidão e dano é o sistema de
+        colisão, a cada frame, sobre quem estiver dentro NAQUELE momento.
+
+        O centro é preso à tela porque a zona precisa ser vista para ser lida —
+        um acerto num inimigo ainda ENTRANDO pela borda tem o centro fora do
+        campo visível, e o jogador levaria dano e lentidão de um círculo que não
+        aparece.
+        """
+        sw, sh = self._screen_size
+        cx = 0.0 if cx < 0.0 else (sw if cx > sw else cx)
+        cy = 0.0 if cy < 0.0 else (sh if cy > sh else cy)
+        self.implosion_pool.get(cx, cy)
 
     def spawn_black_hole(
         self, x: float, y: float, duration: float, is_vortex: bool = False
@@ -1039,10 +1088,12 @@ class EntityManager:
             self._update_emp_linger(f, dt)
             self._update_ice_linger(f, dt)
             self._update_vortex_linger(f, dt)
+            self._update_implosion_linger(f, dt)
             mul = (
                 self._emp_multiplier(f, slow_active, slow_factor, dt)
                 * self._ice_multiplier(f)
                 * self._vortex_multiplier(f)
+                * self._implosion_multiplier(f)
             )
             shot = f.update(enemy_dt * mul)
             if shot:
@@ -1276,10 +1327,12 @@ class EntityManager:
             self._update_emp_linger(s, dt)
             self._update_ice_linger(s, dt)
             self._update_vortex_linger(s, dt)
+            self._update_implosion_linger(s, dt)
             mul = (
                 self._emp_multiplier(s, slow_active, slow_factor, dt)
                 * self._ice_multiplier(s)
                 * self._vortex_multiplier(s)
+                * self._implosion_multiplier(s)
             )
             s.update(enemy_dt * mul, player_x, player_y, ac)
 
@@ -1340,10 +1393,12 @@ class EntityManager:
             self._update_emp_linger(en, dt)
             self._update_ice_linger(en, dt)
             self._update_vortex_linger(en, dt)
+            self._update_implosion_linger(en, dt)
             mul = (
                 self._emp_multiplier(en, slow_active, slow_factor, dt)
                 * self._ice_multiplier(en)
                 * self._vortex_multiplier(en)
+                * self._implosion_multiplier(en)
             )
             ctx.sdt = enemy_dt * mul
             update_in_ctx = getattr(en, "update_in_context", None)
@@ -1417,6 +1472,11 @@ class EntityManager:
             b.process_all_enemies(
                 self._cached_all_enemies, enemy_dt, self.spawn_explosion
             )
+
+        # `enemy_dt` e não `dt`: o pulso MOVE inimigos, então tem que andar no
+        # mesmo tempo que eles. Com o tempo parado (ou sob EMP/gelo) um pulso
+        # rodando em tempo cheio arrastaria alvos congelados.
+        self.implosion_pool.update(enemy_dt)
 
     def update_for_game_over_slow_motion(
         self, dt: float, player_x: float, player_y: float
@@ -1633,6 +1693,7 @@ class EntityManager:
                     e.draw(surface)
 
         self.explosion_pool.draw_all(surface)
+        self.implosion_pool.draw_all(surface)
         for e in self.explosive_effects:
             e.draw(surface)
 
@@ -2060,6 +2121,9 @@ class EntityManager:
         self.rock_glider_pool.clear_active()
         self.bullet_pool.clear_active()
         self.explosion_pool.clear_active()
+        # Solta as referências aos inimigos que os pulsos vivos ainda seguram —
+        # a lista de inimigos vai ser esvaziada logo abaixo.
+        self.implosion_pool.clear_active()
         self.enemy_spatial_grid.clear()
         self.spike_spatial_grid.clear()
         self.enemy_projectile_grid.clear()
@@ -2113,6 +2177,7 @@ class EntityManager:
         self.meteor_pool.clear_active()
         self.rock_glider_pool.clear_active()
         self.explosion_pool.clear_active()
+        self.implosion_pool.clear_active()
         self.spikes.clear()
         self.boulders.clear()
         self.attack_debris.clear()

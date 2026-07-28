@@ -97,6 +97,10 @@ class ShipPowerups:
         d = duration if duration is not None else Config.CHAIN_SHOT_DURATION
         ship.chain_shot_timer = max(ship.chain_shot_timer, d)
 
+    def activate_implosion_shots(self, duration: float) -> None:
+        ship = self.ship
+        ship.implosion_shot_timer = max(ship.implosion_shot_timer, duration)
+
     def activate_repulsion_shield(self, duration: float | None = None) -> None:
         ship = self.ship
         d = duration if duration is not None else Config.REPULSION_SHIELD_DURATION
@@ -148,12 +152,14 @@ class ShipPowerups:
                 ship.invuln_total = 0.0
 
         ship.double_shot_timer = max(0.0, ship.double_shot_timer - dt)
+        ship.spread_shot_timer = max(0.0, ship.spread_shot_timer - dt)
         ship.speed_boost_timer = max(0.0, ship.speed_boost_timer - dt)
         ship.piercing_shot_timer = max(0.0, ship.piercing_shot_timer - dt)
         ship.mini_ships_timer = max(0.0, ship.mini_ships_timer - dt)
         ship.damage_boost_timer = max(0.0, ship.damage_boost_timer - dt)
         ship.big_shot_timer = max(0.0, ship.big_shot_timer - dt)
         ship.chain_shot_timer = max(0.0, ship.chain_shot_timer - dt)
+        ship.implosion_shot_timer = max(0.0, ship.implosion_shot_timer - dt)
         ship.repulsion_shield_timer = max(0.0, ship.repulsion_shield_timer - dt)
 
         ship.shield_timer = max(0.0, ship.shield_timer - dt)

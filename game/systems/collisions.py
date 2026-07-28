@@ -7,6 +7,12 @@ from ..core.sound import sound_manager
 from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
 from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
+from ..core.upgrades_config import (
+    IMPLOSION_DAMAGE,
+    IMPLOSION_DAMAGE_INTERVAL,
+    IMPLOSION_SLOW_LINGER,
+)
+from ..entities.effects.implosion_pulse import accepts_control
 from ..entities.projectiles.air_strike_bomb import AirStrikeBomb
 from ..entities.projectiles.boss_laser import BossLaser
 from ..entities.bosses.boss_square import BossSquare
@@ -918,6 +924,9 @@ class Collisions:
             bullet_chain_active = owner is not None and getattr(
                 owner, "has_chain_shot", False
             )
+            bullet_implosion_active = owner is not None and getattr(
+                owner, "has_implosion_shot", False
+            )
             # Uma vez por bala, não por inimigo atingido: o estilo não muda
             # entre os alvos da mesma bala (piercing acerta vários).
             impact = impact_for_projectile(b)
@@ -927,6 +936,10 @@ class Collisions:
             # cadeia independente (com `already_hit` próprio), fazendo os raios
             # "nascerem" de vários pontos ao mesmo tempo — a sensação de teleporte.
             chain_triggered = False
+            # Mesma trava, mesma razão: uma bala perfurante que atravessa três
+            # inimigos no mesmo frame geraria três pulsos praticamente no mesmo
+            # ponto — custo triplicado para um efeito visual só.
+            implosion_triggered = False
 
             for enemy in potential_enemies:
                 if enemy.dead:
@@ -947,6 +960,14 @@ class Collisions:
                         self._credit_kill(b)
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
+
+                    if bullet_implosion_active and not implosion_triggered:
+                        implosion_triggered = True
+                        # Nasce no CENTRO do inimigo atingido, não no canto da
+                        # bala: é para lá que os vizinhos convergem, e o alvo
+                        # tem que ser o âncora visível do grupo.
+                        icx, icy, _ = enemy.collision_circle()
+                        self._trigger_implosion(icx, icy, entity_manager)
 
                     if bullet_chain_active and not chain_triggered:
                         chain_triggered = True
@@ -1111,6 +1132,83 @@ class Collisions:
         notify = getattr(owner, "notify_reflected", None)
         if notify is not None:
             notify()
+
+    def implosion_pulses_vs_enemies(
+        self,
+        pulses: Sequence[Any],
+        enemy_grid: SpatialGrid[Any],
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+        """Lentidão + dano contínuo das zonas do upgrade Implosão.
+
+        Roda por frame sobre quem está dentro NAQUELE momento — não sobre uma
+        lista capturada no spawn. Zona é área, não impulso: um inimigo que entra
+        depois é pego, e um que sai deixa de ser.
+
+        A lentidão é remarcada todo frame (é só uma escrita de timer); o dano
+        respeita `implosion_damage_cd`, que mora no INIMIGO justamente para que
+        dezenas de pulsos sobrepostos não multipliquem o DPS.
+        """
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[tuple[float, float, int]] = []
+
+        for pulse in pulses:
+            if pulse.dead:
+                continue
+            radius = pulse.radius
+            for enemy in enemy_grid.query(
+                pulse.cx - radius, pulse.cy - radius, radius * 2, radius * 2
+            ):
+                if enemy.dead:
+                    continue
+                # Boss fica fora: pelo atributo formal, nunca por nome de classe
+                # (§5). `position_locked` também — estruturas ancoradas
+                # (estalagmite/estalactite) têm o tempo próprio no ciclo
+                # RISE→LINGER→SHATTER, e freá-las faz a AMEAÇA durar mais.
+                if getattr(enemy, "is_boss", False):
+                    continue
+                if getattr(enemy, "position_locked", False):
+                    continue
+                if not accepts_control(enemy):
+                    continue
+
+                ecx, ecy, er = enemy.collision_circle()
+                if not pulse.covers(ecx, ecy, er):
+                    continue
+
+                # Marca, não escrita de velocidade: o `EntityManager` traduz o
+                # timer em multiplicador de dt no tick. Mesmo protocolo do EMP,
+                # do gelo e do vórtice — é o que faz os quatro se COMPOREM por
+                # multiplicação em vez de disputarem o mesmo campo.
+                enemy.implosion_slow_timer = IMPLOSION_SLOW_LINGER
+
+                if getattr(enemy, "implosion_damage_cd", 0.0) > 0.0:
+                    continue
+                enemy.implosion_damage_cd = IMPLOSION_DAMAGE_INTERVAL
+                result = self._apply_hit(
+                    enemy, IMPLOSION_DAMAGE, ecx, ecy, entity_manager
+                )
+                score_gain += result.points
+                if result.killed:
+                    destroyed_count += 1
+                    if result.points > 0:
+                        score_events.append((ecx, ecy, result.points))
+
+        return score_gain, destroyed_count, score_events
+
+    def _trigger_implosion(
+        self,
+        cx: float,
+        cy: float,
+        entity_manager: "EntityManager",
+    ) -> None:
+        """Abre a zona do upgrade Implosão no ponto do acerto.
+
+        Sem som: o acerto que originou a zona já tocou o dele, e um segundo som
+        dezenas de vezes por segundo viraria ruído.
+        """
+        entity_manager.spawn_implosion_pulse(cx, cy)
 
     def _handle_explosive_bullet(
         self,

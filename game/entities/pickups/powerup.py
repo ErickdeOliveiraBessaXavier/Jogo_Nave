@@ -31,6 +31,7 @@ class PowerUp:
         "life": "[+]",
         "shield": "[SHLD]",
         "double_shot": "[DS]",
+        "spread_shot": "[5X]",
         "speed": "[SPD]",
         "score": "[SCR]",
         "piercing_shot": "[PS]",

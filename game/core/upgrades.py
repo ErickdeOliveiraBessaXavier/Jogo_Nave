@@ -35,6 +35,7 @@ class UpgradeType(Enum):
     WINGMAN = auto()  # Naves de escolta autônomas
     BERSERK = auto()  # Ataque omnidirecional insano
     COOP_LINK = auto()  # Feixe de dano cooperativo
+    IMPLOSION_SHOT = auto()  # Cada acerto suga os inimigos próximos para o impacto
 
 
 class UpgradeContextProtocol(Protocol):
@@ -620,6 +621,20 @@ class GiantShotUpgrade(ActiveUpgrade):
             ship.activate_giant_shots(self.get_effective_duration(ctx))
 
 
+class ImplosionShotUpgrade(ActiveUpgrade):
+    """Enquanto dura, cada acerto suga os inimigos vizinhos para o impacto.
+
+    Mesmo padrão dos outros modificadores de tiro por tempo (Giant, Chain): o
+    upgrade só liga o timer da nave; quem cria os pulsos é o sistema de colisão,
+    no ponto exato do acerto, porque é lá que a spatial grid já está montada.
+    """
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_implosion_shots(self.get_effective_duration(ctx))
+
+
 class CoopLinkUpgrade(ActiveUpgrade):
     """Feixe de alta voltagem que conecta dois jogadores."""
 
@@ -661,6 +676,7 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.AIR_STRIKE: AirStrikeUpgrade,
         UpgradeType.CANNON_TOWER: CannonTowerUpgrade,
         UpgradeType.COOP_LINK: CoopLinkUpgrade,
+        UpgradeType.IMPLOSION_SHOT: ImplosionShotUpgrade,
     }
     cls = factories.get(upgrade_type)
     if cls:
@@ -872,6 +888,19 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         None,
         2,
     ),
+    # UTILITY, não OFFENSIVE: não soma um ponto de dano. O valor é reposicionar
+    # o inimigo, e quem transforma isso em dano é o tiro seguinte do jogador.
+    UpgradeType.IMPLOSION_SHOT: UpgradeMeta(
+        UpgradeType.IMPLOSION_SHOT,
+        "IMPL",
+        "Cada acerto suga os inimigos próximos.",
+        "implosion_shot",
+        UpgradeCategory.UTILITY,
+        55,
+        12,
+        None,
+        2,
+    ),
 }
 
 
@@ -912,6 +941,7 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "berserk": "Z",
         "cannon_tower": "C",  # Canhão — faltava no mapa, caía no fallback
         "link": "F",  # Feixe — cedeu o "C" para o Canhão, que o usa melhor
+        "implosion_shot": "I",  # Implosão
     }
     if icon_id and icon_id in mapping:
         return mapping[icon_id]

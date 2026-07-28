@@ -16,13 +16,17 @@ def get_powerup_weights(difficulty: DifficultyPreset) -> dict[PowerUpType, int]:
     return {
         PowerUpType.SHIELD: 150,
         PowerUpType.DOUBLE_SHOT: 200,
+        # Leque: o "Double Shot grande". Peso baixo de propósito — vale mais que
+        # o duplo (cobertura + ~2,1x de DPS de pico), então precisa ser o achado
+        # ocasional, não o pão de cada dia.
+        PowerUpType.SPREAD_SHOT: 60,
         PowerUpType.SPEED: 150,
-        PowerUpType.COOLDOWN_HASTE: 100,
+        PowerUpType.COOLDOWN_HASTE: 50,
         PowerUpType.MINI_SHIPS: 50,
         PowerUpType.PIERCING_SHOT: 50,
         PowerUpType.LIFE: 50,
         PowerUpType.SCORE: 20,
-        PowerUpType.TIME_STOP: 20,
+        PowerUpType.TIME_STOP: 70,
         PowerUpType.RAINBOW: 10,
         PowerUpType.DAMAGE_BOOST: 80,
         PowerUpType.CHAIN_SHOT: 60,

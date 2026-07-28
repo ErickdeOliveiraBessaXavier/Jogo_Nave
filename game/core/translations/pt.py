@@ -297,6 +297,7 @@ PT: dict[str, str] = {
     "upgrade.air_strike.desc": "20 bombas caem em áreas aleatórias.",
     "upgrade.cannon_tower.desc": "Torres de minas estáticas.",
     "upgrade.link.desc": "Feixe de alta voltagem entre jogadores.",
+    "upgrade.implosion_shot.desc": "Cada acerto suga os inimigos próximos.",
 
     # ── HUD (partida) ────────────────────────────────────────────────────────
     "hud.score": "Pontos: {}",

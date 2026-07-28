@@ -122,3 +122,40 @@ def test_preferencias_da_tela_de_config_sao_as_do_app():
     assert view.preferences is app.preferences, (
         "a tela de configurações voltou a criar a própria cópia das preferências"
     )
+
+
+def test_boot_sem_placa_de_som_nao_derruba_o_jogo():
+    """O caminho de fallback tem que continuar EXECUTÁVEL.
+
+    Quando `pygame.mixer.init()` falha, o `__init__` desvia para um `except` que
+    monta o estado mínimo e segue sem som. Esse trecho não roda em nenhuma
+    máquina de desenvolvimento nem no CI (ambos têm mixer, mesmo o dummy), então
+    nada o exercitava: `music_duck_factor` virou property sem setter e a
+    atribuição que ficou para trás passou a levantar AttributeError DENTRO do
+    except — a máquina sem áudio deixou de abrir o jogo em vez de abrir muda.
+    """
+    import importlib
+    import sys
+    from unittest import mock
+
+    import pygame
+
+    with (
+        mock.patch.object(pygame.mixer, "get_init", return_value=None),
+        mock.patch.object(
+            pygame.mixer, "init", side_effect=pygame.error("sem placa de som")
+        ),
+    ):
+        modulo = importlib.reload(importlib.import_module("game.core.sound"))
+        try:
+            mudo = modulo.sound_manager
+            assert mudo.audio_available is False
+            # As duas leituras que o boot faz logo em seguida — ambas passam
+            # pelo dict de ducks que precisa existir mesmo sem áudio.
+            assert mudo.music_duck_factor == 1.0
+            assert 0.0 <= mudo.music_target_volume() <= 1.0
+        finally:
+            # O módulo é singleton global; devolve a instância com áudio para os
+            # outros testes (a ordem entre arquivos não é garantida).
+            sys.modules.pop("game.core.sound", None)
+            importlib.import_module("game.core.sound")

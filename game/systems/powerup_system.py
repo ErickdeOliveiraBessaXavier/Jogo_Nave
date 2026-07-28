@@ -32,6 +32,7 @@ class PowerupSystem:
         self._powerup_values: dict[str, float] = {
             "shield_duration": Config.SHIELD_DURATION * 1000,
             "double_shot_duration": Config.DOUBLE_SHOT_DURATION,
+            "spread_shot_duration": Config.SPREAD_SHOT_DURATION,
             "speed_boost_duration": Config.SPEED_BOOST_DURATION,
             "piercing_shot_duration": Config.PIERCING_SHOT_DURATION,
             "mini_ships_duration": Config.MINI_SHIPS_DURATION,
@@ -62,6 +63,13 @@ class PowerupSystem:
         ship.double_shot_timer = max(
             ship.double_shot_timer,
             self._powerup_values["double_shot_duration"],
+        )
+
+    def _apply_spread_shot(self, slot: "PlayerSlot") -> None:
+        ship = slot.ship
+        ship.spread_shot_timer = max(
+            ship.spread_shot_timer,
+            self._powerup_values["spread_shot_duration"],
         )
 
     def _apply_speed(self, slot: "PlayerSlot") -> None:
@@ -144,6 +152,7 @@ class PowerupSystem:
         "life": _apply_life,
         "shield": _apply_shield,
         "double_shot": _apply_double_shot,
+        "spread_shot": _apply_spread_shot,
         "speed": _apply_speed,
         "score": _apply_score_bonus,
         "piercing_shot": _apply_piercing,
