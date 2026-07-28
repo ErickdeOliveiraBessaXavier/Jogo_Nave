@@ -116,6 +116,8 @@ class SoundSystem:
             "explosion_boss": sound_manager.play_explosion_boss,
             "explosion_alien": sound_manager.play_explosion_alien,
             "explosion_asteroid": sound_manager.play_explosion_asteroid,
+            "time_stop_in": sound_manager.play_time_stop_in,
+            "time_stop_out": sound_manager.play_time_stop_out,
             "metropolis_lightning_charge": sound_manager.play_metropolis_lightning_charge,
             "metropolis_lightning_strike": sound_manager.play_metropolis_lightning_strike,
             "metropolis_energy_zone": sound_manager.play_metropolis_energy_zone,

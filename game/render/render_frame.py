@@ -141,28 +141,38 @@ class RenderFrame:
     # ── Parada do tempo (power-up TIME_STOP) ──────────────────────────────
     # Já normalizados pela cena a partir do `TimeStopState`; o renderer não
     # conhece durações nem constantes, só desenha as frações.
-    time_stop_frozen: bool = False
-    """Inimigos parados. Liga a moldura e o rótulo de 'TEMPO PARADO'."""
-
+    # A moldura é descrita por DOIS números contínuos e um relógio, e nada
+    # mais. Não há booleano de fase aqui de propósito: um `frozen`/`recovering`
+    # convida o renderer a ramificar, e foi exatamente uma ramificação por fase
+    # que fazia a saída da moldura recomeçar do zero em vez de continuar de
+    # onde a permanência estava.
     time_stop_warning: float = 0.0
-    """0→1 conforme o congelamento se aproxima do fim.
+    """0→1 conforme o congelamento se aproxima do fim, e de volta a 0 na saída.
 
     Único canal do aviso de término: a intensidade da pulsação e o quanto a
     moldura 'racha' saem daqui. Sobe em rampa, em vez de ser um liga/desliga,
     para o aviso entrar suave e ir ficando mais aflito.
+
+    Vem de `TimeStopState.hud_warning`, **não** de `warning_ratio`: o segundo
+    zera de um frame para o outro no descongelamento (certo para o tremor,
+    que tem de parar na hora) e isso dava um degrau visível na moldura.
     """
 
-    time_stop_recovering: bool = False
-    """Rampa de volta em curso.
+    time_stop_openness: float = 0.0
+    """Abertura da moldura: 0 → 1 → 0. Um só valor para entrada, permanência e
+    saída.
 
-    Existe separado de `time_stop_recovery` porque a fração é AMBÍGUA: ela vale
-    0.0 tanto em "não há efeito nenhum" quanto em "a recuperação começou agora".
-    Guardar o overlay por `recovery <= 0.0` engolia o primeiro instante da
-    rampa — justo o frame do descongelamento, o mais visível de todos.
+    A saída é a MESMA rampa da entrada lida ao contrário (1,01s cada), então o
+    fechamento é a continuação natural do estado atual, não uma segunda
+    animação que recomeça do zero.
+
+    Cronometrado pelos SFX: sobe durante o gesto do `Efeito_Desacelerando`
+    (1,01s) e desce durante o do `Efeito_Acelerando`, depois de segurar os
+    0,47s de silêncio inicial daquele arquivo. É deliberado que **não** siga a
+    recuperação dos inimigos, que dura o dobro do áudio.
+
+    `0.0` significa "sem moldura" — é o único guarda de que o renderer precisa.
     """
-
-    time_stop_recovery: float = 0.0
-    """0→1 durante a rampa em que os inimigos voltam a acelerar."""
 
     time_stop_phase: float = 0.0
     """Relógio da pulsação, em segundos de congelamento acumulados.

@@ -92,9 +92,12 @@ class _StalagmiteFragment:
 
 class MountainStalagmite:
     # Estrutura fixa no chão — ``y`` é derivado de ``ground_y - _current_height``,
-    # uma property sem setter. Sinaliza ao black_hole.process_all_enemies para
-    # ignorar (qualquer ``enemy.y += ...`` causaria AttributeError).
-    pullable_by_black_hole: bool = False
+    # uma property SEM setter, e o ``rect`` vem do mask de colisão recalculado a
+    # cada frame. Qualquer `enemy.y += ...` de fora estoura AttributeError, e
+    # empurrar só o rect dessincronizaria colisão e desenho. Contrato descrito
+    # no protocolo `Enemy` (`systems/collision_protocols.py`): é o opt-out de
+    # todo sistema que desloca inimigos (buraco negro, tremor da parada do tempo).
+    position_locked: bool = True
 
     """Pilar de pedra invocado pelo MountainMage, estilo low-poly terroso."""
 
@@ -771,8 +774,9 @@ class MountainStalagmite:
 
 
 class MountainStalactite:
-    # Estrutura fixa no teto — análogo a MountainStalagmite
-    pullable_by_black_hole: bool = False
+    # Estrutura fixa no teto — análogo a MountainStalagmite: `y` é o `ceiling_y`
+    # via property sem setter. Ver `position_locked` no protocolo `Enemy`.
+    position_locked: bool = True
 
     """Estalactite que cai do teto — espelho invertido de MountainStalagmite."""
 

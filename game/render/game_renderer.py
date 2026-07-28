@@ -142,6 +142,10 @@ class GameRenderer:
         self._flash_surface: pygame.Surface | None = None
         # Buffer SRCALPHA reusado da moldura de tempo parado (§7).
         self._time_stop_surface: pygame.Surface | None = None
+        # Faixas do perímetro que a moldura ocupa. Calculadas junto com o buffer
+        # (mudam só com a resolução) para não alocar 4 Rects por frame.
+        self._time_stop_strips: tuple[pygame.Rect, ...] = ()
+        self._time_stop_labels: dict[str, pygame.Surface] = {}
 
         # Escala de UI relativa ao design base (1280×720). Como todas as
         # resoluções ofertadas são 16:9, um único fator (largura) cobre os dois
@@ -334,75 +338,280 @@ class GameRenderer:
                 frame.level_popup_duration,
             )
 
-    # Espessura base da moldura de tempo parado, em px do design 1280×720.
-    _TIME_STOP_BORDER = 6
+    # ── Moldura da parada do tempo ────────────────────────────────────────
+    # Medidas em px do design 1280×720, escaladas por `_s` (§12).
+    _TIME_STOP_BAND = 34
+    """Profundidade do campo de energia na borda, em repouso."""
+
+    _TIME_STOP_BAND_WARNING = 16
+    """Quanto a banda avança para dentro no auge do aviso de término."""
+
+    _TIME_STOP_RINGS = 17
+    """Anéis concêntricos que compõem o gradiente da banda.
+
+    O gradiente é o que dá PRESENÇA sem atrapalhar: a energia é forte na beirada
+    e se apaga antes de chegar na zona de jogo. Um contorno de linha única, por
+    mais grosso que seja, ou é invisível ou vira uma faixa dura na tela.
+    """
+
+    _TIME_STOP_RIM = 2
+    """Fio nítido no limite interno da banda — fecha a moldura."""
+
+    _TIME_STOP_CORNER = 54
+    """Braço dos colchetes de canto sobre o fio interno."""
+
+    _TIME_STOP_BREATH_HZ = 0.32
+    """Respiração lenta. Dilatação temporal se lê como ritmo LONGO."""
+
+    _TIME_STOP_STUTTER_HZ = 1.15
+    _TIME_STOP_STUTTER_STEPS = 5.0
+    """Trepidação em degraus — o ponteiro de um relógio travado.
+
+    É o traço que diz "tempo quebrado" em vez de "efeito bonito": um valor
+    quantizado avança aos trancos, e o olho lê o salto como falha na passagem
+    do tempo. Suave demais viraria um brilho genérico de power-up.
+    """
+
+    _TIME_STOP_RIPPLE_WAVES = 2.0
+    _TIME_STOP_RIPPLE_HZ = 0.55
+    """Ondulação que percorre a banda de fora para dentro."""
+
+    _TIME_STOP_PEAK_ALPHA = 200
+    """Alpha do anel mais externo no auge. O resto do gradiente cai a partir daí.
+
+    Alto porque os anéis são ladrilhados e NÃO se somam — o valor é o brilho
+    real da beirada da tela, não uma contribuição empilhada.
+    """
 
     def _draw_time_stop_overlay(
         self, frame: RenderFrame, surface: pygame.Surface
     ) -> None:
-        """Moldura + rótulo que comunicam o estado da parada do tempo.
+        """Campo de energia nas bordas que comunica a parada do tempo.
 
-        Três leituras num só elemento, todas vindas prontas do DTO:
+        A leitura tem que ser periférica: o jogador identifica o estado pelo
+        canto do olho, sem tirar a atenção do centro. Por isso a energia mora na
+        moldura e se apaga para dentro, e por isso nada aqui cobre a zona de
+        jogo.
 
-        - **congelado**: moldura estável e discreta na cor do power-up. Diz
-          "o efeito está ativo" sem competir com o gameplay.
-        - **acabando** (`time_stop_warning`): a moldura engrossa, clareia e
-          passa a piscar cada vez mais rápido, e o rótulo troca para o aviso.
-          É o indicador de término pedido — a frequência subindo é o que
-          comunica "agora vai" sem precisar ler texto.
-        - **recuperando** (`time_stop_recovery`): a moldura se dissolve no
-          mesmo ritmo em que os inimigos voltam a acelerar, então o sumiço dela
-          É a barra de progresso da retomada.
+        Quatro camadas, todas moduladas pelos mesmos envelopes:
+
+        - **gradiente** (`_TIME_STOP_RINGS` anéis): o corpo do efeito. Cada anel
+          leva a ondulação defasada, então a energia parece escorrer para dentro.
+        - **fio interno**: fecha a moldura e dá o acabamento de HUD.
+        - **colchetes de canto**: âncora visual; carregam a trepidação.
+        - **rótulo**: o texto, só enquanto congelado.
+
+        E três envelopes, todos prontos no DTO (o renderer não tem relógio nem
+        conhece durações — §3):
+
+        - `time_stop_openness` **abre e fecha** — 0→1→0. Um só valor para as
+          duas pontas, então o fechamento é a abertura rebobinada, e não uma
+          segunda animação que recomeça do zero.
+        - `time_stop_warning` **aperta** — a respiração calma cede lugar a um
+          pisca aflito e acelerado, e a banda avança para dentro. Libera junto
+          com a `openness` na saída, sem degrau na virada.
+
+        Abertura e fechamento são cronometrados pelos SFX, não pela rampa dos
+        inimigos: o par som+moldura é o que anuncia o estado, e os dois têm de
+        chegar juntos.
+
+        **Nada aqui ramifica por fase.** Não há `if frozen:` — todo o desenho é
+        função contínua de `openness` e `warning`, e é isso que garante que a
+        transição permanência→saída não tenha salto: não existe caminho de
+        código novo para ela entrar.
         """
-        frozen, warning = frame.time_stop_frozen, frame.time_stop_warning
-        recovery = frame.time_stop_recovery
-        if not frozen and not frame.time_stop_recovering:
+        intensidade = frame.time_stop_openness
+        if intensidade <= 0.0:
             return
+        warning = frame.time_stop_warning
 
-        color = colors.POWERUP_COLORS["time_stop"]
+        fase = frame.time_stop_phase
+        cos, sin, tau = math.cos, math.sin, math.tau
 
-        if frozen:
-            # Pisca acelerando: ~2Hz no começo do aviso, ~9Hz no fim.
-            piscada = 1.0
-            if warning > 0.0:
-                hz = 2.0 + 7.0 * warning
-                onda = math.sin(frame.time_stop_phase * hz * math.tau)
-                piscada = 1.0 - 0.55 * warning * (0.5 - 0.5 * onda)
-            alpha = int((70 + 150 * warning) * piscada)
-            espessura = self._s(self._TIME_STOP_BORDER * (1.0 + 1.4 * warning))
-        else:
-            # Dissolve junto com a rampa de volta.
-            alpha = int(70 * (1.0 - recovery))
-            espessura = self._s(self._TIME_STOP_BORDER)
+        # Respiração lenta + trepidação quantizada. `floor` é o que transforma
+        # uma oscilação contínua num avanço aos saltos.
+        respiro = 0.5 - 0.5 * cos(fase * self._TIME_STOP_BREATH_HZ * tau)
+        travado = (
+            math.floor(fase * self._TIME_STOP_STUTTER_HZ * self._TIME_STOP_STUTTER_STEPS)
+            / self._TIME_STOP_STUTTER_STEPS
+        )
+        tremulo = 0.5 - 0.5 * cos(travado * tau)
 
-        alpha = max(0, min(255, alpha))
-        if alpha <= 0 or espessura <= 0:
+        pulso = 0.70 + 0.30 * (0.6 * respiro + 0.4 * tremulo)
+        if warning > 0.0:
+            # Mistura progressiva em vez de troca: o aviso ENTRA por cima da
+            # respiração, que vai perdendo peso. Trocar de regime de uma vez
+            # dava um salto visível no primeiro frame do aviso.
+            hz = 3.0 + 8.0 * warning
+            urgencia = 0.5 - 0.5 * cos(fase * hz * tau)
+            pulso = pulso * (1.0 - warning) + (0.45 + 0.55 * urgencia) * warning
+
+        banda = self._s(
+            (self._TIME_STOP_BAND + self._TIME_STOP_BAND_WARNING * warning)
+            # A banda também CRESCE na entrada: parte de ~60% e abre.
+            * (0.6 + 0.4 * intensidade)
+        )
+        if banda <= 0:
             return
 
         w, h = surface.get_width(), surface.get_height()
-        # Buffer próprio e reusado (mesmo padrão do `_flash_surface`): desenhar
-        # com alpha exige SRCALPHA, e alocar tela cheia por frame é o tipo de
-        # custo que o §7 proíbe no hot path.
+        moldura, faixas = self._time_stop_scratch(w, h)
+
+        cor = colors.POWERUP_COLORS["time_stop"]
+        acento = self._TIME_STOP_ACCENT
+        pico = self._TIME_STOP_PEAK_ALPHA * intensidade * pulso
+
+        # ── Gradiente ondulante ──
+        # A onda percorre a banda em DEGRAUS (`travado`), não deslizando: a
+        # energia entra aos trancos, como o ponteiro de um relógio parado. É
+        # esse detalhe que separa "tempo quebrado" de um brilho genérico de
+        # power-up. Uma fração contínua entra na mistura só para o degrau não
+        # ficar mecânico demais.
+        aneis = self._TIME_STOP_RINGS
+        desloc_onda = (0.65 * travado + 0.35 * fase * self._TIME_STOP_RIPPLE_HZ) * tau
+        for i in range(aneis):
+            # Anéis LADRILHADOS: cada um ocupa exatamente a faixa entre a sua
+            # borda e a do próximo. Se as espessuras se sobrepusessem, os alphas
+            # se somariam e o gradiente viraria um bloco chapado — que foi
+            # exatamente o que apagou a ondulação na primeira versão.
+            r0 = (i * banda) // aneis
+            r1 = ((i + 1) * banda) // aneis
+            esp = r1 - r0
+            if esp <= 0:
+                continue
+            prof = i / (aneis - 1)  # 0 na beirada da tela → 1 no fio interno
+            # Queda exponencial para dentro: forte na borda, apagado antes de
+            # alcançar a área jogável.
+            queda = (1.0 - prof) ** 1.7
+            # Modulação RASA de propósito: com amplitude funda a onda abria
+            # buracos escuros entre os anéis e o campo lia como listras, não
+            # como energia. A onda tem que ondular a intensidade, não recortar
+            # o gradiente.
+            onda = 0.74 + 0.26 * sin(
+                prof * self._TIME_STOP_RIPPLE_WAVES * tau - desloc_onda
+            )
+            a = int(pico * queda * onda)
+            if a <= 0:
+                continue
+            pygame.draw.rect(
+                moldura, (*cor, min(255, a)), (r0, r0, w - 2 * r0, h - 2 * r0), esp
+            )
+
+        # ── Fio interno + colchetes de canto ──
+        fio_a = int(min(255, 205 * intensidade * (0.55 + 0.45 * pulso)))
+        if fio_a > 0:
+            pygame.draw.rect(
+                moldura,
+                (*acento, fio_a),
+                (banda, banda, w - 2 * banda, h - 2 * banda),
+                max(1, self._s(self._TIME_STOP_RIM)),
+            )
+            self._draw_time_stop_corners(
+                moldura,
+                banda,
+                w,
+                h,
+                (*acento, int(min(255, 245 * intensidade * (0.45 + 0.55 * tremulo)))),
+            )
+
+        for faixa in faixas:
+            surface.blit(moldura, faixa.topleft, faixa)
+
+        # O rótulo esmaece junto com a moldura. Antes ele sumia de estalo no
+        # descongelamento — o texto era a única coisa que ainda ramificava por
+        # fase, e piscava para fora enquanto a borda ainda estava se dissolvendo.
+        texto = t("hud.time_stop.ending") if warning > 0.0 else t("hud.time_stop")
+        rotulo = self._time_stop_labels.get(texto)
+        if rotulo is None:
+            # Rasterizar texto por frame é desperdício: são duas frases fixas e
+            # só o ALPHA muda, que `set_alpha` resolve sem re-rasterizar. A
+            # chave é o texto já traduzido, então trocar de idioma repovoa o
+            # cache sozinho.
+            rotulo = self.hud_font_tiny.render(texto, True, acento)
+            self._time_stop_labels[texto] = rotulo
+        rotulo.set_alpha(int(min(255, 235 * intensidade)))
+        surface.blit(rotulo, rotulo.get_rect(center=(w // 2, banda + self._s(12))))
+
+    _TIME_STOP_ACCENT = (206, 176, 255)
+    """Lavanda claro para o fio e os colchetes.
+
+    O roxo do power-up (145, 87, 217) é a identidade do efeito, mas some contra
+    fundo escuro em traço fino. O acento é o mesmo matiz dessaturado e clareado:
+    lê como a mesma energia, só que incandescente na parte nítida.
+    """
+
+    def _draw_time_stop_corners(
+        self,
+        moldura: pygame.Surface,
+        banda: int,
+        w: int,
+        h: int,
+        cor: tuple[int, int, int, int],
+    ) -> None:
+        """Colchetes em L sobre o fio interno, um por canto.
+
+        Nitidamente mais grossos que o fio: encostados nele com a mesma
+        espessura, os dois se fundiam e o canto virava só um traço um pouco mais
+        longo. O contraste de peso é o que faz o colchete existir como elemento.
+        """
+        if cor[3] <= 0:
+            return
+        braco = min(self._s(self._TIME_STOP_CORNER), (w - 2 * banda) // 3)
+        if braco <= 0:
+            return
+        esp = max(3, self._s(5))
+        x0, y0 = banda, banda
+        x1, y1 = w - banda, h - banda
+        for cx, cy, sx, sy in (
+            (x0, y0, 1, 1),
+            (x1, y0, -1, 1),
+            (x0, y1, 1, -1),
+            (x1, y1, -1, -1),
+        ):
+            pygame.draw.line(moldura, cor, (cx, cy), (cx + sx * braco, cy), esp)
+            pygame.draw.line(moldura, cor, (cx, cy), (cx, cy + sy * braco), esp)
+
+    def _time_stop_scratch(
+        self, w: int, h: int
+    ) -> tuple[pygame.Surface, tuple[pygame.Rect, ...]]:
+        """Buffer reusado da moldura, já limpo, + as faixas que ele ocupa (§7).
+
+        Só o PERÍMETRO é tocado — na limpeza e, depois, no blit. O miolo do
+        buffer é transparente e permanente, então percorrê-lo é trabalho puro.
+        Medido a 1080p: o blit de tela cheia de uma surface SRCALPHA custa
+        3,49 ms (21% de um frame de 60fps, com o efeito ativo); as quatro
+        faixas custam 1,05 ms. O `fill` cai de 1,01 ms para 0,47 ms.
+
+        A profundidade vem das CONSTANTES, não da banda do frame: com a banda
+        do frame sobraria resíduo do frame anterior, quando ela era maior.
+
+        As faixas são DISJUNTAS (as laterais não repetem os cantos). Na
+        limpeza a sobreposição seria inofensiva, mas o blit compõe alpha, e
+        cantos blitados duas vezes sairiam mais fortes que o resto da moldura.
+        """
         if self._time_stop_surface is None or self._time_stop_surface.get_size() != (
             w,
             h,
         ):
             self._time_stop_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+            d = min(
+                min(w, h) // 2,
+                self._s(self._TIME_STOP_BAND + self._TIME_STOP_BAND_WARNING)
+                + max(1, self._s(self._TIME_STOP_RIM))
+                + max(3, self._s(5)),
+            )
+            self._time_stop_strips = (
+                pygame.Rect(0, 0, w, d),
+                pygame.Rect(0, h - d, w, d),
+                pygame.Rect(0, d, d, h - 2 * d),
+                pygame.Rect(w - d, d, d, h - 2 * d),
+            )
+
         moldura = self._time_stop_surface
-        moldura.fill((0, 0, 0, 0))
-        pygame.draw.rect(moldura, (*color, alpha), (0, 0, w, h), espessura)
-        surface.blit(moldura, (0, 0))
-
-        if not frozen:
-            return
-
-        texto = t("hud.time_stop.ending") if warning > 0.0 else t("hud.time_stop")
-        rotulo = self.hud_font_tiny.render(texto, True, color)
-        rotulo.set_alpha(alpha)
-        surface.blit(
-            rotulo,
-            rotulo.get_rect(center=(w // 2, espessura + self._s(14))),
-        )
+        vazio = (0, 0, 0, 0)
+        for faixa in self._time_stop_strips:
+            moldura.fill(vazio, faixa)
+        return moldura, self._time_stop_strips
 
     def _draw_impact_flash(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """White frames: clarão branco curto que esmaece em 1-3 frames (impact frame)."""

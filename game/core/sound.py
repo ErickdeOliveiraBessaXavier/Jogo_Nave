@@ -105,7 +105,7 @@ class SoundManager:
 
         # Configurar número de canais. No web, menos canais = menos mixagem por
         # callback de áudio (que disputa CPU com o loop no software do WASM).
-        # Mantém os 7 dedicados (0–6) + 5 livres p/ one-shots — suficiente.
+        # Mantém os 8 dedicados (0–7) + 5 livres p/ one-shots — suficiente.
         max_channels = CHANNEL_CONFIG["max_channels"]
         if _sys.platform == "emscripten":
             max_channels = max(CHANNEL_CONFIG["reserved"] + 5, 12)
@@ -151,6 +151,9 @@ class SoundManager:
         )
         self.metropolis_laser_channel: pygame.mixer.Channel = pygame.mixer.Channel(
             CHANNEL_CONFIG["metropolis_laser"]
+        )
+        self.time_stop_channel: pygame.mixer.Channel = pygame.mixer.Channel(
+            CHANNEL_CONFIG["time_stop"]
         )
         self.last_shot_time: float = 0.0
         self.shot_volume_base: float = VOLUME_CONFIG["shots"]
@@ -296,6 +299,35 @@ class SoundManager:
             return
         self.last_shield_break_time = now
         self._sounds["shield_break"].play()
+
+    @require_audio
+    def play_time_stop_in(self):
+        """Mundo desacelerando — início do congelamento da parada do tempo."""
+        self._play_time_stop_cue("time_stop_in")
+
+    @require_audio
+    def play_time_stop_out(self):
+        """Mundo acelerando de volta — início da rampa de recuperação."""
+        self._play_time_stop_cue("time_stop_out")
+
+    def _play_time_stop_cue(self, key: str) -> None:
+        """Toca um cue da parada do tempo no canal dedicado.
+
+        Canal próprio, e não `Sound.play()`, por dois motivos: os dois cues são
+        mutuamente exclusivos (tocar um corta o outro, sem sobreposição) e o
+        efeito pode ser CANCELADO no meio — troca de fase ou game over chamam
+        `stop_time_stop_sfx()` para o som não vazar para a tela seguinte.
+        """
+        sound = self._sounds.get(key)
+        if sound is None:
+            return
+        sound.set_volume(self.sfx_volume * self.master_volume)
+        self.time_stop_channel.play(sound)
+
+    @require_audio
+    def stop_time_stop_sfx(self):
+        """Corta o cue da parada do tempo (efeito cancelado antes de terminar)."""
+        self.time_stop_channel.stop()
 
     @require_audio
     def play_gem_birth(self):
@@ -753,7 +785,8 @@ class SoundManager:
     @require_audio
     def stop_looping_sfx(self):
         """Para só os SFX em canais dedicados (loops/sustentados): warning, tiros,
-        lasers de boss, mina/orbe do Golem e o loop do Metropolis.
+        lasers de boss, mina/orbe do Golem, loop do Metropolis e os cues da
+        parada do tempo.
 
         NÃO interrompe one-shots (explosões, raio) — esses se encerram sozinhos e
         devem soar até o fim. Usado ao SAIR da cena de jogo: senão a morte fica
@@ -765,6 +798,7 @@ class SoundManager:
         self.golem_mine_channel.stop()
         self.golem_orb_channel.stop()
         self.metropolis_laser_channel.stop()
+        self.time_stop_channel.stop()
 
     @require_audio
     def stop_all_sfx(self):

@@ -98,6 +98,8 @@ def load_sfx(
         "hit_hurt_meteor_boss": ui.get("hit_hurt_meteor_boss"),
         "shield_activate": ui.get("shield_activate"),
         "shield_break": ui.get("shield_break"),
+        "time_stop_in": ui.get("time_stop_in"),
+        "time_stop_out": ui.get("time_stop_out"),
         "gem_birth": ui.get("gem_birth"),
         "gem_death": ui.get("gem_death"),
         "metropolis_overlord_laser": ui.get("metropolis_overlord_laser"),

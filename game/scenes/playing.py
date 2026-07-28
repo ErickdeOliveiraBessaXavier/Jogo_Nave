@@ -86,7 +86,7 @@ from ..systems.revival_system import RevivalSystem
 from ..systems.shooting_system import ShootingSystem
 from ..systems.upgrade_selector import UpgradeSelector
 from ..systems.spawner import EnemySpawner, PowerUpSpawner, StarSpawner
-from ..systems.time_stop import TimeStopState
+from ..systems.time_stop import TimeStopPhase, TimeStopState
 from ..systems.transition_controller import TransitionController, TransitionPhase
 from ..systems.world_transition_cutscene import (
     ThrusterParticle,
@@ -319,6 +319,9 @@ class PlayingScene(Scene):
         # Relógio do envelope de música (tremolo). Separado do de cima porque
         # continua correndo durante a recuperação, quando o tremor já parou.
         self._time_stop_music_clock: float = 0.0
+        # Última fase observada — a borda entre duas fases é o que dispara os
+        # cues de áudio (desacelerando/acelerando) uma vez só.
+        self._time_stop_last_phase: TimeStopPhase = TimeStopPhase.IDLE
 
         self.show_fps: bool = False
         self.show_enemy_hitboxes: bool = False
@@ -1267,10 +1270,41 @@ class PlayingScene(Scene):
 
     def _update_timers(self, dt: float) -> None:
         self.time_stop.update(dt)
-        if self.time_stop.is_frozen:
+        if self.time_stop.is_active:
+            # Corre durante TODO o efeito, não só no congelamento: a moldura
+            # continua ondulando enquanto se dissolve na rampa de volta. O
+            # tremor dos inimigos, que divide este relógio, não é afetado —
+            # `tremor_pixels` já é zero fora do congelamento.
             self._time_stop_phase += dt
         self._apply_time_stop_music(dt)
+        self._emit_time_stop_cues()
         self.shooting.update(dt)
+        self._update_frame_timers(dt)
+
+    def _emit_time_stop_cues(self) -> None:
+        """Cues de áudio da parada do tempo, disparados na VIRADA de fase.
+
+        Por borda, e não dentro do `trigger()`, por dois motivos: assim um único
+        ponto cobre todos os caminhos de ativação (hoje o power-up, amanhã o que
+        for), e a virada `FROZEN → RECOVERING` nasce dentro do `TimeStopState`,
+        que é lógica pura e não conhece `EventBus` (§1). A cena observa a fase e
+        emite o evento (§2) — quem toca é o `SoundSystem`.
+
+        Re-pegar o power-up durante o congelamento renova a duração mas NÃO
+        repete o "desacelerando": a fase não virou, e o som seria um eco sem
+        nada acontecendo na tela.
+        """
+        fase = self.time_stop.phase
+        if fase is self._time_stop_last_phase:
+            return
+        anterior, self._time_stop_last_phase = self._time_stop_last_phase, fase
+
+        if fase is TimeStopPhase.FROZEN:
+            self.app.event_bus.emit(events.PlaySound(sound_name="time_stop_in"))
+        elif fase is TimeStopPhase.RECOVERING and anterior is TimeStopPhase.FROZEN:
+            # Só na saída natural do congelamento. Um `reset()` (troca de fase,
+            # game over) passa direto a IDLE e não deve soar como recuperação.
+            self.app.event_bus.emit(events.PlaySound(sound_name="time_stop_out"))
 
     def _apply_time_stop_music(self, dt: float) -> None:
         """Envelope de volume da música durante/depois da parada do tempo.
@@ -1295,6 +1329,14 @@ class PlayingScene(Scene):
             self._time_stop_music_clock = 0.0
             sound_manager.set_music_duck("time_stop", 1.0)
 
+    def _update_frame_timers(self, dt: float) -> None:
+        """Timers de frame da cena: preparação, pop-ups, multiplicador, shake.
+
+        Separado de `_update_timers` só por tamanho — roda **todo frame**,
+        incondicionalmente. Não pode ficar dentro de nenhum método com
+        early-out (ver `_apply_time_stop_music`), sob pena de o timer de
+        preparação nunca correr e a intro nunca terminar.
+        """
         # Timer de preparação (continua negativo para animação de saída)
         if self.preparation_time_left > -1.5:
             self.preparation_time_left -= dt
@@ -1922,10 +1964,14 @@ class PlayingScene(Scene):
         self.time_stop.reset()
         self._time_stop_phase = 0.0
         self._time_stop_music_clock = 0.0
+        self._time_stop_last_phase = TimeStopPhase.IDLE
         # Solta o duck junto: sem isto a fase seguinte começava com a música
         # presa no volume do congelamento, já que nada mais recalcularia o
         # envelope depois do reset.
         sound_manager.set_music_duck("time_stop", 1.0)
+        # E corta o cue em curso — o efeito foi cancelado, o som dele não pode
+        # vazar por cima da abertura da fase nova.
+        sound_manager.stop_time_stop_sfx()
 
         theme_changed, new_world = self.level_controller.start_next_level(
             self.current_world
@@ -2055,10 +2101,8 @@ class PlayingScene(Scene):
             stage_name=stage_name,
             score_multiplier_active=self.score_multiplier_active,
             score_multiplier_timer=self.score_multiplier_timer,
-            time_stop_frozen=self.time_stop.is_frozen,
-            time_stop_warning=self.time_stop.warning_ratio,
-            time_stop_recovering=self.time_stop.is_recovering,
-            time_stop_recovery=self.time_stop.recovery_ratio,
+            time_stop_warning=self.time_stop.hud_warning,
+            time_stop_openness=self.time_stop.hud_openness,
             time_stop_phase=self._time_stop_phase,
             shake_timer=self.screen_shake_timer,
             shake_intensity=self.screen_shake_intensity,

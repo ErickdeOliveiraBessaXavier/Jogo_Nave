@@ -86,11 +86,17 @@ CHANNEL_CONFIG: Dict[str, int] = {
     "golem_mine": 4,  # Canal dedicado para tick da mina do Golem
     "golem_orb": 5,  # Canal dedicado para rajada do orbe roxo do Golem
     "metropolis_laser": 6,  # Canal dedicado para o loop do laser do Metropolis Overlord
-    # Canais 0–6 são DEDICADOS (loops/sustentados). `reserved` informa ao mixer
+    # Canal próprio para os cues da parada do tempo. Não é loop, mas é
+    # SUSTENTADO e ligado a um estado: precisa ser cortável quando o efeito é
+    # cancelado (troca de fase, game over) e os dois cues são mutuamente
+    # exclusivos — "acelerando" deve cortar "desacelerando", que o canal
+    # compartilhado dá de graça.
+    "time_stop": 7,
+    # Canais 0–7 são DEDICADOS (loops/sustentados). `reserved` informa ao mixer
     # quantos canais do início reservar — `Sound.play()` (one-shots) nunca os
     # auto-aloca, evitando que `stop_looping_sfx()` mate uma explosão recém-tocada.
-    "reserved": 7,  # Reserva canais 0–6; one-shots usam só 7..max-1
-    "max_channels": 16,  # 7 dedicados + 9 livres para one-shots simultâneos
+    "reserved": 8,  # Reserva canais 0–7; one-shots usam só 8..max-1
+    "max_channels": 17,  # 8 dedicados + 9 livres para one-shots simultâneos
 }
 
 # Diretórios-base da descoberta data-driven de música (orientada por pastas).
@@ -136,6 +142,10 @@ SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
             "hit_hurt_meteor_boss": "sfx/ui/hit_hurt_meteor_boss.wav",  # Som de rachadura do boss meteoro
             "shield_activate": "sfx/ui/Som_Escudo_Ativando.wav",  # Pulso do SapperDrone concede escudos
             "shield_break": "sfx/ui/Som_Escudo_Destruído.wav",  # Escudo de inimigo esgotado
+            # Parada do tempo (power-up TIME_STOP): o mundo desacelerando ao
+            # congelar e acelerando de volta na rampa de recuperação.
+            "time_stop_in": "sfx/ui/Efeito_Desacelerando.wav",
+            "time_stop_out": "sfx/ui/Efeito_Acelerando.wav",
             "gem_birth": "sfx/ui/Birth_Energy_Sound_Gem.wav",  # Nascimento da gema do IceGolem
             "gem_death": "sfx/ui/Death_Energy_Sound_Gem.wav",  # Colapso/morte da gema do IceGolem
             "metropolis_overlord_laser": "sfx/ui/Laser_Boss_Loop_Metropolis_Overlord_Boss.mp3",

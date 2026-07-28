@@ -278,7 +278,12 @@ class BlackHole:
             if getattr(enemy, "dead", False):
                 continue
 
-            # opt-out via ``pullable_by_black_hole = False``.
+            # Dois opt-outs distintos: `position_locked` = a entidade não pode
+            # ser movida por ninguém (posição derivada, sem setter — ver o
+            # protocolo `Enemy`); `pullable_by_black_hole` = imunidade a ESTE
+            # efeito, para quem é móvel mas não deve ser arrastado.
+            if getattr(enemy, "position_locked", False):
+                continue
             if not getattr(enemy, "pullable_by_black_hole", True):
                 continue
 

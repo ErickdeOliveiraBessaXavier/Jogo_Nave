@@ -77,7 +77,24 @@ class Scoreable(Protocol):
 
 @runtime_checkable
 class Enemy(Protocol):
-    """Contrato estrutural para inimigos comuns do jogo."""
+    """Contrato estrutural para inimigos comuns do jogo.
+
+    **`position_locked` (class attribute, default `False`)** — o inimigo NÃO
+    pode ser deslocado de fora. `x`/`y` aqui são só de leitura no protocolo, e
+    algumas entidades levam isso a sério: `MountainStalagmite` e
+    `MountainStalactite` derivam `y` da ancoragem no chão/teto com uma property
+    sem setter, e o `rect` delas vem de um mask recalculado por frame — escrever
+    `enemy.y += ...` estoura `AttributeError` e empurrar só o `rect`
+    dessincronizaria colisão e desenho.
+
+    Todo sistema que MOVE inimigos alheios (buraco negro, tremor da parada do
+    tempo) consulta `getattr(en, "position_locked", False)` e pula (§5:
+    class attribute, não `isinstance` nem `hasattr`). `hasattr(en, "y")` NÃO
+    serve para isso — é verdadeiro para property somente-leitura.
+
+    Não confundir com `pullable_by_black_hole`, que é imunidade específica
+    daquele efeito (um boss é móvel, mas não é arrastado).
+    """
 
     @property
     def x(self) -> float: ...

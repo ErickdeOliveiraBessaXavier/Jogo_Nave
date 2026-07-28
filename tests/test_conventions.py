@@ -206,3 +206,61 @@ def test_invulnerabilidade_concedida_por_metodo():
         "use ship.grant_invulnerability(ms) — atribuir invuln direto "
         "dessincroniza invuln_total:\n" + "\n".join(violacoes)
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §5 — posição derivada declara `position_locked`
+# ─────────────────────────────────────────────────────────────────────────────
+def test_entidade_com_posicao_derivada_declara_position_locked():
+    """`x`/`y` como property SEM setter exige `position_locked = True`.
+
+    Sistemas que deslocam inimigos alheios (buraco negro, tremor da parada do
+    tempo) fazem `en.y += ...`. Numa property somente-leitura isso estoura
+    `AttributeError` — e `hasattr(en, "y")` NÃO protege, porque é verdadeiro
+    para property de leitura. O guarda correto é o class attribute (§5), e ele
+    só funciona se a entidade o declarar.
+
+    Custou um crash em runtime: `MountainStalagmite` derruba a partida inteira
+    quando o tremor da parada do tempo tenta vibrá-la. O tremor é código novo;
+    a entidade já existia com o problema, sinalizado só ao buraco negro.
+    """
+    faltando = []
+    for f in _py_files("entities"):
+        arvore = ast.parse(f.read_text(encoding="utf-8"))
+        for cls in (n for n in ast.walk(arvore) if isinstance(n, ast.ClassDef)):
+            getters, setters = set(), set()
+            for corpo in cls.body:
+                if not isinstance(corpo, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if corpo.name not in ("x", "y"):
+                    continue
+                for dec in corpo.decorator_list:
+                    if isinstance(dec, ast.Name) and dec.id == "property":
+                        getters.add(corpo.name)
+                    elif isinstance(dec, ast.Attribute) and dec.attr == "setter":
+                        setters.add(corpo.name)
+            somente_leitura = getters - setters
+            if not somente_leitura:
+                continue
+
+            declara = any(
+                isinstance(a, ast.AnnAssign)
+                and isinstance(a.target, ast.Name)
+                and a.target.id == "position_locked"
+                or isinstance(a, ast.Assign)
+                and any(
+                    isinstance(t, ast.Name) and t.id == "position_locked"
+                    for t in a.targets
+                )
+                for a in cls.body
+            )
+            if not declara:
+                faltando.append(
+                    f"{f.relative_to(_ROOT)}:{cls.lineno}  {cls.name} "
+                    f"(somente-leitura: {sorted(somente_leitura)})"
+                )
+
+    assert not faltando, (
+        "posição derivada sem `position_locked = True` — quem mover essa "
+        "entidade vai estourar AttributeError:\n" + "\n".join(faltando)
+    )

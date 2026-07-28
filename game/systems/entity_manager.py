@@ -937,6 +937,14 @@ class EntityManager:
         sin, cos = math.sin, math.cos
 
         for i, en in enumerate(self.enemies):
+            # Entidades ancoradas ao cenário (estalagmite/estalactite) derivam a
+            # posição de uma property SEM setter — `en.y += ...` estoura
+            # AttributeError. `hasattr(en, "y")` abaixo não protege disso: é
+            # verdadeiro para property somente-leitura. O opt-out formal é o
+            # class attribute do protocolo `Enemy` (§5).
+            if getattr(en, "position_locked", False):
+                continue
+
             dx_old = getattr(en, dx_attr, 0.0)
             dy_old = getattr(en, dy_attr, 0.0)
 

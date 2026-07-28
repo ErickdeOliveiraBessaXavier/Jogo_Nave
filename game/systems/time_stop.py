@@ -19,8 +19,23 @@ de feedback: é o aviso de que a paralisia está no fim.
 from __future__ import annotations
 
 import math
+from enum import Enum, auto
 
 from ..core.config import config as Config
+
+
+class TimeStopPhase(Enum):
+    """Fase corrente do efeito, para quem precisa reagir à VIRADA.
+
+    `is_frozen`/`is_recovering` respondem "como está agora"; a fase existe para
+    a cena detectar a transição (idle→frozen, frozen→recovering) e disparar os
+    cues de áudio uma única vez. `WARNING` não é fase própria: ainda é
+    congelamento, só com feedback diferente (ver `warning_ratio`).
+    """
+
+    IDLE = auto()
+    FROZEN = auto()
+    RECOVERING = auto()
 
 # ── Envelope de música ──────────────────────────────────────────────────────
 # Tudo aqui é AMPLITUDE, porque é o único eixo que `pygame.mixer.music` expõe
@@ -40,6 +55,26 @@ _MUSIC_DUCK_IN: float = 0.12
 # acima disso a modulação alia e vira chiado em vez de oscilação.
 _MUSIC_TREMOLO_HZ: float = 8.0
 _MUSIC_TREMOLO_DEPTH: float = 0.55
+
+# ── Sincronia do feedback visual com os SFX ─────────────────────────────────
+# O congelamento em si é instantâneo (é o ponto do power-up); o que tem rampa é
+# só a MOLDURA da HUD, e ela é cronometrada pelos efeitos sonoros
+# `Efeito_Desacelerando` / `Efeito_Acelerando` — o olho e o ouvido têm de
+# chegar juntos.
+#
+# Medido nos próprios arquivos (não estimado): ambos têm 1,480s, mas o GESTO
+# audível de cada um dura 1,01s, e eles são espelhados —
+#
+#   Desacelerando |=== gesto 1,01s ===|···· silêncio 0,47s ····|
+#   Acelerando    |···· silêncio 0,47s ····|=== gesto 1,01s ===|
+#
+# Por isso a entrada é uma rampa simples de 1,01s, e a saída SEGURA durante o
+# silêncio inicial antes de dissolver. Usar a duração do arquivo (1,48s) nos
+# dois casos deixaria a moldura ainda se mexendo depois de o som calar na
+# entrada, e já quase apagada antes de o som começar na saída.
+_VISUAL_ENTRY_RAMP: float = 1.01
+_VISUAL_EXIT_HOLD: float = 0.47
+_VISUAL_EXIT_RAMP: float = 1.01
 
 
 class TimeStopState:
@@ -126,6 +161,15 @@ class TimeStopState:
         return self.is_frozen or self.is_recovering
 
     @property
+    def phase(self) -> TimeStopPhase:
+        """Fase corrente. Derivada, não armazenada — não pode dessincronizar."""
+        if self.is_frozen:
+            return TimeStopPhase.FROZEN
+        if self.is_recovering:
+            return TimeStopPhase.RECOVERING
+        return TimeStopPhase.IDLE
+
+    @property
     def frozen_time_left(self) -> float:
         return self._frozen_left
 
@@ -148,6 +192,76 @@ class TimeStopState:
     def tremor_pixels(self) -> float:
         """Amplitude do tremor dos congelados, em pixels."""
         return self.warning_ratio * Config.TIME_STOP_TREMOR_PIXELS
+
+    @property
+    def entry_ratio(self) -> float:
+        """0→1 na abertura do congelamento; 1 pelo resto do efeito.
+
+        Só o feedback VISUAL usa isto — o congelamento em si não tem rampa. É o
+        que faz a moldura crescer para dentro da tela ao ativar, em vez de
+        piscar pronta. Dura o gesto do `Efeito_Desacelerando` (1,01s), então a
+        moldura assenta no instante em que o som cala. Vale 1.0 durante a
+        recuperação (já entrou; ali quem manda é `exit_ratio`) e 0.0 sem efeito.
+        """
+        if not self.is_frozen:
+            return 1.0 if self.is_recovering else 0.0
+        if _VISUAL_ENTRY_RAMP <= 0.0:
+            return 1.0
+        return max(0.0, min(1.0, self._elapsed_frozen() / _VISUAL_ENTRY_RAMP))
+
+    @property
+    def exit_ratio(self) -> float:
+        """1→0 no fechamento visual, casado com o `Efeito_Acelerando`.
+
+        Segura em 1.0 durante os 0,47s de silêncio do arquivo e só então
+        dissolve, ao longo dos 1,01s do gesto: a moldura some no mesmo instante
+        em que o som termina. Uma dissolução linear desde o descongelamento
+        correria à frente do áudio — a borda estaria quase apagada antes de o
+        som sequer começar.
+
+        **Não** acompanha `recovery_ratio`. A rampa dos inimigos dura
+        `TIME_STOP_RECOVERY_DURATION` (3s), o dobro do áudio; amarrar a moldura
+        a ela é o que a deixava fora de sincronia com o efeito sonoro.
+        """
+        if self.is_frozen:
+            return 1.0
+        if not self.is_recovering:
+            return 0.0
+        decorrido = Config.TIME_STOP_RECOVERY_DURATION - self._recovery_left
+        if decorrido <= _VISUAL_EXIT_HOLD:
+            return 1.0
+        if _VISUAL_EXIT_RAMP <= 0.0:
+            return 0.0
+        return max(0.0, 1.0 - (decorrido - _VISUAL_EXIT_HOLD) / _VISUAL_EXIT_RAMP)
+
+    @property
+    def hud_openness(self) -> float:
+        """Abertura da moldura: 0 → 1 → 0. **Único** parâmetro das duas pontas.
+
+        Sobe pela `entry_ratio`, fica em 1.0 enquanto o poder está ativo, e
+        desce pela `exit_ratio` — que tem a MESMA duração de rampa. Como as duas
+        pontas são o mesmo número lido em sentidos opostos, a saída é
+        literalmente a entrada rebobinada, e não uma segunda animação que
+        recomeça do zero.
+        """
+        return self.entry_ratio if self.is_frozen else self.exit_ratio
+
+    @property
+    def hud_warning(self) -> float:
+        """`warning_ratio` para a MOLDURA, contínuo na virada do descongelamento.
+
+        `warning_ratio` despenca de ~1 para 0 de um frame para o outro quando o
+        congelamento acaba. Isso é correto para o TREMOR, que tem de parar na
+        hora (senão os inimigos vibrariam enquanto voltam a andar), e errado
+        para a moldura: a banda encolhia de estalo e o pisca rápido voltava à
+        respiração calma no mesmo frame. Era esse duplo salto que fazia a saída
+        parecer uma animação nova em vez da continuação da permanência.
+
+        Na recuperação acompanha `hud_openness`, que vale exatamente 1.0 no
+        instante da virada — então não há degrau — e depois libera junto com a
+        dissolução da moldura.
+        """
+        return self.warning_ratio if self.is_frozen else self.hud_openness
 
     @property
     def recovery_ratio(self) -> float:
