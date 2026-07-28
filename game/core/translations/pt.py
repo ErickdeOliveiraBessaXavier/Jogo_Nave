@@ -299,7 +299,7 @@ PT: dict[str, str] = {
     "upgrade.link.desc": "Feixe de alta voltagem entre jogadores.",
     "upgrade.implosion_shot.desc": "Cada acerto cria uma área que deixa os inimigos lentos e causa dano leve.",
     "upgrade.critical_core.desc": "Cada tiro tem chance de sair crítico e causar dano multiplicado.",
-    "upgrade.cryo_shot.desc": "Acertos seguidos no mesmo inimigo o deixam cada vez mais lento (até 75%). O efeito cai se você trocar de alvo.",
+    "upgrade.cryo_shot.desc": "Acertos seguidos no mesmo inimigo o deixam cada vez mais lento. No 3º acerto ele congela por 5s, coberto de cristais. O efeito cai se você trocar de alvo.",
     "upgrade.shockwave.desc": "Cada inimigo que morre explode numa área pequena, ferindo os vizinhos e apagando tiros inimigos por perto.",
 
     # ── HUD (partida) ────────────────────────────────────────────────────────
