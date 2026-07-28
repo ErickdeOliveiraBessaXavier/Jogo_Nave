@@ -9,6 +9,16 @@ from .._shared.draw_utils import draw_square_trail_particle, rotated_square_corn
 from .square_base import SquareProjectileBase
 
 
+def _lerp_rgb(
+    a: tuple[int, int, int], b: tuple[int, int, int], t: float
+) -> tuple[int, int, int]:
+    return (
+        int(a[0] + (b[0] - a[0]) * t),
+        int(a[1] + (b[1] - a[1]) * t),
+        int(a[2] + (b[2] - a[2]) * t),
+    )
+
+
 class BossSquare(SquareProjectileBase):
     """
     Indestructible square projectile launched by the boss in frenzy mode.
@@ -33,6 +43,29 @@ class BossSquare(SquareProjectileBase):
     SCATTER_DURATION = 0.9
     SCATTER_SPEED_MIN = 170.0
     SCATTER_SPEED_MAX = 330.0
+
+    # ── Identidade visual ───────────────────────────────────────────────────
+    #
+    # O quadrado é lido como PEDAÇO DO BOSS porque repete a gramática dele: o
+    # chassi do boss (`boss_pixel_map`) é contorno escuro `D` → rampa de aço
+    # azulado `B`/`C`/`E` → núcleo quente `G`/`H` embutido. Aqui é a mesma
+    # construção concêntrica, com o casco vindo da PALETA DO BOSS (então
+    # acompanha o lerp para o frenzy) e só a energia sendo própria.
+    #
+    # A energia é CIANO por três motivos: é complementar do núcleo laranja do
+    # boss, o que faz os dois lerem como um sistema só (coração quente, sistemas
+    # auxiliares frios); contrasta por saturação com o aço dessaturado do casco;
+    # e evita laranja/vermelho, já dominantes em explosões e ataques.
+    #
+    # No frenzy a energia NÃO vira vermelha — ela intensifica. O casco escurece
+    # junto com o boss (vem da paleta dele), então o quadrado se corrompe com o
+    # dono sem virar mais um borrão quente na tela.
+    ENERGY_CORE = (0, 210, 255)
+    ENERGY_HOT = (190, 250, 255)
+    # Fração do meio-lado de cada anel concêntrico, de fora para dentro.
+    RING_HULL = 0.80
+    RING_CORE = 0.52
+    RING_HOT = 0.24
 
     def __init__(
         self,
@@ -189,52 +222,102 @@ class BossSquare(SquareProjectileBase):
             ):
                 self.dead = True
 
-    def draw(self, surface: pygame.Surface) -> None:
-        """Draw the square projectile with rotation and trail."""
-        if self.dead:
+    @property
+    def drawn_by_owner(self) -> bool:
+        """True quando quem desenha é o boss, não o EntityManager.
+
+        O boss desenha os orbitais em DUAS passadas (metade atrás do corpo,
+        metade na frente) para a órbita ler como volta em torno de um objeto com
+        volume. Sem esta divisão de responsabilidade os dois desenhavam o mesmo
+        quadrado — e o do EntityManager, por vir depois, apagava tanto a
+        aparência quanto a camada "atrás" que o boss tinha acabado de compor.
+
+        Espalhando, o dono já morreu e pode ter sido solto: aí o EntityManager
+        assume, senão ninguém desenharia a animação de encerramento.
+        """
+        return self.is_orbital and self.state != "scattering"
+
+    def _hull_colors(self) -> tuple[
+        tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]
+    ]:
+        """(contorno, casco, brilho) — o aço do boss, vindo da paleta dele.
+
+        É o que amarra o quadrado ao dono: mesmo material, mesma rampa, e
+        acompanha de graça o lerp de cor quando o boss entra em frenzy.
+        """
+        pal = self.palette
+        if not pal:
+            # Fallback neutro. O antigo era VERMELHO puro (255,0,0) e era o que
+            # o jogador via de fato: os orbitais nunca recebiam paleta, então
+            # caíam aqui — a origem do "parecem de outro conjunto de sprites".
+            return (20, 25, 35), (80, 100, 120), (150, 170, 190)
+        return (
+            pal.get("D", (20, 25, 35)),
+            pal.get("C", (80, 100, 120)),
+            pal.get("F", (150, 170, 190)),
+        )
+
+    def draw(
+        self, surface: pygame.Surface, off_x: float = 0.0, off_y: float = 0.0
+    ) -> None:
+        """Desenha o quadrado: contorno, casco, núcleo de energia e centro.
+
+        Concêntrico de propósito. A silhueta não muda com o giro, então o bloco
+        continua legível rodando — que é o requisito de leitura em movimento —,
+        e os anéis repetem a leitura do chassi do boss (contorno escuro, corpo de
+        aço, energia embutida no meio) em vez de serem um quadrado chapado.
+
+        `off_x/off_y` é o tremor do boss, aplicado quando é ele quem desenha.
+        """
+        if self.dead or self.size < 1.0:
             return
 
-        # Paleta de cores dinâmica
-        from .boss_pixel_map import PROJECTILE_COLOR_KEY, PROJECTILE_HIGHLIGHT_KEY, TRAIL_COLOR_KEY
-        
-        # Cores padrão caso não haja paleta
-        hull_color = (255, 0, 0)
-        energy_color = (255, 255, 100)
-        trail_base = (255, 50, 0)
-        
-        if self.palette:
-            hull_color = self.palette.get(PROJECTILE_COLOR_KEY, hull_color)
-            energy_color = self.palette.get(PROJECTILE_HIGHLIGHT_KEY, energy_color)
-            trail_base = self.palette.get(TRAIL_COLOR_KEY, trail_base)
+        outline, hull, sheen = self._hull_colors()
 
-        # Desenhar partículas de trail primeiro (atrás do quadrado)
+        # Trilha atrás do corpo, esfriando para o branco-ciano da energia (antes
+        # aquecia para laranja, brigando com as explosões).
         for p in self.trail_particles:
             if p.alpha > 0:
-                # Interpola a cor da trilha baseada na vida da partícula
-                r = int(trail_base[0] * p.life + 255 * (1 - p.life))
-                g = int(trail_base[1] * p.life + 100 * (1 - p.life))
-                b = int(trail_base[2] * p.life)
+                fade = 1.0 - p.life
+                r = int(hull[0] * p.life + self.ENERGY_HOT[0] * fade)
+                g = int(hull[1] * p.life + self.ENERGY_HOT[1] * fade)
+                b = int(hull[2] * p.life + self.ENERGY_HOT[2] * fade)
                 draw_square_trail_particle(
-                    surface, p.x, p.y, p.size, (r, g, b), p.alpha
+                    surface, p.x + off_x, p.y + off_y, p.size, (r, g, b), p.alpha
                 )
 
-        # Calcular cor com intensidade alternada (usa offset para dessincronizar)
-        anim_value = self.animation_timer + self.animation_offset
-        cos_val = abs(math.cos(anim_value))
-        
-        # Interpola entre hull_color e energy_color para efeito pulsante
-        r = int(hull_color[0] + (energy_color[0] - hull_color[0]) * cos_val * 0.3)
-        g = int(hull_color[1] + (energy_color[1] - hull_color[1]) * cos_val * 0.3)
-        b = int(hull_color[2] + (energy_color[2] - hull_color[2]) * cos_val * 0.3)
-        color = (r, g, b)
-        
-        border_color = energy_color
+        cx, cy = self.x + off_x, self.y + off_y
+        half = self.size / 2
+        angle = math.radians(self.rotation)
 
-        rotated_corners = rotated_square_corners(
-            self.x, self.y, self.size / 2, math.radians(self.rotation)
-        )
-        pygame.draw.polygon(surface, color, rotated_corners)
-        self._draw_animated_border(surface, rotated_corners, border_color)
+        # Pulso do núcleo — dessincronizado por `animation_offset` para os 14 não
+        # piscarem em uníssono.
+        pulse = 0.5 + 0.5 * abs(math.cos(self.animation_timer + self.animation_offset))
+        core = _lerp_rgb(self.ENERGY_CORE, self.ENERGY_HOT, pulse * 0.55)
+
+        def anel(frac: float, color: tuple[int, int, int]) -> list[tuple[float, float]]:
+            corners = rotated_square_corners(cx, cy, half * frac, angle)
+            pygame.draw.polygon(surface, color, corners)
+            return corners
+
+        borda = anel(1.0, outline)  # contorno escuro (chave `D` do boss)
+        anel(self.RING_HULL, hull)  # casco de aço (chave `C`)
+        anel(self.RING_CORE, core)  # energia
+        if half * self.RING_HOT >= 1.0:
+            anel(self.RING_HOT, self.ENERGY_HOT)  # centro quente
+
+        # Reflexo diagonal: o chassi do boss tem `F` como face iluminada, e é o
+        # detalhe que faz o bloco parecer metal e não um adesivo.
+        if half >= 5.0:
+            pygame.draw.line(
+                surface,
+                sheen,
+                borda[0],
+                borda[1],
+                max(1, int(self.size / 12)),
+            )
+
+        self._draw_animated_border(surface, borda, core)
 
     def _begin_scatter(self) -> None:
         """Solta o quadrado da órbita quando o boss cai.

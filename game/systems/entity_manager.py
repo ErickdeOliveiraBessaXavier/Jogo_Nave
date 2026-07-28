@@ -1660,7 +1660,6 @@ class EntityManager:
             self.carrier_debris,
             self.ice_shards,
             self.captor_emps,
-            self.boss_squares,
             self.powerups,
             self.stars,
             self.floating_scores,
@@ -1677,6 +1676,16 @@ class EntityManager:
             for e in lst:
                 if is_v(e):
                     e.draw(surface)
+
+        # Quadrados do boss fora do laço genérico: os ORBITAIS são desenhados
+        # pelo próprio boss, que os divide em duas camadas (metade atrás do
+        # corpo, metade na frente). Redesenhá-los aqui — depois do boss —
+        # apagava tanto a aparência quanto a camada de trás. Sobram para o EM os
+        # projéteis lançados e os orbitais já soltos (espalhando), que não têm
+        # mais quem os desenhe.
+        for q in self.boss_squares:
+            if not q.drawn_by_owner and is_v(q):
+                q.draw(surface)
 
         self.explosion_pool.draw_all(surface)
         self.implosion_pool.draw_all(surface)

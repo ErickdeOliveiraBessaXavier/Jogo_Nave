@@ -1,7 +1,7 @@
 import logging
 import math
 import random
-from typing import TYPE_CHECKING, Any, List, Literal, Tuple
+from typing import TYPE_CHECKING, Any, List, Literal
 
 import pygame
 
@@ -20,7 +20,6 @@ from .boss_pixel_map import (
 )
 from .boss_square import BossSquare
 from .boss_state import BossState
-from .._shared.draw_utils import rotated_square_corners
 
 if TYPE_CHECKING:
     from ...systems.boss_context import BossUpdateContext, BossUpdateResult
@@ -185,6 +184,13 @@ class Boss(BossHitMixin):
                 g = max(0, min(255, g))
                 b = max(0, min(255, b))
                 self.current_palette[key] = (r, g, b)
+
+        # Os orbitais desenham o casco com a paleta do boss (chaves D/C/F), então
+        # precisam da MESMA instância — é o que os faz escurecer junto no frenzy
+        # em vez de ficarem num tom fixo enquanto o dono muda. Compartilhar a
+        # referência (e não copiar) mantém isso de graça a cada lerp.
+        for square in self.floating_squares:
+            square.palette = self.current_palette
 
     def _position_cannons(self) -> None:
         """Cola os canhões ao corpo do boss. Chamado todo frame para que sigam
@@ -1072,56 +1078,24 @@ class Boss(BossHitMixin):
     def _draw_floating_squares(
         self, surface: pygame.Surface, off_x: float, off_y: float, behind: bool
     ) -> None:
+        """Metade dos orbitais atrás do corpo, metade na frente.
+
+        É o que dá volume à órbita — os blocos passam POR TRÁS do boss. O
+        desenho em si é do próprio quadrado (`BossSquare.draw`): aqui só se
+        decide a camada.
+
+        Antes esta função tinha aparência própria (aço do boss) e o
+        `EntityManager` redesenhava os mesmos quadrados por cima com um fallback
+        VERMELHO — apagando de uma vez a aparência e a camada de trás. Agora o
+        `drawn_by_owner` divide a responsabilidade: o que o boss desenha, o EM
+        não repete.
+        """
         for i, sq in enumerate(self.floating_squares):
             if (i % 2 == 0) != behind:
                 continue
-
-            color, border = (255, 0, 0), (255, 100, 100)  # Fallback
-            if sq.state in ("preparing", "launching"):
-                p = 0.5 + 0.5 * abs(math.sin(sq.prepare_timer * 8))
-                color, border = (255, int(200 * p), 0), (255, 255, 0)
-            else:
-                pal = self.current_palette
-                # No frenzy usamos a cor do chassi ou similar
-                color = pal.get("C", (200, 0, 0))
-                intensity = 0.7 + (i / len(self.floating_squares)) * 0.3
-                color = (
-                    int(color[0] * intensity),
-                    int(color[1] * intensity),
-                    int(color[2] * intensity),
-                )
-                border = (
-                    min(255, color[0] + 50),
-                    min(255, color[1] + 50),
-                    min(255, color[2] + 50),
-                )
-
-            if sq.rotation > 0:
-                self._draw_rotated_square(surface, sq, color, border, off_x, off_y)
-            else:
-                r = pygame.Rect(
-                    int(sq.x - sq.size / 2 + off_x),
-                    int(sq.y - sq.size / 2 + off_y),
-                    int(sq.size),
-                    int(sq.size),
-                )
-                pygame.draw.rect(surface, color, r)
-                pygame.draw.rect(surface, border, r, 2)
-
-    def _draw_rotated_square(
-        self,
-        surface: pygame.Surface,
-        sq: BossSquare,
-        color: Tuple[int, int, int],
-        border: Tuple[int, int, int],
-        ox: float,
-        oy: float,
-    ) -> None:
-        corners = rotated_square_corners(
-            sq.x + ox, sq.y + oy, sq.size / 2, math.radians(sq.rotation)
-        )
-        pygame.draw.polygon(surface, color, corners)
-        pygame.draw.polygon(surface, border, corners, 2)
+            if not sq.drawn_by_owner:
+                continue
+            sq.draw(surface, off_x, off_y)
 
     def _get_aiming_line_intensity(self) -> float:
         """Calcula a intensidade do traçado de mira baseado no estado.

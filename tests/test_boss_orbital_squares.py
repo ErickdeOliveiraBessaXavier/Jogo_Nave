@@ -11,6 +11,7 @@ frame, mas o **EntityManager** controlava o ciclo de vida, e nenhum dos dois
 sabia da regra "sem boss, sem órbita".
 """
 
+import pygame
 import pytest
 
 from game.entities.bosses.boss import Boss
@@ -269,6 +270,127 @@ class TestRotacaoContinua:
         em, boss = cenario()
         tick(em, 600)
         assert all(0.0 <= q.rotation < 360.0 for q in boss.floating_squares)
+
+
+class TestIdentidadeVisual:
+    """Os quadrados são pedaços do boss, não sprites avulsos.
+
+    O defeito era estrutural, não de gosto: os orbitais eram desenhados DUAS
+    vezes — o boss os pintava com o aço da paleta dele (em duas camadas, metade
+    atrás do corpo) e o `EntityManager`, por vir depois, redesenhava por cima
+    com um fallback VERMELHO hardcoded, porque orbital nunca recebia paleta.
+    O que o jogador via era só o fallback, e a camada de trás nunca aparecia.
+    """
+
+    def desenhos_por_frame(self, em: EntityManager, alvo) -> int:
+        from unittest import mock
+
+        surface = pygame.Surface((1280, 720))
+        n = {"c": 0}
+        puro = BossSquare.draw
+
+        def conta(self, *a, **k):
+            if self is alvo:
+                n["c"] += 1
+            return puro(self, *a, **k)
+
+        with mock.patch.object(BossSquare, "draw", conta):
+            em.draw(surface, 640.0, 600.0)
+        return n["c"]
+
+    def test_orbital_e_desenhado_uma_unica_vez(self):
+        em, boss = cenario()
+        tick(em, 10)
+        assert self.desenhos_por_frame(em, boss.floating_squares[0]) == 1
+
+    def test_espalhando_tambem_e_desenhado_uma_unica_vez(self):
+        """Solto do dono, quem desenha passa a ser o EM — mas continua sendo um
+        só. Sem a troca de responsabilidade, ninguém desenharia."""
+        em, boss = cenario()
+        tick(em, 10)
+        boss.dead = True
+        tick(em, 1)
+        assert self.desenhos_por_frame(em, em.boss_squares[0]) == 1
+
+    def test_orbital_recebe_a_paleta_do_boss(self):
+        """A origem do fallback vermelho: só os projéteis lançados recebiam
+        paleta; os 14 orbitais ficavam com `None`."""
+        em, boss = cenario()
+        tick(em, 5)
+        assert all(q.palette for q in boss.floating_squares)
+        assert all(q.palette is boss.current_palette for q in boss.floating_squares)
+
+    def test_o_casco_sai_da_paleta_do_boss(self):
+        """Mesmo material do chassi — é o que amarra os dois visualmente."""
+        from game.entities.bosses.boss_pixel_map import COLORS_NORMAL
+
+        em, boss = cenario()
+        tick(em, 5)
+        contorno, casco, brilho = boss.floating_squares[0]._hull_colors()
+        assert contorno == COLORS_NORMAL["D"]
+        assert casco == COLORS_NORMAL["C"]
+        assert brilho == COLORS_NORMAL["F"]
+
+    def test_o_casco_acompanha_o_frenzy(self):
+        em, boss = cenario()
+        tick(em, 5)
+        antes = boss.floating_squares[0]._hull_colors()[1]
+        boss.frenzy_mode = True
+        tick(em, 60)
+        assert boss.floating_squares[0]._hull_colors()[1] != antes
+
+    def test_a_energia_nao_e_laranja_nem_vermelha(self):
+        """Restrição explícita: essas cores já dominam explosões e ataques."""
+        for cor in (BossSquare.ENERGY_CORE, BossSquare.ENERGY_HOT):
+            r, _, b = cor
+            assert b > r, f"{cor} puxa para o quente"
+
+    def test_a_energia_nao_vira_vermelha_no_frenzy(self):
+        """O casco se corrompe com o boss; a energia intensifica, não troca de
+        hue — senão o quadrado vira mais um borrão quente na tela."""
+        em, boss = cenario()
+        tick(em, 5)
+        antes = BossSquare.ENERGY_CORE
+        boss.frenzy_mode = True
+        tick(em, 60)
+        assert BossSquare.ENERGY_CORE == antes
+
+    def test_os_aneis_sao_concentricos_e_decrescentes(self):
+        """Concêntrico é o que mantém a silhueta legível girando."""
+        assert 1.0 > BossSquare.RING_HULL > BossSquare.RING_CORE > BossSquare.RING_HOT
+        assert BossSquare.RING_HOT > 0.0
+
+    def test_metade_dos_orbitais_fica_atras_do_corpo(self):
+        """Profundidade da órbita. Antes existia no código e nunca aparecia,
+        porque o EM redesenhava tudo por cima do boss."""
+        import inspect
+
+        from game.entities.bosses import boss as mod
+
+        src = inspect.getsource(mod.Boss._draw_floating_squares)
+        assert "behind" in src
+        assert "drawn_by_owner" in src
+
+    def test_o_em_nao_redesenha_o_que_o_boss_desenhou(self):
+        import inspect
+
+        from game.systems import entity_manager as mod
+
+        src = inspect.getsource(mod.EntityManager.draw)
+        assert "drawn_by_owner" in src
+
+    def test_desenha_em_todos_os_estados_e_tamanhos(self):
+        """Inclui tamanhos minúsculos do fim do espalhamento, onde os anéis
+        internos degeneram."""
+        from game.entities.bosses.boss_pixel_map import COLORS_NORMAL
+
+        surface = pygame.Surface((400, 400))
+        for estado in ("orbiting", "preparing", "flying", "scattering"):
+            for tam in (0.5, 1.0, 4.0, 16.0, 28.0):
+                q = BossSquare(x=200, y=200, vx=0, vy=0, size=tam, is_orbital=True)
+                q.state = estado
+                q.palette = COLORS_NORMAL
+                q.draw(surface)
 
 
 class TestProjetilLancadoNaoRegride:
