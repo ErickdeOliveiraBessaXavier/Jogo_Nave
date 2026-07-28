@@ -24,13 +24,18 @@ from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.effects.emp_wave import EMPWave
 from ..entities.effects.explosion import Explosion, ExplosionType, ImpactPattern
 from ..entities.effects.explosion_pool import ExplosionPool
+from ..entities.effects.cryo_crystals import draw_frozen as draw_frozen_crystals
 from ..entities.effects.implosion_pulse import ImplosionPulsePool
 from ..entities.effects.explosive_effect import ExplosiveEffect
 from ..entities.projectiles.explosive_mine import ExplosiveMine
 from ..entities.enemies.space.eye_enemy import EyeEnemy
 from ..entities.projectiles.eye_laser import EyeLaser
 from ..entities.enemies.city.captor_emp import CaptorEMP
-from ..core.upgrades_config import IMPLOSION_SLOW_FACTOR
+from ..core.upgrades_config import (
+    CRYO_MAX_STACKS,
+    CRYO_SLOW_STEPS,
+    IMPLOSION_SLOW_FACTOR,
+)
 from ..entities.enemies.city.core_implosion import CoreImplosion
 from ..entities.enemies.city.cyber_captor import CyberCaptor
 from ..entities.enemies.city.cyber_tank import CyberTank
@@ -341,6 +346,37 @@ class EntityManager:
         """
         imp_t = getattr(entity, "implosion_slow_timer", 0.0)
         return IMPLOSION_SLOW_FACTOR if imp_t > 0.0 else 1.0
+
+    @staticmethod
+    def _cryo_multiplier(entity: Any) -> float:
+        """Multiplicador de velocidade pela escada do Cryo Shot.
+
+        O NÍVEL (`cryo_stacks`) escolhe o degrau; o timer só diz se a escada
+        ainda está de pé. Marca posta em `Collisions._apply_cryo`; aqui só se lê.
+        """
+        if getattr(entity, "cryo_slow_timer", 0.0) <= 0.0:
+            return 1.0
+        stacks = int(getattr(entity, "cryo_stacks", 0))
+        if stacks <= 0:
+            return 1.0
+        return CRYO_SLOW_STEPS[min(stacks, CRYO_MAX_STACKS) - 1]
+
+    @staticmethod
+    def _update_cryo_linger(entity: Any, dt: float) -> None:
+        """Decrementa o timer do Cryo e DERRUBA a escada inteira quando ele zera.
+
+        Zerar `cryo_stacks` junto é o que faz o upgrade ser condicional: soltar o
+        alvo custa o nível inteiro, não um degrau. Sem isso o nível ficaria
+        guardado no inimigo esperando o próximo acerto, e a escada — que é a
+        identidade do upgrade — viraria só um bônus permanente com atraso.
+        """
+        t = getattr(entity, "cryo_slow_timer", 0.0)
+        if t <= 0.0:
+            return
+        t = max(0.0, t - dt)
+        setattr(entity, "cryo_slow_timer", t)
+        if t == 0.0:
+            setattr(entity, "cryo_stacks", 0)
 
     @staticmethod
     def _update_implosion_linger(entity: Any, dt: float) -> None:
@@ -1082,11 +1118,13 @@ class EntityManager:
             self._update_ice_linger(f, dt)
             self._update_vortex_linger(f, dt)
             self._update_implosion_linger(f, dt)
+            self._update_cryo_linger(f, dt)
             mul = (
                 self._emp_multiplier(f, slow_active, slow_factor, dt)
                 * self._ice_multiplier(f)
                 * self._vortex_multiplier(f)
                 * self._implosion_multiplier(f)
+                * self._cryo_multiplier(f)
             )
             shot = f.update(enemy_dt * mul)
             if shot:
@@ -1321,11 +1359,13 @@ class EntityManager:
             self._update_ice_linger(s, dt)
             self._update_vortex_linger(s, dt)
             self._update_implosion_linger(s, dt)
+            self._update_cryo_linger(s, dt)
             mul = (
                 self._emp_multiplier(s, slow_active, slow_factor, dt)
                 * self._ice_multiplier(s)
                 * self._vortex_multiplier(s)
                 * self._implosion_multiplier(s)
+                * self._cryo_multiplier(s)
             )
             s.update(enemy_dt * mul, player_x, player_y, ac)
 
@@ -1387,11 +1427,13 @@ class EntityManager:
             self._update_ice_linger(en, dt)
             self._update_vortex_linger(en, dt)
             self._update_implosion_linger(en, dt)
+            self._update_cryo_linger(en, dt)
             mul = (
                 self._emp_multiplier(en, slow_active, slow_factor, dt)
                 * self._ice_multiplier(en)
                 * self._vortex_multiplier(en)
                 * self._implosion_multiplier(en)
+                * self._cryo_multiplier(en)
             )
             ctx.sdt = enemy_dt * mul
             update_in_ctx = getattr(en, "update_in_context", None)
@@ -1617,6 +1659,13 @@ class EntityManager:
             self.meteor_pool.draw(surface)
             self.rock_glider_pool.draw(surface)
 
+        # 3.6 Gelo do Cryo Shot: POR CIMA dos inimigos (encapsula o sprite) e
+        # por baixo dos projéteis, que precisam continuar legíveis. Lê o estado
+        # que já vive no inimigo — sem entidade, sem lista, sem ciclo de vida
+        # próprio (ver `cryo_crystals`).
+        if enemy_visible:
+            draw_frozen_crystals(surface, self._cached_all_enemies)
+
         for laser in self.boss_lasers:
             laser.draw(surface)
         for laser in self.cacador_lasers:
@@ -1839,6 +1888,8 @@ class EntityManager:
         owner_ship: Any | None = None,
         size_multiplier: float = 1.0,
         boss_damage_mult: float = 1.0,
+        critical: bool = False,
+        cryo: bool = False,
     ) -> Bullet:
         bullet = self.bullet_pool.get(
             x=x,
@@ -1854,6 +1905,8 @@ class EntityManager:
             owner_ship=owner_ship,
             size_multiplier=size_multiplier,
             boss_damage_mult=boss_damage_mult,
+            critical=critical,
+            cryo=cryo,
         )
         if homing:
             target = self._assign_homing_target(bullet)

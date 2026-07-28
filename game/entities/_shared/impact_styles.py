@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from ...core.player_tint import player_shot_color
-from ...core.upgrades_config import giant_visual_scale
+from ...core.upgrades_config import CRITICAL_CORE_IMPACT_SCALE, giant_visual_scale
 from ..effects.explosion import ImpactPattern
 
 Palette = Tuple[Tuple[int, int, int], ...]
@@ -142,11 +142,19 @@ def impact_for_projectile(projectile: object) -> Optional[ImpactStyle]:
 
 
 def impact_scale_for_projectile(projectile: object) -> float:
-    """Fator de tamanho do impacto do projétil sob o Giant Shot.
+    """Fator de tamanho do impacto do projétil (Giant Shot × crítico).
 
     Lê o `size_multiplier` da bala (cheio ~3x quando o Giant Shot está ativo) e o
     passa pela mesma suavização visual das sprites, para o burst de impacto
     crescer junto com o tiro aumentado. Projéteis sem `size_multiplier` (ex.:
     teleguiado do Caçador) caem em 1.0 — impacto do tamanho de sempre.
+
+    A bala crítica engorda o impacto por cima disso. É o único feedback do
+    Critical Core: o jogo não tem número de dano flutuante nem som de crítico,
+    então o pico de dano precisa aparecer no impacto ou o upgrade fica invisível
+    — e "invisível" é o modo de falha de todo upgrade que só mexe num número.
     """
-    return giant_visual_scale(getattr(projectile, "size_multiplier", 1.0))
+    scale = giant_visual_scale(getattr(projectile, "size_multiplier", 1.0))
+    if getattr(projectile, "critical", False):
+        scale *= CRITICAL_CORE_IMPACT_SCALE
+    return scale

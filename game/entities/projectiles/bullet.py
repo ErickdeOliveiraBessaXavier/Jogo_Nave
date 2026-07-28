@@ -139,6 +139,67 @@ def _get_homing_frames(
     return frames
 
 
+# ── Tiro de gelo (Cryo Shot) ────────────────────────────────────────────────
+# Paleta dessaturada de propósito: o azul-elétrico saturado já é do Chain
+# Lightning e do Engenheiro. Gelo é claro e frio, não neon.
+_CRYO_FILL: Tuple[int, int, int] = (110, 190, 230)
+_CRYO_EDGE: Tuple[int, int, int] = (200, 240, 255)
+_CRYO_CORE: Tuple[int, int, int] = (255, 255, 255)
+# Rastro congelante: pixels que ficam para trás, esfriando. Sem alpha de
+# propósito — contra o fundo escuro, escurecer a cor lê como desvanecer e custa
+# um `draw.rect` em vez de uma Surface com alpha por bala por frame (§7).
+_CRYO_TRAIL: Tuple[Tuple[int, int, int], ...] = (
+    (150, 215, 245),
+    (95, 160, 205),
+    (55, 100, 145),
+)
+# Sprite do cristal por (w, h, jogador). O tiro tem meia dúzia de tamanhos no
+# jogo inteiro, então o cache satura nos primeiros disparos.
+_CRYO_BULLET_CACHE: Dict[Tuple[int, int, int], pygame.Surface] = {}
+
+
+def _get_cryo_bullet_surface(w: int, h: int, player_index: int) -> pygame.Surface:
+    """Cristal facetado do tamanho do tiro, memoizado.
+
+    Hexágono alongado no eixo maior — a forma que lê como cristal de quartzo em
+    poucos pixels. O losango claro por dentro é a faceta: é ela que dá volume e
+    diferencia o tiro de uma cápsula azul qualquer.
+    """
+    key = (w, h, player_index)
+    cached = _CRYO_BULLET_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    cx, cy = w / 2.0, h / 2.0
+    fill = player_shot_color(_CRYO_FILL, player_index)
+    edge = player_shot_color(_CRYO_EDGE, player_index)
+    core = player_shot_color(_CRYO_CORE, player_index)
+
+    if w >= h:  # cristal deitado (side-scroll / leque horizontal)
+        body = [(0, cy), (w * 0.3, 0), (w, cy * 0.75), (w, cy * 1.25), (w * 0.3, h)]
+        facet = [(w * 0.25, cy), (w * 0.5, cy * 0.45), (w * 0.8, cy), (w * 0.5, cy * 1.55)]
+    else:  # cristal em pé (top-down, o caso comum)
+        body = [(cx, 0), (w, h * 0.3), (cx * 1.25, h), (cx * 0.75, h), (0, h * 0.3)]
+        facet = [(cx, h * 0.18), (w * 0.8, h * 0.42), (cx, h * 0.72), (w * 0.2, h * 0.42)]
+
+    pygame.draw.polygon(surf, fill, body)
+    if w >= 4 and h >= 4:
+        pygame.draw.polygon(surf, edge, body, 1)
+        pygame.draw.polygon(surf, core, facet)
+    else:
+        # Tiro minúsculo (Estilete tem 2px de largura): faceta não cabe, então o
+        # brilho vira um pixel central — sem isso o cristal some numa mancha.
+        surf.set_at((int(cx), int(cy)), core)
+
+    try:
+        surf = surf.convert_alpha()
+    except pygame.error:
+        pass
+    _CRYO_BULLET_CACHE[key] = surf
+    return surf
+
+
 # Giro do tiro do Berserk ("Estrela Espiral") no próprio eixo, em graus/s. As
 # rajadas já giram EM VOLTA da nave (o padrão espiral, em shooting_system); isto
 # gira cada projétil em torno do próprio centro. Mais rápido que o teleguiado
@@ -409,10 +470,20 @@ class Bullet:
         owner_ship: Optional[Any] = None,
         size_multiplier: float = 1.0,
         boss_damage_mult: float = 1.0,
+        critical: bool = False,
+        cryo: bool = False,
     ):
         self.x, self.y = x, y
         self.damage = damage
         self.dead = False
+        # Cryo Shot: só VISUAL na bala. Quem aplica a escada de gelo é o sistema
+        # de colisão, lendo `owner_ship.has_cryo_shot` — a marca é do dono, não
+        # do projétil, porque em coop cada nave responde pelo próprio upgrade.
+        self.cryo = cryo
+        # Crítico (Critical Core): o `damage` acima JÁ vem multiplicado. A flag
+        # não é lida para calcular dano nenhum — só para o impacto sair maior
+        # (`impact_scale_for_projectile`), que é o feedback do upgrade.
+        self.critical = critical
         self.size_multiplier = size_multiplier  # Giant Shot escala w/h (visual+hitbox)
         # Nerf de dano aplicado SÓ contra bosses, lido em `collisions.
         # _project_into_boss`. 1.0 = sem mudança (todo tiro comum).
@@ -482,10 +553,19 @@ class Bullet:
         owner_ship: Optional[Any] = None,
         size_multiplier: float = 1.0,
         boss_damage_mult: float = 1.0,
+        critical: bool = False,
+        cryo: bool = False,
     ):
-        """Reconfigura a bala para reutilização no pool."""
+        """Reconfigura a bala para reutilização no pool.
+
+        Todo campo de modificador tem que ser reescrito aqui, inclusive quando o
+        valor é `False`: a bala vem de uma vida anterior e, sem isto, herda o
+        crítico (ou o explosivo) do disparo que a usou por último.
+        """
         self.x, self.y = x, y
         self.damage = damage
+        self.critical = critical
+        self.cryo = cryo
         self.dead = False
         self.size_multiplier = size_multiplier
         self.boss_damage_mult = boss_damage_mult
@@ -728,8 +808,39 @@ class Bullet:
             self._draw_homing_bullet(surface)
         elif self.explosive:
             self._draw_explosive_bullet(surface)
+        elif self.cryo:
+            self._draw_cryo_bullet(surface)
         else:
             self._draw_ship_specific_bullet(surface)
+
+    def _draw_cryo_bullet(self, surface: pygame.Surface) -> None:
+        """Cristal de gelo com rastro congelante.
+
+        Fica DEPOIS do teleguiado e do explosivo na cadeia de despacho: aqueles
+        dois visuais comunicam MECÂNICA (o '+' persegue, a granada explode) e
+        escondê-los custaria leitura de jogo. O gelo ainda se anuncia nos combos
+        pelo halo, que vira ciano quando o Cryo está ativo.
+        """
+        rect = self.rect
+        if self.size_multiplier > 1.0 and self.ship_id != "berserk":
+            rect = self._breathing_rect(rect)
+
+        # Rastro primeiro: fica ATRÁS do cristal, saindo por trás dele.
+        speed = math.hypot(self.vx, self.vy)
+        if speed > 1.0:
+            step = max(2, min(rect.width, rect.height))
+            ux, uy = -self.vx / speed, -self.vy / speed
+            cx, cy = rect.centerx, rect.centery
+            size = max(1, step // 2)
+            for i, color in enumerate(_CRYO_TRAIL, start=1):
+                px = int(cx + ux * step * i) - size // 2
+                py = int(cy + uy * step * i) - size // 2
+                pygame.draw.rect(surface, color, (px, py, size, size))
+
+        surface.blit(
+            _get_cryo_bullet_surface(rect.width, rect.height, self.player_index),
+            rect.topleft,
+        )
 
     def _draw_power_pulse(self, surface: pygame.Surface) -> None:
         """Halo pulsante ('respiração') dos tiros de power-up.
@@ -754,9 +865,18 @@ class Bullet:
 
         # Cor + ritmo por fantasia. Prioridade quando combinados: o efeito mais
         # dramático manda na cor do halo.
-        is_common = not (self.explosive or is_chain or self.homing or is_giant)
+        is_common = not (
+            self.explosive or is_chain or self.homing or is_giant or self.cryo
+        )
         radius_factor = 1.4
-        if self.explosive:
+        if self.cryo:
+            # Gelo tem prioridade sobre TODOS aqui, ao contrário da cadeia de
+            # despacho do corpo. É de propósito: quando o Cryo se combina com
+            # teleguiado ou explosivo, o corpo do tiro fica com o visual daquele
+            # (que comunica mecânica) e o halo é o que mantém o gelo visível.
+            base_color = _CRYO_EDGE
+            speed = 0.004  # respiração lenta: gelo não crepita
+        elif self.explosive:
             base_color = (255, 120, 0)  # laranja de pavio
             speed = 0.009
         elif is_chain:

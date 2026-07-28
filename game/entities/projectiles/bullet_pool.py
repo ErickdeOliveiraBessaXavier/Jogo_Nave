@@ -46,6 +46,8 @@ class BulletPool:
         owner_ship: Optional[Any] = None,
         size_multiplier: float = 1.0,
         boss_damage_mult: float = 1.0,
+        critical: bool = False,
+        cryo: bool = False,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -66,6 +68,8 @@ class BulletPool:
                 owner_ship=owner_ship,
                 size_multiplier=size_multiplier,
                 boss_damage_mult=boss_damage_mult,
+                critical=critical,
+                cryo=cryo,
             )
             self.active.append(bullet)
             return bullet
@@ -85,6 +89,8 @@ class BulletPool:
             owner_ship=owner_ship,
             size_multiplier=size_multiplier,
             boss_damage_mult=boss_damage_mult,
+            critical=critical,
+            cryo=cryo,
         )
         self.pool.append(bullet)
         self.active.append(bullet)

@@ -8,11 +8,14 @@ from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
 from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
 from ..core.upgrades_config import (
+    CRYO_FREEZE_DURATION,
+    CRYO_MAX_STACKS,
+    CRYO_SLOW_DURATION,
     IMPLOSION_DAMAGE,
     IMPLOSION_DAMAGE_INTERVAL,
     IMPLOSION_SLOW_LINGER,
 )
-from ..entities.effects.implosion_pulse import accepts_control
+from ..entities._shared.control_marks import can_be_controlled
 from ..entities.projectiles.air_strike_bomb import AirStrikeBomb
 from ..entities.projectiles.boss_laser import BossLaser
 from ..entities.bosses.boss_square import BossSquare
@@ -927,6 +930,9 @@ class Collisions:
             bullet_implosion_active = owner is not None and getattr(
                 owner, "has_implosion_shot", False
             )
+            bullet_cryo_active = owner is not None and getattr(
+                owner, "has_cryo_shot", False
+            )
             # Uma vez por bala, não por inimigo atingido: o estilo não muda
             # entre os alvos da mesma bala (piercing acerta vários).
             impact = impact_for_projectile(b)
@@ -960,6 +966,15 @@ class Collisions:
                         self._credit_kill(b)
                         if result.points > 0:
                             score_events.append((b.x, b.y, result.points))
+
+                    # Cryo: acumula POR INIMIGO ATINGIDO, sem a trava de "uma vez
+                    # por bala" que a implosão e a cadeia usam. As travas delas
+                    # existem porque criam um efeito no MUNDO (um pulso, uma
+                    # cadeia) que sairia duplicado no mesmo ponto; aqui o efeito
+                    # é uma marca no alvo, então uma bala perfurante que atravessa
+                    # três inimigos deve gelar os três — é o prêmio de alinhá-los.
+                    if bullet_cryo_active:
+                        self._apply_cryo(enemy)
 
                     if bullet_implosion_active and not implosion_triggered:
                         implosion_triggered = True
@@ -1166,17 +1181,10 @@ class Collisions:
             for enemy in enemy_grid.query(
                 pulse.cx - radius, pulse.cy - radius, radius * 2, radius * 2
             ):
-                if enemy.dead:
-                    continue
-                # Boss fica fora: pelo atributo formal, nunca por nome de classe
-                # (§5). `position_locked` também — estruturas ancoradas
-                # (estalagmite/estalactite) têm o tempo próprio no ciclo
-                # RISE→LINGER→SHATTER, e freá-las faz a AMEAÇA durar mais.
-                if getattr(enemy, "is_boss", False):
-                    continue
-                if getattr(enemy, "position_locked", False):
-                    continue
-                if not accepts_control(enemy):
+                # Guard único dos efeitos de controle (morto, boss,
+                # `position_locked`, `__slots__` sem opt-in) — ver
+                # `control_marks.can_be_controlled` para o porquê de cada um.
+                if not can_be_controlled(enemy):
                     continue
 
                 ecx, ecy, er = enemy.collision_circle()
@@ -1202,6 +1210,28 @@ class Collisions:
                         score_events.append((ecx, ecy, result.points))
 
         return score_gain, destroyed_count, score_events
+
+    @staticmethod
+    def _apply_cryo(enemy: Any) -> None:
+        """Sobe um degrau da escada de gelo no inimigo e renova a duração.
+
+        O nível mora no INIMIGO (`cryo_stacks`), não na nave nem na bala: é o que
+        faz P1 e P2 alimentarem a mesma escada em coop, e o que faz o nível cair
+        junto com o alvo em vez de sobreviver a ele.
+
+        A duração é REPOSTA a cada acerto (não somada): é isso que torna o
+        upgrade condicional — o nível cheio dura enquanto o jogador insistir no
+        mesmo alvo, e cai inteiro quando ele solta.
+        """
+        if not can_be_controlled(enemy):
+            return
+        stacks = min(CRYO_MAX_STACKS, int(getattr(enemy, "cryo_stacks", 0)) + 1)
+        enemy.cryo_stacks = stacks
+        # O topo da escada é o estágio CONGELADO e vale mais tempo — é a
+        # recompensa por ter mantido a pressão nos três acertos.
+        enemy.cryo_slow_timer = (
+            CRYO_FREEZE_DURATION if stacks >= CRYO_MAX_STACKS else CRYO_SLOW_DURATION
+        )
 
     def _trigger_implosion(
         self,

@@ -10,13 +10,18 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
 from ..core.config import config as Config
 from ..core.fire_timer import FireTimer
 from ..core.sound import sound_manager
-from ..core.upgrades_config import HOMING_DAMAGE_MULTIPLIER
+from ..core.upgrades_config import (
+    CRITICAL_CORE_CHANCE,
+    CRITICAL_CORE_MULTIPLIER,
+    HOMING_DAMAGE_MULTIPLIER,
+)
 from ..events import game_events as events
 
 if TYPE_CHECKING:
@@ -150,6 +155,13 @@ class ShootingSystem:
             * 1.5
         )
 
+        # O Berserk também crita: a regra é "toda BALA da nave pode sair
+        # crítica", e uma exceção aqui seria invisível para o jogador — ele veria
+        # o upgrade parar de funcionar sem nada explicando. Os dois se compõem
+        # (1,5× do Berserk × 2,5× do crítico), o que é caro em slots nos dois
+        # lados; o nerf anti-boss do Berserk continua valendo por cima.
+        crit_chance = CRITICAL_CORE_CHANCE if ship.has_critical_core else 0.0
+
         # Dispara em 4 direções rotativas (Cruz Espiral)
         # Reduzido de 8 para 4 conforme solicitado ("tiros demais")
         for i in range(4):
@@ -157,16 +169,23 @@ class ShootingSystem:
             angle_rad = math.radians(angle_deg)
             dir_vec = (math.cos(angle_rad), math.sin(angle_rad))
 
+            critical = random.random() < crit_chance
             # Usando BulletPool via EntityManager.spawn_bullet
             self._em.spawn_bullet(
                 cx,
                 cy,
-                damage=adjusted_damage,
+                damage=(
+                    _round_damage(adjusted_damage * CRITICAL_CORE_MULTIPLIER)
+                    if critical
+                    else adjusted_damage
+                ),
                 direction=dir_vec,
                 ship_id="berserk",
                 owner_ship=ship,
                 size_multiplier=ship.bullet_size_multiplier,
                 boss_damage_mult=_BERSERK_BOSS_DAMAGE_MULT,  # nerf só em boss
+                critical=critical,
+                cryo=ship.has_cryo_shot,
             )
 
         # Efeito sonoro
@@ -241,6 +260,15 @@ class ShootingSystem:
                 if spec.homing
                 else adjusted_damage
             )
+            # Crítico multiplica DEPOIS de tudo (perfil da nave, power-up de
+            # dano, teleguiado), então ele vale sempre os mesmos 2,5× sobre o
+            # dano que aquela bala causaria — e não uma fração dele.
+            # A explosão do tiro explosivo NÃO crita: ela é dano de área com
+            # valor próprio (EXPLOSIVE_BULLET_DAMAGE), não o impacto da bala.
+            if spec.critical:
+                bullet_damage = _round_damage(
+                    bullet_damage * CRITICAL_CORE_MULTIPLIER
+                )
             bullet = self._em.spawn_bullet(
                 spec.x,
                 spec.y,
@@ -253,6 +281,8 @@ class ShootingSystem:
                 ship_id=ship.profile.id,
                 owner_ship=ship,
                 size_multiplier=size_mult,
+                critical=spec.critical,
+                cryo=spec.cryo,
             )
             self._apply_subframe_catchup(bullet, overshoot)
             fired_explosive = fired_explosive or spec.explosive

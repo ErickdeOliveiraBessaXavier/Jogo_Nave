@@ -8,6 +8,7 @@ import pygame
 
 from ...core.config import config as Config
 from ...core.ship_types import ShipProfile, get_ship_profile
+from ...core.upgrades_config import CRITICAL_CORE_CHANCE
 from ...core.sound import sound_manager
 from ..effects.particle_types import ParticleDict, step_particle
 from .ship_movement import ShipMovement
@@ -63,6 +64,12 @@ class BulletSpec(NamedTuple):
     homing: bool = False
     explosive: bool = False
     low_ammo: bool = False
+    # ÚNICO campo sorteado por bala em vez de copiado da nave: o Critical Core
+    # rola uma vez por projétil, então duas balas da mesma salva divergem aqui.
+    critical: bool = False
+    # Visual: o tiro sai como cristal de gelo. Uniforme na salva (é estado da
+    # nave), ao contrário do `critical`, que é sorteado por bala.
+    cryo: bool = False
 
 
 class Ship:
@@ -158,8 +165,14 @@ class Ship:
         self.big_shot_timer: float = 0.0
         # Chain Shot power-up
         self.chain_shot_timer: float = 0.0
-        # Implosão (upgrade): cada acerto suga os inimigos vizinhos.
+        # Implosão (upgrade): cada acerto abre uma área de lentidão.
         self.implosion_shot_timer: float = 0.0
+        # Critical Core (upgrade): cada bala pode sair crítica.
+        self.critical_core_timer: float = 0.0
+        # Cryo Shot (upgrade): acertos acumulam lentidão no alvo.
+        self.cryo_shot_timer: float = 0.0
+        # Shockwave (upgrade): morte de inimigo vira explosão pequena.
+        self.shockwave_timer: float = 0.0
         # Repulsion Shield power-up (Vento Constante)
         self.repulsion_shield_timer: float = 0.0
         self.repulsion_wind_streaks: list[dict[str, Any]] = []
@@ -543,18 +556,57 @@ class Ship:
     def activate_implosion_shots(self, duration: float) -> None:
         self._powerups.activate_implosion_shots(duration)
 
+    def activate_critical_core(self, duration: float) -> None:
+        self._powerups.activate_critical_core(duration)
+
+    def activate_cryo_shots(self, duration: float) -> None:
+        self._powerups.activate_cryo_shots(duration)
+
+    def activate_shockwave(self, duration: float) -> None:
+        self._powerups.activate_shockwave(duration)
+
     @property
     def has_chain_shot(self) -> bool:
         return self.chain_shot_timer > 0.0
 
     @property
     def has_implosion_shot(self) -> bool:
-        """True enquanto os acertos desta nave geram pulsos de sucção.
+        """True enquanto os acertos desta nave abrem áreas de lentidão.
 
         Lido por bala no sistema de colisão via `owner_ship`, como o
         `has_chain_shot`: em coop cada nave responde pelo próprio upgrade.
         """
         return self.implosion_shot_timer > 0.0
+
+    @property
+    def has_critical_core(self) -> bool:
+        """True enquanto as balas desta nave podem sair críticas.
+
+        Como o `has_implosion_shot`, é por NAVE: em coop cada jogador responde
+        pelo próprio upgrade, mesmo compartilhando o `ShootingSystem`.
+        """
+        return self.critical_core_timer > 0.0
+
+    @property
+    def has_cryo_shot(self) -> bool:
+        """True enquanto os acertos desta nave acumulam lentidão no alvo.
+
+        Por NAVE, como os irmãos: em coop cada jogador responde pelo próprio
+        upgrade, e a escada que o P1 subiu num inimigo é a mesma que o P2
+        alimenta — o nível mora no INIMIGO, não na nave.
+        """
+        return self.cryo_shot_timer > 0.0
+
+    @property
+    def has_shockwave(self) -> bool:
+        """True enquanto as mortes de inimigo viram explosão.
+
+        Diferente dos irmãos, este NÃO é lido por bala: quem consulta é o
+        `ShockwaveSystem`, que reage à morte sem saber quem matou. Em coop basta
+        UM jogador com o upgrade ativo para as mortes explodirem — a morte é do
+        mundo, não de quem deu o tiro.
+        """
+        return self.shockwave_timer > 0.0
 
     @property
     def has_repulsion_shield(self) -> bool:
@@ -843,6 +895,11 @@ class Ship:
         nenhum caso especial: cada campo do `BulletSpec` responde só pelo seu
         upgrade e não olha os outros.
 
+        A exceção é o `critical`, sorteado DENTRO da compreensão: uma rolagem
+        por bala, não por salva. Com o leque são 5 sorteios independentes por
+        puxada de gatilho, e é isso que faz o upgrade cintilar em vez de ligar e
+        desligar a salva inteira.
+
         `apply_spread=False` ignora o Spread Shot: é o que os charge shots usam,
         porque abrir o laser do Magneto ou os 5 teleguiados do Caçador em leque
         multiplicaria projéteis que já são o "muitos de uma vez" da nave.
@@ -853,6 +910,8 @@ class Ship:
             self.explosive_shots_active and self.explosive_shots_remaining > 0
         )
         is_low_ammo = is_explosive and self.explosive_shots_remaining <= 5
+        crit_chance = CRITICAL_CORE_CHANCE if self.has_critical_core else 0.0
+        is_cryo = self.has_cryo_shot
 
         facing_vector = self.get_facing_vector()
 
@@ -880,6 +939,8 @@ class Ship:
                 homing=is_homing,
                 explosive=is_explosive,
                 low_ammo=is_low_ammo,
+                critical=random.random() < crit_chance,
+                cryo=is_cryo,
             )
             for mx, my in muzzles
             for direction in directions

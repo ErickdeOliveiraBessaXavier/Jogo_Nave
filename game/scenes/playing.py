@@ -73,6 +73,7 @@ from ..systems.cheat_input import CheatBuffer
 from ..systems.collision_orchestrator import CollisionOrchestrator
 from ..systems.collisions import Collisions
 from ..systems.effects_system import EffectsSystem
+from ..systems.shockwave_system import ShockwaveSystem
 from ..systems.entity_manager import EntityManager
 from ..systems.gameplay_input_handler import GameplayInputHandler
 from ..systems.level_progression_controller import (
@@ -386,6 +387,18 @@ class PlayingScene(Scene):
     # eram privados, ele os chamava por `hasattr` + acesso a `_privado`, com
     # fallback escrevendo atributos direto — fronteira borrada e quebra
     # silenciosa se o nome mudasse. Ver `ScreenFeedback` em `effects_system`.
+    def _any_shockwave_active(self) -> bool:
+        """Algum jogador vivo está com o Shockwave ligado?
+
+        Basta UM: a onda é consequência da morte do inimigo, não do tiro de quem
+        matou — e o evento que a dispara nem diz quem matou.
+        """
+        return any(
+            slot.ship.has_shockwave
+            for slot in self.roster.alive_slots()
+            if slot.ship is not None
+        )
+
     def request_screen_shake(self, duration: float, intensity: int) -> None:
         self.screen_shake_timer = duration
         self.screen_shake_intensity = intensity
@@ -440,6 +453,15 @@ class PlayingScene(Scene):
         # Instanciar EffectsSystem que escuta eventos do jogo
         self.effects_system = EffectsSystem(
             self.app.event_bus, self.entity_manager, scene=self
+        )
+
+        # Shockwave: reage a EnemyDestroyed. Recebe um callback em vez da cena
+        # (§9) — a única coisa que ele não sabe responder é se o upgrade está
+        # ligado, e isso é uma pergunta sobre o roster.
+        self.shockwave_system = ShockwaveSystem(
+            self.app.event_bus,
+            self.entity_manager,
+            is_active=self._any_shockwave_active,
         )
 
         self.game_renderer = GameRenderer(self.r)
@@ -1173,6 +1195,8 @@ class PlayingScene(Scene):
         sound_manager.stop_looping_sfx()
         if hasattr(self, "effects_system"):
             self.effects_system.cleanup()
+        if hasattr(self, "shockwave_system"):
+            self.shockwave_system.cleanup()
 
     # ------------------------------------------------------------------
     # Update principal

@@ -1,0 +1,55 @@
+Analisei os cinco contra o que este código já tem. Resumo antes do detalhe: dois são quase de graça agora, um é caro mas é o único que muda o jogo de verdade, e um deles eu recomendaria cortar pela metade — porque a parte que ele pede é exatamente a que acabamos de remover da Implosão.
+
+Ranking por (valor entregue) ÷ (risco estrutural)
+
+┌───────────────────┬─────────────┬──────────────────┬───────────────────────────────────────────────────────────────┐
+│                   │    Custo    │      Risco       │                          Observação                           │
+├───────────────────┼─────────────┼──────────────────┼───────────────────────────────────────────────────────────────┤
+│ 🎯 Critical Core  │ Baixo       │ Quase nulo       │ Nenhum estado novo em inimigo, nenhuma escrita de posição     │
+├───────────────────┼─────────────┼──────────────────┼───────────────────────────────────────────────────────────────┤
+│ ☣️ Corrosive Ammo │ Baixo-médio │ Baixo            │ O padrão de DoT que acabei de construir serve de molde direto │
+├───────────────────┼─────────────┼──────────────────┼───────────────────────────────────────────────────────────────┤
+│ ❄️ Cryo Shot      │ Médio       │ Médio            │ A cadeia de slow está pronta; o congelamento é a parte cara   │
+├───────────────────┼─────────────┼──────────────────┼───────────────────────────────────────────────────────────────┤
+│ 💥 Shockwave      │ Médio-alto  │ Alto no empurrão │ O resto é tranquilo — ver abaixo                              │
+├───────────────────┼─────────────┼──────────────────┼───────────────────────────────────────────────────────────────┤
+│ 🔄 Boomerang      │ Alto        │ Alto             │ O único que realmente muda o feel do jogo                     │
+└───────────────────┴─────────────┴──────────────────┴───────────────────────────────────────────────────────────────┘
+
+O que já está pago
+
+Vale saber que o trabalho desta sessão barateou três deles:
+
+- BulletSpec (o NamedTuple que substituiu a tupla de 7 campos): adicionar um modificador por projétil hoje é um campo com default + uma linha no spawn_bullet. Critical, Corrosive e Cryo entram por aí sem tocar em call site nenhum.
+- A cadeia de lentidão _emp × _ice × _vortex × _implosion: um 5º fator para o Cryo é uma função + 3 linhas. E já compõe por multiplicação, então Cryo + gelo + EMP não brigam.
+- accepts_control() e o cooldown no inimigo: os dois problemas que me morderam (entidade com __slots__ estourando, e efeito que multiplica com o número de fontes) já estão resolvidos e testados. Corrosive e Cryo precisam dos dois.
+
+Onde eu puxaria o freio
+
+Shockwave: faça sem o empurrão. Essa é minha recomendação mais forte, e é experiência direta desta sessão, não teoria. "Empurrar inimigos" = escrever posição de fora, e isso cobrou, em ordem: crash em entidade com __slots__; estalactite ficando 4× mais tempo em cena; RockGlider desfazendo o deslocamento no próprio update; CityDrone e FusedDrone voltando pela mola em ~1s; e alvos sendo arremessados para fora da tela quando os efeitos se sobrepunham. Cada inimigo expõe posição de um jeito, e não existe um lugar só para consertar isso.
+
+O resto do Shockwave é barato e satisfatório: dano pequeno, destruir projéteis inimigos próximos (isso sim é sensacional e é geometria pura, sem escrever em ninguém) e lentidão. O gancho já existe: EnemyDestroyed está no EventBus com posição — é o lugar §2-correto. Dois ajustes necessários: o evento não é emitido para boss (not is_boss) e não carrega tamanho, então "onda maior para inimigo maior" precisa de um campo novo.
+
+"Interromper ataques" também é mais caro do que parece: exige um contrato novo (interrupt()) implementado por família de inimigo, e a maioria não vai implementar. Eu deixaria de fora.
+
+Cryo: o congelamento é o risco, não a lentidão. Os três primeiros níveis são a cadeia de multiplicadores, trivial. O 4º nível (parar o inimigo) é outra coisa: congelar uma peça coreografada de boss ou um inimigo em meio a um padrão roteirizado dessincroniza o mesmo tipo de lógica que o puxão quebrava. O TimeStop existente congela tudo globalmente, o que é bem mais simples que congelar um. Eu começaria com 3 níveis de lentidão e avaliaria o congelamento depois, em jogo.
+
+Boomerang: é o mais legal e o mais caro, e vale saber por quê. A bala morre ao sair da tela (bullet.py:546) e morre no impacto (a menos que seja perfurante). Então o retorno exige: máquina de estados na bala, virada antes da borda de despawn, sobreviver ao acerto, um conjunto de "já acertei" para não bater no mesmo alvo duas vezes na volta, e o reset() do pool limpando tudo isso. Some as sinergias que você citou (5 tiros × ida e volta) e você tem também o problema de leitura visual. Eu orçaria em várias sessões, não uma — mas se a ideia é ter um upgrade assinatura, é esse.
+
+A observação que eu faria sobre o conjunto
+
+Você disse que eles não competem entre si. Concordo para Critical, Boomerang e Shockwave. Discordo para Corrosive e Cryo — e o problema não é entre eles, é com o que já existe: a Implosão que acabamos de terminar já é dano contínuo pequeno + lentidão em área. Corrosive é dano contínuo, Cryo é lentidão. Os três vão ler como "o upgrade que aplica um efeitinho no inimigo".
+
+Se quiser os dois, eu daria identidade pelo eixo de aplicação, não pelo efeito: Implosão é área (pega grupo, não escala com precisão), Corrosive é alvo único e cumulativo (recompensa insistir no mesmo inimigo — daí o "excelente contra chefes" que você já anotou), Cryo é condicional (a escada 25→50→75 só compensa se você mantiver pressão). Isso funciona, mas precisa ser deliberado, senão vira redundância.
+
+Sobre a árvore de evolução
+
+Aqui eu seria mais cauteloso do que você. A árvore é um multiplicador de escopo, não um item da lista: 5 upgrades × 3 ramos = 15 comportamentos novos para balancear, em cima dos 18 upgrades que já existem e de 8 slots disponíveis. Tecnicamente é viável — as instâncias de ActiveUpgrade já são por partida, então os parâmetros de ramo caberiam nelas sem mexer no UPGRADES_META. O custo real é UI de escolha, persistência (se for meta-progressão) e balanceamento.
+
+Minha leitura é que o gargalo hoje não é falta de profundidade por upgrade — é que já há 18 e o jogador escolhe 8. Adicionar 5 (23 total) e depois ramificar espalha o balanceamento muito fino. Eu faria na ordem: escolher dois dos cinco, entregar chapados, jogar, e só então prototipar a árvore em um upgrade para sentir o custo antes de comprometer os cinco.
+
+Se fosse eu escolhendo dois para começar
+
+Critical Core + Shockwave (sem empurrão). Motivo: são os que menos dependem de estado novo em inimigo, então não pagam o pedágio do __slots__, e os dois dão feedback imediato e barulhento — que é o que faz um upgrade parecer bom antes de ser bom. O Critical precisa das "melhorias" que você listou (perfurar ou explodir no crítico) para ter identidade; sozinho ele é só um número.
+
+Depois deles, Boomerang como projeto próprio, com tempo reservado.

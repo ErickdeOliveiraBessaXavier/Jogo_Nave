@@ -35,10 +35,10 @@ from game.core.upgrades_config import (
     IMPLOSION_SLOW_LINGER,
 )
 from game.core.spatial_grid import SpatialGrid
+from game.entities._shared.control_marks import accepts_control
 from game.entities.effects.implosion_pulse import (
     ImplosionPulse,
     ImplosionPulsePool,
-    accepts_control,
     suction_radius,
 )
 from game.systems.collisions import Collisions

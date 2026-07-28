@@ -23,7 +23,7 @@ montada (§8) e onde mora o roteador de dano (`apply_hit`/`HitResult`).
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import List
 
 import pygame
 
@@ -67,21 +67,6 @@ def suction_radius() -> float:
     errado.
     """
     return scaled(IMPLOSION_RADIUS)
-
-
-def accepts_control(enemy: Any) -> bool:
-    """A entidade pode receber os efeitos de controle da zona?
-
-    Inimigo comum tem `__dict__` e aceita as marcas (`implosion_slow_timer`,
-    `implosion_damage_cd`) na hora. Entidades com `__slots__` — peças
-    coreografadas de boss (`SerpentBlock`), destroços, tanques — só aceitam os
-    campos que declararam, e escrever nelas estoura `AttributeError`. Uma delas
-    derrubou o jogo em combate.
-
-    Quem quiser participar declara o slot, como já fazem com `emp_linger_timer`:
-    o opt-in fica explícito na entidade, do lado de quem sabe se ela aguenta.
-    """
-    return hasattr(enemy, "__dict__") or hasattr(enemy, "implosion_slow_timer")
 
 
 class ImplosionPulse:

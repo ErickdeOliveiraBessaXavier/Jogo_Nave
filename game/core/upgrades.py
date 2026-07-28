@@ -36,6 +36,9 @@ class UpgradeType(Enum):
     BERSERK = auto()  # Ataque omnidirecional insano
     COOP_LINK = auto()  # Feixe de dano cooperativo
     IMPLOSION_SHOT = auto()  # Cada acerto abre uma área que deixa os inimigos lentos
+    CRITICAL_CORE = auto()  # Chance de cada bala sair crítica (dano multiplicado)
+    CRYO_SHOT = auto()  # Acertos acumulam lentidão no mesmo inimigo (25/50/75%)
+    SHOCKWAVE = auto()  # A morte de cada inimigo vira uma explosão pequena
 
 
 class UpgradeContextProtocol(Protocol):
@@ -639,6 +642,50 @@ class ImplosionShotUpgrade(ActiveUpgrade):
             ship.activate_implosion_shots(self.get_effective_duration(ctx))
 
 
+class CriticalCoreUpgrade(ActiveUpgrade):
+    """Enquanto dura, cada bala tem chance de sair crítica.
+
+    Mesmo padrão dos outros modificadores de tiro por tempo (Giant, Implosão): o
+    upgrade só liga o timer da nave. Quem sorteia é a `Ship.bullet_spawn`, uma
+    vez por bala, e quem multiplica o dano é o `ShootingSystem` — nada aqui
+    conhece bala nem dano.
+    """
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_critical_core(self.get_effective_duration(ctx))
+
+
+class CryoShotUpgrade(ActiveUpgrade):
+    """Enquanto dura, cada acerto acumula lentidão no inimigo atingido.
+
+    Mesmo padrão dos outros modificadores de tiro por tempo: o upgrade só liga o
+    timer da nave. Quem acumula o nível é o sistema de colisão, no acerto, e
+    quem traduz nível em velocidade é o `EntityManager` — nada aqui conhece
+    inimigo.
+    """
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_cryo_shots(self.get_effective_duration(ctx))
+
+
+class ShockwaveUpgrade(ActiveUpgrade):
+    """Enquanto dura, a morte de cada inimigo vira uma explosão pequena.
+
+    O upgrade só liga o timer da nave. Quem reage à morte é o `ShockwaveSystem`,
+    inscrito em `EnemyDestroyed` no EventBus (§2) — nada aqui conhece inimigo,
+    explosão nem cena.
+    """
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_shockwave(self.get_effective_duration(ctx))
+
+
 class CoopLinkUpgrade(ActiveUpgrade):
     """Feixe de alta voltagem que conecta dois jogadores."""
 
@@ -681,6 +728,9 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.CANNON_TOWER: CannonTowerUpgrade,
         UpgradeType.COOP_LINK: CoopLinkUpgrade,
         UpgradeType.IMPLOSION_SHOT: ImplosionShotUpgrade,
+        UpgradeType.CRITICAL_CORE: CriticalCoreUpgrade,
+        UpgradeType.CRYO_SHOT: CryoShotUpgrade,
+        UpgradeType.SHOCKWAVE: ShockwaveUpgrade,
     }
     cls = factories.get(upgrade_type)
     if cls:
@@ -906,6 +956,46 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         None,
         2,
     ),
+    # OFFENSIVE e não UTILITY: o valor é dano puro, sem nenhum efeito de
+    # controle. Cooldown/duração/peso na mesma faixa dos outros modificadores de
+    # tiro por tempo (Giant 60/12/2, Chain 60/10/2) — é a família dele.
+    UpgradeType.CRITICAL_CORE: UpgradeMeta(
+        UpgradeType.CRITICAL_CORE,
+        "CRIT",
+        "Cada tiro pode sair crítico e causar dano multiplicado.",
+        "critical_core",
+        UpgradeCategory.OFFENSIVE,
+        60,
+        12,
+        None,
+        2,
+    ),
+    # UTILITY como a Implosão: o valor é controle, não dano. A diferença entre
+    # os dois é o EIXO — a Implosão é área e não pede pontaria; o Cryo é alvo
+    # único e só paga o nível cheio para quem mantém a pressão.
+    UpgradeType.CRYO_SHOT: UpgradeMeta(
+        UpgradeType.CRYO_SHOT,
+        "CRYO",
+        "Acertos seguidos no mesmo inimigo o deixam cada vez mais lento.",
+        "cryo_shot",
+        UpgradeCategory.UTILITY,
+        55,
+        12,
+        None,
+        2,
+    ),
+    # OFFENSIVE: o valor é dano em área e limpeza de tela, não controle.
+    UpgradeType.SHOCKWAVE: UpgradeMeta(
+        UpgradeType.SHOCKWAVE,
+        "SHOCK",
+        "A morte de cada inimigo vira uma explosão pequena.",
+        "shockwave",
+        UpgradeCategory.OFFENSIVE,
+        60,
+        12,
+        None,
+        2,
+    ),
 }
 
 
@@ -947,6 +1037,9 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "cannon_tower": "C",  # Canhão — faltava no mapa, caía no fallback
         "link": "F",  # Feixe — cedeu o "C" para o Canhão, que o usa melhor
         "implosion_shot": "I",  # Implosão
+        "critical_core": "K",  # Krítico — "C" é do Canhão
+        "cryo_shot": "N",  # Neve — "C"/"G" já usados
+        "shockwave": "O",  # Onda
     }
     if icon_id and icon_id in mapping:
         return mapping[icon_id]

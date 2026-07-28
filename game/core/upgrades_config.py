@@ -59,6 +59,9 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.BERSERK,
     UpgradeType.COOP_LINK,
     UpgradeType.IMPLOSION_SHOT,
+    UpgradeType.CRITICAL_CORE,
+    UpgradeType.CRYO_SHOT,
+    UpgradeType.SHOCKWAVE,
 ]
 
 # Parâmetros de balanceamento do EMP (tempo e intensidade)
@@ -162,6 +165,94 @@ IMPLOSION_SLOW_FACTOR: float = 0.25
 # "3 segundos após o término" quer dizer. Não somar a duração da zona aqui: o
 # timer é REPOSTO por frame, não aplicado uma vez, e somar daria 5s de sobrevida.
 IMPLOSION_SLOW_LINGER: float = 3.0
+
+# Parâmetros do Critical Core
+#
+# A rolagem é POR BALA, não por disparo: com o leque são 5 sorteios por puxada
+# de gatilho, e é isso que faz o upgrade "cintilar" em vez de ligar e desligar a
+# salva inteira. Uma salva toda crítica seria um evento raro e mudo; balas
+# críticas soltas dão leitura contínua de que o upgrade está ativo.
+#
+# Os dois números só importam pelo produto: o dano médio enquanto ativo é
+# `1 + chance × (mult - 1)` = 1 + 0,25 × 1,5 = **+37,5%**. Fica abaixo do
+# Berserk (+50% fixo, mas em rajada rotativa curta) e acima de um power-up de
+# dano comum. Mexer em um dos dois sem olhar o produto muda a força do upgrade
+# sem parecer que mudou.
+#
+# A repartição escolhida (crítico grande e raro, em vez de pequeno e frequente)
+# é o que dá o pico perceptível: 2,5× mata em uma bala o que exigia três.
+CRITICAL_CORE_CHANCE: float = 0.25
+CRITICAL_CORE_MULTIPLIER: float = 2.5
+# O impacto do crítico é maior — é o ÚNICO feedback que o upgrade tem hoje (não
+# há som nem número flutuante no vocabulário do jogo). Passa pelo mesmo
+# `impact_scale` do Giant Shot, então os dois se compõem por multiplicação.
+CRITICAL_CORE_IMPACT_SCALE: float = 1.6
+
+# Parâmetros do Cryo Shot
+#
+# Escada de lentidão por acertos ACUMULADOS no mesmo inimigo: 25% → 50% → 75%
+# mais lento. Os valores são o que SOBRA da velocidade (0.75 = anda a 3/4).
+#
+# A identidade do upgrade é ser CONDICIONAL, e quem entrega isso é a duração
+# curta, não a subida: subir é fácil (3 acertos), mas o nível inteiro cai de uma
+# vez se o jogador soltar o alvo. É o que o separa da Implosão, que é área e não
+# pede pontaria — aqui a recompensa é manter a pressão no mesmo inimigo.
+#
+# A queda é TOTAL e não degrau a degrau, de propósito: escada que desce sozinha
+# vira um número flutuante que o jogador não consegue ler na tela. "Está gelado"
+# ou "descongelou" é legível; "está no nível 2 descendo para 1" não.
+CRYO_SLOW_STEPS: tuple[float, ...] = (0.75, 0.50, 0.25)
+CRYO_MAX_STACKS: int = len(CRYO_SLOW_STEPS)
+# Renovado a cada acerto. 2.5s é o bastante para a troca de alvo custar o nível,
+# sem punir a mira imperfeita entre dois tiros da cadência mais lenta do elenco
+# (Aríete, ~3.7 tiros/s).
+CRYO_SLOW_DURATION: float = 2.5
+# CONGELAMENTO: ao encher a escada o inimigo entra no estágio congelado, que
+# dura mais que os degraus de baixo. É a recompensa por ter mantido a pressão —
+# subir custa 3 acertos, e o topo compra o dobro de tempo do que os degraus
+# intermediários davam. Continua sendo reposto a cada acerto novo.
+CRYO_FREEZE_DURATION: float = 5.0
+# Quantos cristais se formam em volta do inimigo congelado. Poucos e grandes,
+# não muitos e pequenos: o pedido é "parcialmente encapsulado", e cristal
+# pequeno demais vira ruído em cima de sprites que já são pixel art densa.
+CRYO_CRYSTAL_COUNT: int = 6
+# Onde os cristais nascem e até onde vão, em fração do raio do inimigo. A base
+# começa DENTRO (0.45) para parecer gelo brotando do corpo, e a ponta passa da
+# borda (1.2) para o contorno ficar irregular. O miolo do sprite fica livre — o
+# inimigo tem que continuar reconhecível.
+CRYO_CRYSTAL_INNER: float = 0.78
+CRYO_CRYSTAL_OUTER: float = 1.5
+# Paleta azul-gelo dessaturada: preenchimento, aresta e faceta de brilho.
+CRYO_CRYSTAL_FILL: tuple[int, int, int] = (120, 185, 220)
+CRYO_CRYSTAL_EDGE: tuple[int, int, int] = (205, 240, 255)
+CRYO_CRYSTAL_SHINE: tuple[int, int, int] = (255, 255, 255)
+# Tempo final em que os cristais se dissolvem. Sem isto o gelo SOME num frame,
+# e some justamente quando o jogador está olhando para o inimigo que voltou a
+# acelerar — o momento em que a transição mais precisa ser legível.
+CRYO_CRYSTAL_FADE: float = 0.7
+
+# Parâmetros do Shockwave
+#
+# Enquanto ativo, a morte de cada inimigo vira uma explosão PEQUENA no lugar
+# onde ele estava. Reusa o `ExplosiveEffect` (mesma peça do tiro explosivo), que
+# já traz visual, dano em área com dedup por inimigo e ciclo de vida.
+#
+# Raio menor que o do tiro explosivo (60px) de propósito: a onda não é uma
+# segunda arma, é o eco da morte. Ela pega quem estava colado no que morreu.
+SHOCKWAVE_RADIUS: float = 46.0
+# Dano baixo: mata o que já estava quase morto e encadeia em enxame, sem virar
+# a forma principal de matar. O valor é por onda, aplicado uma vez por inimigo.
+SHOCKWAVE_DAMAGE: int = 12
+SHOCKWAVE_LIFETIME: float = 0.3
+# Ciano frio, para não ser confundido com a explosão laranja do tiro explosivo:
+# são efeitos parecidos e a cor é o que diz de quem é qual.
+SHOCKWAVE_COLOR: tuple[int, int, int] = (120, 230, 255)
+# Teto de ondas VIVAS ao mesmo tempo. Não é só orçamento de frame: a onda mata
+# inimigos, e cada morte gera outra onda. Como o dano das explosões é aplicado
+# percorrendo a MESMA lista onde a nova onda entra, sem teto uma cascata em
+# enxame cresceria dentro do próprio laço do frame. Com teto, ela é uma reação
+# em cadeia satisfatória e limitada.
+SHOCKWAVE_MAX_ACTIVE: int = 8
 
 # Parâmetros de balanceamento do Air Strike
 AIR_STRIKE_BOMB_COUNT: int = 20  # Bombas por ativação da ultimate

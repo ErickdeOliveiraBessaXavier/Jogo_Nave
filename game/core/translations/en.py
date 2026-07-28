@@ -295,6 +295,9 @@ EN: dict[str, str] = {
     "upgrade.cannon_tower.desc": "Static mine towers.",
     "upgrade.link.desc": "High-voltage beam between players.",
     "upgrade.implosion_shot.desc": "Every hit creates an area that slows enemies and deals light damage.",
+    "upgrade.critical_core.desc": "Each shot has a chance to crit for multiplied damage.",
+    "upgrade.cryo_shot.desc": "Repeated hits on the same enemy slow it further (up to 75%). The effect drops if you switch targets.",
+    "upgrade.shockwave.desc": "Every enemy that dies explodes in a small area, hurting neighbours and clearing nearby enemy shots.",
 
     # ── HUD (in-game) ────────────────────────────────────────────────────────
     "hud.score": "Score: {}",
