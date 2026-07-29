@@ -517,15 +517,28 @@ class TestCristaisDeGelo:
     def test_o_gelo_engorda_conforme_carrega(self):
         """A carga tem duas leituras (cor e silhueta). Esta é a silhueta: perto
         do estouro o alvo cristalizado ocupa mais pixels do que recém-congelado.
+
+        Desenha por `_draw_one` com SEED FIXO e conta pixel a pixel, em vez de
+        passar por `draw_frozen` amostrando de 2 em 2. A forma dos cristais sai
+        do `id()` do alvo, que muda a cada execução do processo: pela via do
+        `draw_frozen` este teste media uma coroa diferente por run e o
+        crescimento de 18% às vezes caía inteiro entre as amostras — falhava
+        sozinho, sem nada ter mudado no código.
         """
-        alvo = self._alvo_no_centro()
-        gelar(alvo, vezes=CRYO_MAX_STACKS)
-        recem = self._pintar(alvo)
+        from game.entities.effects.cryo_crystals import _draw_one
 
-        alvo.cryo_slow_timer = 0.02  # a um piscar do estouro
-        carregado = self._pintar(alvo)
+        def pixels(charge: float) -> int:
+            canvas = pygame.Surface((300, 300))
+            canvas.fill((0, 0, 0))
+            _draw_one(canvas, 150.0, 150.0, 22.0, 0x5EED1234, charge)
+            return sum(
+                1
+                for x in range(300)
+                for y in range(300)
+                if canvas.get_at((x, y))[:3] != (0, 0, 0)
+            )
 
-        assert carregado > recem
+        assert pixels(1.0) > pixels(0.0)
 
     def test_boss_cristaliza_como_qualquer_alvo(self):
         """Boss não congela, mas GANHA os cristais: é o que avisa o jogador de

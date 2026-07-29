@@ -1406,7 +1406,10 @@ class EntityManager:
         for b in self.cacador_lasers:
             b.update(dt)
         for w in self.wingmen:
-            w.update(dt, self._cached_all_enemies, self.mini_ship_bullets)
+            # A lista inteira entra por parâmetro: é dela que cada escolta tira
+            # a vaga na formação e de quem precisa se afastar (§1 — a escolta
+            # não lê o manager, o manager entrega o contexto).
+            w.update(dt, self._cached_all_enemies, self.mini_ship_bullets, self.wingmen)
         for link in self.coop_links:
             link.update(dt)
         for s in self.orbital_shields:
