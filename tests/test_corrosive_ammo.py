@@ -617,7 +617,7 @@ class TestProjetil:
     def test_a_paleta_e_esverdeada_e_nao_saturada(self):
         """Verde musgo: o verde neon já é do teleguiado. Sem isso os dois tiros
         ficam indistinguíveis num combo."""
-        from game.entities.projectiles.bullet import (
+        from game.entities.projectiles.bullet_fx.corrosive import (
             _CORROSIVE_EDGE,
             _CORROSIVE_FILL,
             _CORROSIVE_PIT,
@@ -631,7 +631,7 @@ class TestProjetil:
     def test_o_sprite_tem_poco_escuro_e_brilho(self):
         """Os dois detalhes que fazem a bolha ler como ácido e não como cápsula:
         o poço (o ácido comendo a gota) e o brilho úmido."""
-        from game.entities.projectiles.bullet import _get_corrosive_bullet_surface
+        from game.entities.projectiles.bullet_fx.corrosive import _get_corrosive_bullet_surface
 
         surf = _get_corrosive_bullet_surface(14, 18, 0)
         cores = {
@@ -650,7 +650,7 @@ class TestProjetil:
     def test_o_sprite_minusculo_nao_some(self):
         """O Estilete tem 2px de largura: a receita de elipse+poço não cabe, e
         sem o caminho degradado o tiro vira uma mancha invisível."""
-        from game.entities.projectiles.bullet import _get_corrosive_bullet_surface
+        from game.entities.projectiles.bullet_fx.corrosive import _get_corrosive_bullet_surface
 
         surf = _get_corrosive_bullet_surface(2, 3, 0)
         visiveis = sum(
@@ -660,7 +660,7 @@ class TestProjetil:
 
     def test_o_sprite_e_memoizado(self):
         """Um `Surface` por bala por frame seria alocação no hot path (§7)."""
-        from game.entities.projectiles.bullet import _get_corrosive_bullet_surface
+        from game.entities.projectiles.bullet_fx.corrosive import _get_corrosive_bullet_surface
 
         a = _get_corrosive_bullet_surface(12, 16, 0)
         b = _get_corrosive_bullet_surface(12, 16, 0)

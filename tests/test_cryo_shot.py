@@ -713,7 +713,7 @@ class TestProjetilDeGelo:
 
     def test_o_sprite_do_cristal_e_cacheado(self):
         """Um `Surface` novo por bala por frame é exatamente o que §7 proíbe."""
-        from game.entities.projectiles.bullet import _get_cryo_bullet_surface
+        from game.entities.projectiles.bullet_fx.cryo import _get_cryo_bullet_surface
 
         a = _get_cryo_bullet_surface(6, 12, 0)
         b = _get_cryo_bullet_surface(6, 12, 0)
@@ -722,7 +722,7 @@ class TestProjetilDeGelo:
     def test_desenha_em_qualquer_tamanho_e_orientacao(self):
         """O tiro tem tamanhos bem diferentes por nave (o Estilete é 2px de
         largura) e vira 90° no side-scroll."""
-        from game.entities.projectiles.bullet import _get_cryo_bullet_surface
+        from game.entities.projectiles.bullet_fx.cryo import _get_cryo_bullet_surface
 
         for w, h in ((2, 14), (14, 2), (6, 6), (4, 10), (24, 24)):
             surf = _get_cryo_bullet_surface(w, h, 0)

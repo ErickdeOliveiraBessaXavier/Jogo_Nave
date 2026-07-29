@@ -25,12 +25,14 @@ import math
 import pygame
 import pytest
 
-from game.entities.projectiles.bullet import (
+from game.entities.projectiles.bullet import Bullet
+from game.entities.projectiles.bullet_fx.corrosive import (
     _CORROSIVE_TRAIL_SEGMENTS,
+    corrosive_trail_segments,
+)
+from game.entities.projectiles.bullet_fx.cryo import (
     _CRYO_TRAIL,
     _CRYO_TRAIL_STEP_TIME,
-    Bullet,
-    corrosive_trail_segments,
     cryo_trail_blocks,
 )
 from game.entities.projectiles.bullet_pool import BulletPool
@@ -254,7 +256,7 @@ class TestRastroCorrosivo:
     def test_o_borbulhar_e_independente_do_serpenteio(self):
         """Sincronizados, os dois leriam como uma animação em loop; separados,
         leem como líquido instável."""
-        from game.entities.projectiles.bullet import (
+        from game.entities.projectiles.bullet_fx.corrosive import (
             _CORROSIVE_BUBBLE_PERIOD,
             _CORROSIVE_WAVE_PERIOD,
         )

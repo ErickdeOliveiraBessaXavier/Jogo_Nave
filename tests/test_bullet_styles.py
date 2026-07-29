@@ -23,7 +23,7 @@ import pytest
 
 from game.core import colors
 from game.core.ship_types import SHIP_REGISTRY
-from game.entities.projectiles import bullet_styles
+from game.entities.projectiles.bullet_fx import ship_styles as bullet_styles
 from game.entities.projectiles.bullet import Bullet
 
 # Ids que o registro cobre + os que caem no default de propósito.
@@ -40,7 +40,7 @@ def _pintar(bala) -> set:
     canvas = pygame.Surface((120, 120))
     canvas.fill((0, 0, 0))
     # Só o corpo: o halo é outro passe e mudaria a comparação entre estilos.
-    bala._draw_ship_specific_bullet(canvas)
+    bullet_styles.draw_body(bala, canvas)
     return {
         (x, y, canvas.get_at((x, y))[:3])
         for x in range(120)

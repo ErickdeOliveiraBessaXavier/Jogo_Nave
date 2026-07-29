@@ -1,4 +1,4 @@
-"""Estilo visual do tiro básico de cada nave.
+"""Estilo visual do tiro básico de cada nave (parte do pacote `bullet_fx`).
 
 Era uma cascata de nove `elif self.ship_id == ...` dentro do `draw` da bala,
 com o agravante de que a identidade visual de cada nave estava repartida em
@@ -33,11 +33,13 @@ from typing import TYPE_CHECKING, Callable, Dict, List, NamedTuple, Tuple
 
 import pygame
 
-from ...core import colors
-from ...core.player_tint import player_shot_color
+from ....core import colors
+from ....core.player_tint import player_shot_color
+
+from . import common
 
 if TYPE_CHECKING:
-    from .bullet import Bullet
+    from ..bullet import Bullet
 
 RGB = Tuple[int, int, int]
 DrawFn = Callable[["Bullet", pygame.Surface, pygame.Rect], None]
@@ -334,3 +336,19 @@ SHOT_STYLES: Dict[str, ShotStyle] = {
 def style_for(ship_id: str) -> ShotStyle:
     """Estilo da nave, ou o padrão para id desconhecido."""
     return SHOT_STYLES.get(ship_id, DEFAULT_STYLE)
+
+
+def draw_body(bullet: "Bullet", surface: pygame.Surface) -> None:
+    """Desenha o corpo do tiro básico com o estilo da nave.
+
+    Qual estilo é decisão do registro acima — aqui não há cascata de `ship_id`
+    (§5). O que esta função decide é só o RECT: com ou sem a respiração do
+    Giant Shot, que é propriedade do upgrade e não da nave.
+    """
+    style = style_for(bullet.ship_id)
+    rect = bullet.rect
+    # Giant Shot "respira": o corpo pulsa no tamanho VISUAL (o hitbox segue em
+    # bullet._rect, intacto). Quem não respira diz isso no próprio estilo.
+    if bullet.size_multiplier > 1.0 and style.breathes:
+        rect = common.breathing_rect(rect)
+    style.draw(bullet, surface, rect)
