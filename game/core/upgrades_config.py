@@ -62,6 +62,7 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.CRITICAL_CORE,
     UpgradeType.CRYO_SHOT,
     UpgradeType.SHOCKWAVE,
+    UpgradeType.CORROSIVE_AMMO,
 ]
 
 # Parâmetros de balanceamento do EMP (tempo e intensidade)
@@ -329,6 +330,54 @@ SHOCKWAVE_COLOR: tuple[int, int, int] = (120, 230, 255)
 # enxame cresceria dentro do próprio laço do frame. Com teto, ela é uma reação
 # em cadeia satisfatória e limitada.
 SHOCKWAVE_MAX_ACTIVE: int = 8
+
+# Parâmetros do Corrosive Ammo
+#
+# Identidade OBRIGATÓRIA para não virar redundância com a Implosão: **alvo único
+# e cumulativo**. A Implosão é área e não pede pontaria; o Corrosive só paga a
+# pilha cheia para quem insiste no MESMO inimigo — daí "excelente contra chefes".
+#
+# 3 cargas, uma por acerto. O dano por tique é `carga × CORROSIVE_DAMAGE_PER_STACK`,
+# então a pilha cheia vale 3× a primeira: subir a pilha é o upgrade inteiro.
+CORROSIVE_MAX_STACKS: int = 3
+CORROSIVE_DAMAGE_PER_STACK: int = 3
+# O intervalo entre tiques mora no INIMIGO (`corrosive_damage_cd`), não na nave
+# nem na bala. É o que impede o DPS de escalar com a cadência de tiro: acertar
+# mais rápido sobe a pilha e renova a duração, mas nunca aperta os tiques. Sem
+# isso, o Aríete (lento) e a Estrela (rápida) teriam upgrades diferentes.
+#
+# 0,5s dá 6 HP/s na carga 1 e 18 HP/s na pilha cheia. Para comparar: uma bala
+# comum são 10 de dano de uma vez, e a Implosão faz 4 HP/s em ÁREA. O Corrosive
+# em alvo único fica acima dela, que é o preço de exigir pontaria sustentada.
+CORROSIVE_TICK_INTERVAL: float = 0.5
+# Reposta (não somada) a cada acerto, como a escada do Cryo. 4s é generoso de
+# propósito: diferente do Cryo, aqui o jogador não está comprando controle e sim
+# dano ao longo do tempo, e um DoT que morre entre duas balas não se acumula.
+#
+# Ao expirar, a pilha cai INTEIRA. Pilha que desce degrau a degrau vira um número
+# flutuante que ninguém lê na tela — "está corroído" ou "não está" é legível.
+CORROSIVE_DURATION: float = 4.0
+# Verde-ácido: cor que ainda não existe no vocabulário de efeitos do jogo (o
+# gelo é azul, a onda é ciano, a explosão é laranja, a implosão é violeta).
+#
+# Musgo, não neon: o verde saturado já é do tiro teleguiado (0,255,100). A
+# leitura de "ácido" vem da FORMA (bolhas, poços, gotejamento) — cor fluorescente
+# só competiria com o teleguiado e com o halo do Estilete.
+CORROSIVE_COLOR: tuple[int, int, int] = (146, 214, 78)
+CORROSIVE_COLOR_DARK: tuple[int, int, int] = (62, 108, 40)
+# O projétil corrosivo é MAIOR que o comum: ácido é líquido pesado, e a bolha
+# precisa de área para os poços e o brilho caberem (abaixo de ~6px o sprite cai
+# no caminho degradado). Pelo mesmo `size_multiplier` do Giant/Cryo, então os
+# três se compõem por multiplicação.
+#
+# Consequência herdada do canal, igual à do Cryo: tiro com `size_multiplier !=
+# 1.0` também ganha o `GIANT_SHOT_SPEED_MULTIPLIER`. Aceita de propósito — um
+# pingo lento de ácido lê como fraco, e o alcance extra não muda balanceamento
+# (o dano é o mesmo; quem fere é a marca no alvo).
+CORROSIVE_SHOT_SIZE_MULTIPLIER: float = 1.45
+# Bolhas desenhadas em volta do alvo corroído, POR CARGA. Poucas: o efeito tem
+# que ser lido de relance sem cobrir o sprite (mesma regra dos cristais do Cryo).
+CORROSIVE_BUBBLES_PER_STACK: int = 3
 
 # Parâmetros de balanceamento do Air Strike
 AIR_STRIKE_BOMB_COUNT: int = 20  # Bombas por ativação da ultimate

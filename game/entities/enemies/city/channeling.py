@@ -6,6 +6,10 @@ um boost grande de vida e entram em transformação. Se o jogador **não** abate
 os 4 a tempo, eles se fundem num `FusedDrone` (mini-chefe). Abater qualquer um
 **quebra** o ritual.
 
+Quantas fusões podem estar em jogo e com que espaçamento é decisão do
+`FusionGovernor` (`systems/fusion_governor.py`), consultado por `CityDrone`
+antes de abrir o ritual — aqui só registramos a fusão consumada.
+
 Este coordenador é deliberadamente leve e não conhece a cena (§1): recebe os
 membros, dirige o progresso e empurra o mini-chefe no buffer `ctx.new_enemies`
 (o mesmo contrato que o `EntityManager` consome após o loop de update).
@@ -93,6 +97,10 @@ class ChannelingGroup:
         if self.spawned:
             return
         self.spawned = True
+        # Marca o instante da fusão: é daqui que corre o intervalo mínimo até a
+        # próxima. Matar este mini-chefe cedo não devolve o tempo — o relógio só
+        # anda com o tempo de jogo.
+        ctx.fusion_governor.commit_fusion()
 
         # Import local: evita ciclo (fused_drone importa CityDrone no topo).
         from .fused_drone import FusedDrone

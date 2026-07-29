@@ -34,6 +34,11 @@ _RING_COLORS = [pal.ELECTRIC_BLUE, pal.CYBER_MAGENTA, pal.TOXIC_ORANGE]
 
 
 class FusedDrone(EnemyHitMixin):
+    # Marca de tipo lida por getattr (§5), não por isinstance: é assim que o
+    # `FusionGovernor` conta quantas fusões já estão em jogo sem importar esta
+    # classe (o que fecharia um ciclo systems → entities → systems).
+    is_fused_drone = True
+
     CELL = 5
     SIZE = PIXEL_COLS * CELL  # 75px
     HEALTH = 240

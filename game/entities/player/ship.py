@@ -9,6 +9,7 @@ import pygame
 from ...core.config import config as Config
 from ...core.ship_types import ShipProfile, get_ship_profile
 from ...core.upgrades_config import (
+    CORROSIVE_SHOT_SIZE_MULTIPLIER,
     CRITICAL_CORE_CHANCE,
     CRYO_SHOT_ANGLES,
     CRYO_SHOT_SIZE_MULTIPLIER,
@@ -83,6 +84,9 @@ class BulletSpec(NamedTuple):
     # Visual: o tiro sai como cristal de gelo. Uniforme na salva (é estado da
     # nave), ao contrário do `critical`, que é sorteado por bala.
     cryo: bool = False
+    # Visual: halo verde-ácido. Só o halo — quem empilha o ácido é o sistema de
+    # colisão lendo `owner_ship.has_corrosive_ammo`, como o Cryo faz.
+    corrosive: bool = False
 
 
 class Ship:
@@ -186,6 +190,8 @@ class Ship:
         self.cryo_shot_timer: float = 0.0
         # Shockwave (upgrade): morte de inimigo vira explosão pequena.
         self.shockwave_timer: float = 0.0
+        # Corrosive Ammo (upgrade): acertos empilham ácido que corrói por tempo.
+        self.corrosive_timer: float = 0.0
         # Repulsion Shield power-up (Vento Constante)
         self.repulsion_shield_timer: float = 0.0
         self.repulsion_wind_streaks: list[dict[str, Any]] = []
@@ -468,11 +474,11 @@ class Ship:
 
     @property
     def bullet_size_multiplier(self) -> float:
-        """Fator de escala das balas (visual + hitbox): Giant Shot × Cryo Shot.
+        """Fator de escala das balas (visual + hitbox): Giant × Cryo × Corrosive.
 
         1.0 = tamanho normal. Lido pelo `ShootingSystem` no spawn de cada bala.
 
-        Os dois se COMPÕEM por multiplicação, como todo modificador de disparo
+        Todos se COMPÕEM por multiplicação, como todo modificador de disparo
         nesta base: o cristal de gelo sob Giant Shot é um bloco (3,0 × 1,6). É a
         mesma escolha que faz leque + perfurante + explosivo valerem juntos sem
         um caso especial por combinação.
@@ -482,6 +488,8 @@ class Ship:
             mult *= GIANT_SHOT_SIZE_MULTIPLIER
         if self.has_cryo_shot:
             mult *= CRYO_SHOT_SIZE_MULTIPLIER
+        if self.has_corrosive_ammo:
+            mult *= CORROSIVE_SHOT_SIZE_MULTIPLIER
         return mult
 
     @property
@@ -584,6 +592,9 @@ class Ship:
     def activate_shockwave(self, duration: float) -> None:
         self._powerups.activate_shockwave(duration)
 
+    def activate_corrosive_ammo(self, duration: float) -> None:
+        self._powerups.activate_corrosive_ammo(duration)
+
     @property
     def has_chain_shot(self) -> bool:
         return self.chain_shot_timer > 0.0
@@ -626,6 +637,16 @@ class Ship:
         mundo, não de quem deu o tiro.
         """
         return self.shockwave_timer > 0.0
+
+    @property
+    def has_corrosive_ammo(self) -> bool:
+        """True enquanto os acertos desta nave empilham ácido no alvo.
+
+        Por NAVE, como o `has_cryo_shot`, e pelo mesmo motivo: a pilha mora no
+        INIMIGO, então em coop os dois jogadores alimentam a mesma corrosão —
+        mas cada um só a alimenta enquanto o SEU upgrade estiver ativo.
+        """
+        return self.corrosive_timer > 0.0
 
     @property
     def has_repulsion_shield(self) -> bool:
@@ -982,6 +1003,7 @@ class Ship:
                 low_ammo=is_low_ammo,
                 critical=random.random() < crit_chance,
                 cryo=is_cryo,
+                corrosive=self.has_corrosive_ammo,
             )
             for mx, my in muzzles
             for direction in directions

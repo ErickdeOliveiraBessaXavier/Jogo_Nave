@@ -24,6 +24,7 @@ from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
 from ..entities.effects.emp_wave import EMPWave
 from ..entities.effects.explosion import Explosion, ExplosionType, ImpactPattern
 from ..entities.effects.explosion_pool import ExplosionPool
+from ..entities.effects.corrosion_stain import draw_corroded as draw_corroded_bubbles
 from ..entities.effects.cryo_crystals import draw_frozen as draw_frozen_crystals
 from ..entities.effects.implosion_pulse import ImplosionPulsePool
 from ..entities.effects.explosive_effect import ExplosiveEffect
@@ -31,7 +32,10 @@ from ..entities.projectiles.explosive_mine import ExplosiveMine
 from ..entities.enemies.space.eye_enemy import EyeEnemy
 from ..entities.projectiles.eye_laser import EyeLaser
 from ..entities.enemies.city.captor_emp import CaptorEMP
+from ..core.fire_timer import carry_interval
 from ..core.upgrades_config import (
+    CORROSIVE_DAMAGE_PER_STACK,
+    CORROSIVE_TICK_INTERVAL,
     CRYO_BOMB_EXPLOSION_SIZE,
     CRYO_BOMB_SHARDS,
     CRYO_MAX_STACKS,
@@ -106,6 +110,7 @@ from . import enemy_shield
 from .boss_context import BossUpdateContext, BossUpdateResult
 from .collision_protocols import Removable
 from .entity_context import EnemyUpdateContext
+from .fusion_governor import FusionGovernor
 from .hit_result import MeteorSpec
 from .targeting import enemy_center, is_targetable
 
@@ -162,6 +167,16 @@ class EntityManager:
         # fase, transição) deixaria uma entrada apontando para uma entidade que
         # já voltou ao pool — e o dano cairia no inimigo que herdou o slot.
         self.cryo_detonations: list[tuple[Any, float, float, float, Any]] = []
+        # Tiques de corrosão devidos NESTE frame (Corrosive Ammo): cada item é
+        # `(alvo, cx, cy, dano, dono)`, enfileirado quando o acumulador do alvo
+        # fecha um `CORROSIVE_TICK_INTERVAL`. Consome `Collisions.
+        # corrosion_vs_enemies`, pelo mesmo motivo da fila de gelo acima: o
+        # tique fere o alvo, e dano passa pelo roteador de colisão (§8).
+        #
+        # Limpa no INÍCIO de cada `update`, junto com a de gelo e pelo mesmo
+        # risco: item que atravessa o frame pode apontar para uma entidade que
+        # já voltou ao pool, e o dano cairia em quem herdou o slot.
+        self.corrosion_ticks: list[tuple[Any, float, float, int, Any]] = []
         # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos/inimigos neste
         # frame; consumidos pela cena (handle_mine_explosion) p/ aplicar dano à nave.
         self.area_blasts: list[tuple[float, float, float]] = []
@@ -181,6 +196,11 @@ class EntityManager:
         self.chain_lightnings: list[ChainLightning] = []
         self.orbital_shields: list[OrbitalShield] = []
         self.plasma_beams: list[PlasmaBeam] = []
+
+        # Ritmo das fusões emergentes City Drone → FusedDrone (teto simultâneo +
+        # intervalo mínimo). Estado de partida que atravessa frames, entregue às
+        # entidades pelo EnemyUpdateContext.
+        self.fusion_governor = FusionGovernor()
 
         # Listas de entidades e coletáveis
         self.enemies: list[Any] = []
@@ -417,10 +437,71 @@ class EntityManager:
         if self._update_cryo_linger(entity, dt):
             self.queue_cryo_detonation(entity)
 
+    # ── Corrosão (Corrosive Ammo) ────────────────────────────────────────────
+
+    @staticmethod
+    def _clear_corrosion(entity: Any) -> None:
+        """Apaga a pilha de ácido. A pilha cai INTEIRA, nunca degrau a degrau."""
+        try:
+            entity.corrosive_stacks = 0
+            entity.corrosive_timer = 0.0
+            entity.corrosive_damage_cd = 0.0
+            entity.corrosive_owner = None
+        except AttributeError:
+            # Entidade com `__slots__` que aceitou a marca mas não declarou
+            # todos os campos. Nunca deve derrubar o jogo no meio do combate.
+            pass
+
+    def _tick_corrosion(self, entity: Any, dt: float) -> None:
+        """Queima a duração do ácido e enfileira o tique de dano quando vence.
+
+        O acumulador do tique (`corrosive_damage_cd`) mora no INIMIGO, não na
+        nave nem na bala: é o que impede o DPS de escalar com a cadência de tiro
+        ou com o número de jogadores atirando no mesmo alvo. Acertar mais rápido
+        sobe a pilha (até o teto) e renova a duração — nunca aperta os tiques.
+
+        O dano em si não é aplicado aqui: dano passa pelo roteador de colisão
+        (§8), então o que sai daqui é uma entrada na fila que
+        `Collisions.corrosion_vs_enemies` consome no mesmo frame.
+        """
+        stacks = int(getattr(entity, "corrosive_stacks", 0))
+        if stacks <= 0:
+            return
+        remaining = getattr(entity, "corrosive_timer", 0.0) - dt
+        if remaining <= 0.0:
+            self._clear_corrosion(entity)
+            return
+        entity.corrosive_timer = remaining
+
+        cd = getattr(entity, "corrosive_damage_cd", 0.0) - dt
+        if cd > 0.0:
+            entity.corrosive_damage_cd = cd
+            return
+        # `carry_interval` e não `= INTERVALO` (§14): a sobra do frame fica no
+        # acumulador, senão o período real vira um número inteiro de frames e o
+        # DoT rende menos que o configurado — e menos ainda a 30fps.
+        entity.corrosive_damage_cd = carry_interval(cd, CORROSIVE_TICK_INTERVAL)
+
+        geometry = self._entity_geometry(entity)
+        if geometry is None:
+            return
+        cx, cy, _radius = geometry
+        damage = stacks * CORROSIVE_DAMAGE_PER_STACK
+        owner = getattr(entity, "corrosive_owner", None) or None
+        self.corrosion_ticks.append((entity, cx, cy, damage, owner))
+
+    def take_corrosion_ticks(self) -> list[tuple[Any, float, float, int, Any]]:
+        """Retira e devolve os tiques pendentes (a fila fica vazia)."""
+        if not self.corrosion_ticks:
+            return []
+        pending = self.corrosion_ticks
+        self.corrosion_ticks = []
+        return pending
+
     # ── Bomba de gelo (Cryo Shot) ────────────────────────────────────────────
 
     @staticmethod
-    def _cryo_geometry(entity: Any) -> tuple[float, float, float] | None:
+    def _entity_geometry(entity: Any) -> tuple[float, float, float] | None:
         """(cx, cy, raio) do alvo pelo `collision_circle`, ou None se não der.
 
         Nunca por `x + w/2`: nem toda entidade tem `w`, e em algumas (`Mountain
@@ -465,7 +546,7 @@ class EntityManager:
         """
         if int(getattr(entity, "cryo_stacks", 0)) < CRYO_MAX_STACKS:
             return False
-        geometry = self._cryo_geometry(entity)
+        geometry = self._entity_geometry(entity)
         if geometry is None:
             self._consume_cryo_marks(entity)
             return False
@@ -493,7 +574,7 @@ class EntityManager:
         """
         if int(getattr(entity, "cryo_stacks", 0)) < CRYO_MAX_STACKS:
             return False
-        geometry = self._cryo_geometry(entity)
+        geometry = self._entity_geometry(entity)
         owner = self._consume_cryo_marks(entity)
         if geometry is None:
             return False
@@ -1132,6 +1213,8 @@ class EntityManager:
         # `cleanup` devolver o alvo ao pool. A fila nunca atravessa um frame.
         if self.cryo_detonations:
             self.cryo_detonations.clear()
+        if self.corrosion_ticks:
+            self.corrosion_ticks.clear()
 
         self._update_visual_effects(dt)
 
@@ -1157,6 +1240,9 @@ class EntityManager:
         # intocado: aqui só anda o relógio da bomba.
         if self.boss is not None and not getattr(self.boss, "dead", False):
             self._tick_cryo(self.boss, dt)
+            # A corrosão do chefe corre no mesmo `dt` real e pelo mesmo motivo:
+            # é marca de dano com relógio próprio, não parte do ritmo da luta.
+            self._tick_corrosion(self.boss, dt)
         self._update_boss(enemy_dt, player_x, player_y)
 
         ctx_emissions = self._update_enemies(
@@ -1615,6 +1701,9 @@ class EntityManager:
         screen_height: int,
     ) -> EnemyUpdateContext:
         """Loop polimórfico via update_in_context — retorna ctx com emissões."""
+        # Relógio das fusões no tempo dos INIMIGOS: congela junto com eles na
+        # parada do tempo, como todo o resto deste lado.
+        self.fusion_governor.tick(enemy_dt)
         ctx = EnemyUpdateContext(
             dt=dt,
             sdt=0.0,
@@ -1624,6 +1713,7 @@ class EntityManager:
             screen_width=screen_width,
             screen_height=screen_height,
             other_enemies=self.enemies,
+            fusion_governor=self.fusion_governor,
         )
         slow_active, slow_factor = self._emp_state()
         for en in self.enemies:
@@ -1632,6 +1722,7 @@ class EntityManager:
             self._update_vortex_linger(en, dt)
             self._update_implosion_linger(en, dt)
             self._tick_cryo(en, dt)
+            self._tick_corrosion(en, dt)
             mul = (
                 self._emp_multiplier(en, slow_active, slow_factor, dt)
                 * self._ice_multiplier(en)
@@ -1719,6 +1810,7 @@ class EntityManager:
         # (sem EMP/ice em slow-motion). Cada inimigo traduz o ctx em sua
         # assinatura específica — sem cascata de isinstance aqui.
         sw, sh = self._screen_size
+        self.fusion_governor.tick(dt)
         ctx = EnemyUpdateContext(
             dt=dt,
             sdt=dt,
@@ -1728,6 +1820,7 @@ class EntityManager:
             screen_width=sw,
             screen_height=sh,
             other_enemies=self.enemies,
+            fusion_governor=self.fusion_governor,
         )
         for en in self.enemies:
             update_in_ctx = getattr(en, "update_in_context", None)
@@ -1869,6 +1962,9 @@ class EntityManager:
         # próprio (ver `cryo_crystals`).
         if enemy_visible:
             draw_frozen_crystals(surface, self._cached_all_enemies)
+            # Ácido do Corrosive Ammo, na mesma camada e pelo mesmo contrato:
+            # lê o estado que já vive no inimigo, sem entidade nem lista própria.
+            draw_corroded_bubbles(surface, self._cached_all_enemies)
 
         for laser in self.boss_lasers:
             laser.draw(surface)
@@ -2094,6 +2190,7 @@ class EntityManager:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        corrosive: bool = False,
         ice_shard: bool = False,
     ) -> Bullet:
         bullet = self.bullet_pool.get(
@@ -2112,6 +2209,7 @@ class EntityManager:
             boss_damage_mult=boss_damage_mult,
             critical=critical,
             cryo=cryo,
+            corrosive=corrosive,
             ice_shard=ice_shard,
         )
         if homing:
@@ -2320,6 +2418,9 @@ class EntityManager:
 
     def clear_all(self) -> None:
         self.invalidate_enemy_targets()
+        # Arena limpa (fim de fase, restart) é encontro novo: a primeira fusão
+        # do próximo não herda o intervalo mínimo do anterior.
+        self.fusion_governor.reset()
         self.bullets.clear()
         self.homing_bullets.clear()
         self.alien_bullets.clear()
@@ -2339,6 +2440,7 @@ class EntityManager:
         self.ice_shards.clear()
         self.captor_emps.clear()
         self.cryo_detonations.clear()
+        self.corrosion_ticks.clear()
         self.area_blasts.clear()
         self.powerups.clear()
         self.stars.clear()
@@ -2399,6 +2501,7 @@ class EntityManager:
         self.ice_shards.clear()
         self.captor_emps.clear()
         self.cryo_detonations.clear()
+        self.corrosion_ticks.clear()
         self.area_blasts.clear()
         # Lasers do boss (incl. cerca elétrica da Fase 3): o boss já era; limpeza
         # definitiva aqui evita qualquer vazamento de feixe-limite para o próximo nível.

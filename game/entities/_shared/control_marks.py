@@ -30,6 +30,10 @@ CONTROL_MARKS: tuple[str, ...] = (
     "cryo_slow_timer",
     "cryo_stacks",
     "cryo_owner",
+    "corrosive_timer",
+    "corrosive_stacks",
+    "corrosive_damage_cd",
+    "corrosive_owner",
     "_ice_slow_timer",
     "vortex_slow_timer",
     "emp_linger_timer",
@@ -87,12 +91,26 @@ def can_be_controlled(enemy: Any) -> bool:
     return accepts_control(enemy)
 
 
-def accepts_cryo(enemy: Any) -> bool:
-    """A entidade pode acumular a ESCADA do Cryo Shot?
+def _accepts_damage_mark(enemy: Any) -> bool:
+    """Base dos efeitos que marcam para DANO (e não para freio): boss incluído.
 
     Igual ao `can_be_controlled` **menos o opt-out de boss**, e é essa a única
-    diferença que existe entre os dois — por isso são funções separadas e não um
-    parâmetro: quem lê o call site vê qual regra está em jogo.
+    diferença que existe entre os dois. Os call sites usam os nomes específicos
+    abaixo, não este: quem lê `accepts_cryo(x)` vê qual regra está em jogo, o
+    que um parâmetro booleano esconderia.
+
+    `position_locked` continua de fora: estrutura ancorada tem ciclo próprio
+    (RISE→LINGER→SHATTER) e não sobrevive à janela do efeito de forma previsível.
+    """
+    if getattr(enemy, "dead", False):
+        return False
+    if getattr(enemy, "position_locked", False):
+        return False
+    return accepts_control(enemy)
+
+
+def accepts_cryo(enemy: Any) -> bool:
+    """A entidade pode acumular a ESCADA do Cryo Shot?
 
     Boss e miniboss **cristalizam mas não congelam**: acumulam as cargas, ganham
     os cristais e detonam a bomba de gelo no fim, mas nunca são freados. Quem
@@ -100,12 +118,20 @@ def accepts_cryo(enemy: Any) -> bool:
     para `is_boss` — a lentidão é o que dessincroniza padrão roteirizado e peça
     coreografada, não a marca em si. Assim o upgrade continua entregando dano
     contra chefe sem tocar na IA nem no ritmo da luta.
-
-    `position_locked` continua de fora: estrutura ancorada tem ciclo próprio
-    (RISE→LINGER→SHATTER) e não sobrevive à janela do pavio de forma previsível.
     """
-    if getattr(enemy, "dead", False):
-        return False
-    if getattr(enemy, "position_locked", False):
-        return False
-    return accepts_control(enemy)
+    return _accepts_damage_mark(enemy)
+
+
+def accepts_corrosion(enemy: Any) -> bool:
+    """A entidade pode acumular a PILHA do Corrosive Ammo?
+
+    Boss incluído, e aqui isso não é um detalhe: o Corrosive é alvo único e
+    cumulativo justamente para ser bom contra quem tem muita vida e fica muito
+    tempo na tela. Excluir chefe apagaria o upgrade inteiro.
+
+    O ácido não freia ninguém — é dano ao longo do tempo —, então não existe o
+    risco de dessincronizar padrão roteirizado que motiva o opt-out de boss em
+    `can_be_controlled`. O que o chefe recebe a menos é o `BOSS_UPGRADE_DAMAGE_
+    MULTIPLIER` global, aplicado no tique (ver `Collisions.corrosion_vs_enemies`).
+    """
+    return _accepts_damage_mark(enemy)

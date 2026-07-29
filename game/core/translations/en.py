@@ -298,6 +298,7 @@ EN: dict[str, str] = {
     "upgrade.critical_core.desc": "Each shot has a chance to crit for multiplied damage.",
     "upgrade.cryo_shot.desc": "Your ship fires a trio of bigger, harder-hitting ice crystals. Repeated hits on the same enemy slow it further; the 3rd encases it in crystals — which shatter when the freeze ends (or when it dies), damaging the target and spraying shards at everything nearby. Bosses crystallize and shatter, but never freeze.",
     "upgrade.shockwave.desc": "Every enemy that dies explodes in a small area, hurting neighbours and clearing nearby enemy shots.",
+    "upgrade.corrosive_ammo.desc": "Every hit leaves acid on the target, up to 3 stacks. The acid eats away on its own for a few seconds and burns harder the more stacks it has — sticking with the SAME enemy is what pays off. Works on bosses.",
 
     # ── HUD (in-game) ────────────────────────────────────────────────────────
     "hud.score": "Score: {}",

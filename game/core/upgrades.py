@@ -39,6 +39,7 @@ class UpgradeType(Enum):
     CRITICAL_CORE = auto()  # Chance de cada bala sair crítica (dano multiplicado)
     CRYO_SHOT = auto()  # Acertos acumulam lentidão, congelam e a bomba de gelo estoura
     SHOCKWAVE = auto()  # A morte de cada inimigo vira uma explosão pequena
+    CORROSIVE_AMMO = auto()  # Acertos empilham ácido que corrói o alvo por tempo
 
 
 class UpgradeContextProtocol(Protocol):
@@ -686,6 +687,20 @@ class ShockwaveUpgrade(ActiveUpgrade):
             ship.activate_shockwave(self.get_effective_duration(ctx))
 
 
+class CorrosiveAmmoUpgrade(ActiveUpgrade):
+    """Enquanto dura, cada acerto empilha ácido no inimigo atingido.
+
+    Mesmo padrão dos outros modificadores de tiro por tempo: o upgrade só liga o
+    timer da nave. Quem empilha é o sistema de colisão, no acerto, e quem
+    tiquetaqueia o dano é o `EntityManager` — nada aqui conhece inimigo.
+    """
+
+    def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
+        ship = self._ctx_ship(ctx)
+        if ship:
+            ship.activate_corrosive_ammo(self.get_effective_duration(ctx))
+
+
 class CoopLinkUpgrade(ActiveUpgrade):
     """Feixe de alta voltagem que conecta dois jogadores."""
 
@@ -731,6 +746,7 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.CRITICAL_CORE: CriticalCoreUpgrade,
         UpgradeType.CRYO_SHOT: CryoShotUpgrade,
         UpgradeType.SHOCKWAVE: ShockwaveUpgrade,
+        UpgradeType.CORROSIVE_AMMO: CorrosiveAmmoUpgrade,
     }
     cls = factories.get(upgrade_type)
     if cls:
@@ -996,6 +1012,21 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         None,
         2,
     ),
+    # OFFENSIVE, não UTILITY: o ácido não freia nem atrapalha ninguém — é dano
+    # ao longo do tempo. Duração maior (16s) que os irmãos porque o dano dele
+    # não é instantâneo: uma janela de 12s daria ~2 pilhas cheias contra um
+    # chefe, e é justamente contra chefe que ele existe.
+    UpgradeType.CORROSIVE_AMMO: UpgradeMeta(
+        UpgradeType.CORROSIVE_AMMO,
+        "ACID",
+        "Acertos seguidos empilham ácido que corrói o alvo por vários segundos.",
+        "corrosive_ammo",
+        UpgradeCategory.OFFENSIVE,
+        60,
+        16,
+        None,
+        2,
+    ),
 }
 
 
@@ -1040,6 +1071,7 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "critical_core": "K",  # Krítico — "C" é do Canhão
         "cryo_shot": "N",  # Neve — "C"/"G" já usados
         "shockwave": "O",  # Onda
+        "corrosive_ammo": "Q",  # Química — "C"/"A" já usados
     }
     if icon_id and icon_id in mapping:
         return mapping[icon_id]

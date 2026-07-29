@@ -9,14 +9,12 @@ from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
 from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
 from ..core.upgrades_config import (
     CRYO_BOMB_DAMAGE,
-    CRYO_FREEZE_DURATION,
-    CRYO_MAX_STACKS,
-    CRYO_SLOW_DURATION,
     IMPLOSION_DAMAGE,
     IMPLOSION_DAMAGE_INTERVAL,
     IMPLOSION_SLOW_LINGER,
 )
-from ..entities._shared.control_marks import accepts_cryo, can_be_controlled
+from ..entities._shared.control_marks import can_be_controlled
+from . import shot_marks
 from ..entities.projectiles.air_strike_bomb import AirStrikeBomb
 from ..entities.projectiles.boss_laser import BossLaser
 from ..entities.bosses.boss_square import BossSquare
@@ -467,16 +465,16 @@ class Collisions:
             )
             score_gain += result.points
 
-            # Cryo no boss: ele acumula as cargas e cristaliza como qualquer
-            # alvo — o que ele nunca recebe é a lentidão (ver `_apply_cryo`).
-            # Fragmento de gelo não recarrega a escada, senão a bomba se
-            # realimentaria sozinha enquanto o boss estivesse no alcance.
+            # Marcas de disparo no chefe. Ele é alvo delas como qualquer outro:
+            # cristaliza, corrói. O que o chefe não recebe é a LENTIDÃO do gelo,
+            # recusada em `EntityManager._cryo_multiplier` — e o dano do ácido
+            # ainda passa pelo nerf global de upgrade.
+            #
+            # Fragmento de gelo fica de fora: é dano de estouro, não tiro do
+            # jogador, e realimentaria a própria bomba enquanto o chefe
+            # estivesse no alcance.
             if not getattr(proj, "ice_shard", False):
-                proj_owner = getattr(proj, "owner_ship", None)
-                if proj_owner is not None and getattr(
-                    proj_owner, "has_cryo_shot", False
-                ):
-                    self._apply_cryo(boss, proj_owner)
+                shot_marks.apply_all(boss, getattr(proj, "owner_ship", None))
 
         return score_gain
 
@@ -961,11 +959,11 @@ class Collisions:
                 and owner is not None
                 and getattr(owner, "has_implosion_shot", False)
             )
-            bullet_cryo_active = (
-                not is_shard
-                and owner is not None
-                and getattr(owner, "has_cryo_shot", False)
-            )
+            # Marcas de disparo do DONO (gelo, ácido, e o que vier depois):
+            # resolvidas uma vez por bala e aplicadas a cada alvo atingido. O
+            # fragmento de gelo fica de fora com os demais efeitos — ele é dano
+            # de estouro, não tiro do jogador, e realimentaria a própria bomba.
+            bullet_marks = () if is_shard else shot_marks.active_marks(owner)
             # O alvo que estilhaçou não é atingido pelos próprios cacos: o dano
             # dele já veio do estouro, e os cacos nascem colados ao corpo dele.
             shard_source_id = getattr(b, "shard_source_id", 0)
@@ -1018,14 +1016,14 @@ class Collisions:
                                 )
                             )
 
-                    # Cryo: acumula POR INIMIGO ATINGIDO, sem a trava de "uma vez
-                    # por bala" que a implosão e a cadeia usam. As travas delas
-                    # existem porque criam um efeito no MUNDO (um pulso, uma
-                    # cadeia) que sairia duplicado no mesmo ponto; aqui o efeito
-                    # é uma marca no alvo, então uma bala perfurante que atravessa
-                    # três inimigos deve gelar os três — é o prêmio de alinhá-los.
-                    if bullet_cryo_active:
-                        self._apply_cryo(enemy, owner)
+                    # Marcas: acumulam POR INIMIGO ATINGIDO, sem a trava de "uma
+                    # vez por bala" que a implosão e a cadeia usam. As travas
+                    # delas existem porque criam um efeito no MUNDO (um pulso,
+                    # uma cadeia) que sairia duplicado no mesmo ponto; aqui o
+                    # efeito é uma marca no alvo, então uma bala perfurante que
+                    # atravessa três inimigos marca os três — o prêmio de alinhá-los.
+                    if bullet_marks:
+                        shot_marks.apply_marks(bullet_marks, enemy, owner)
 
                     if bullet_implosion_active and not implosion_triggered:
                         implosion_triggered = True
@@ -1264,38 +1262,67 @@ class Collisions:
 
     @staticmethod
     def _apply_cryo(enemy: Any, owner: Any = None) -> None:
-        """Sobe um degrau da escada de gelo no alvo e renova a duração.
+        """Fachada fina sobre `shot_marks.apply_cryo` (§9).
 
-        O nível mora no ALVO (`cryo_stacks`), não na nave nem na bala: é o que
-        faz P1 e P2 alimentarem a mesma escada em coop, e o que faz o nível cair
-        junto com o alvo em vez de sobreviver a ele.
-
-        A duração é REPOSTA a cada acerto (não somada): é isso que torna o
-        upgrade condicional — o nível cheio dura enquanto o jogador insistir no
-        mesmo alvo, e cai inteiro quando ele solta. Cheia, ela é também o pavio
-        da bomba de gelo, então reacertar o alvo ADIA o estouro: o jogador
-        escolhe entre segurar o controle e colher o dano.
-
-        `owner` fica gravado no alvo para que o leque de fragmentos saia com a
-        cor do jogador certo e credite o kill a ele (combo do Reverberador).
-        Quem marcou por último leva o crédito — em coop é o que responde à
-        pergunta "de quem foi esse estouro?" da forma que o jogador espera.
-
-        O guard é o `accepts_cryo`, não o `can_be_controlled`: **boss e miniboss
-        acumulam as cargas** e cristalizam. O que eles não recebem é a lentidão,
-        recusada em `EntityManager._cryo_multiplier`.
+        A regra mora no registro único de marcas de disparo, que é o que faz
+        cada modificador novo valer em todos os caminhos de acerto de uma vez.
+        O nome fica aqui porque vários call sites já chamam por ele.
         """
-        if not accepts_cryo(enemy):
-            return
-        stacks = min(CRYO_MAX_STACKS, int(getattr(enemy, "cryo_stacks", 0)) + 1)
-        enemy.cryo_stacks = stacks
-        # O topo da escada é o estágio CONGELADO e vale mais tempo — é a
-        # recompensa por ter mantido a pressão nos três acertos.
-        enemy.cryo_slow_timer = (
-            CRYO_FREEZE_DURATION if stacks >= CRYO_MAX_STACKS else CRYO_SLOW_DURATION
-        )
-        if owner is not None:
-            enemy.cryo_owner = owner
+        shot_marks.apply_cryo(enemy, owner)
+
+    @staticmethod
+    def _apply_corrosion(enemy: Any, owner: Any = None) -> None:
+        """Fachada fina sobre `shot_marks.apply_corrosion` (§9)."""
+        shot_marks.apply_corrosion(enemy, owner)
+
+    def corrosion_vs_enemies(
+        self,
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[ScoreEvent]]:
+        """Aplica os tiques de corrosão devidos neste frame.
+
+        O acumulador zera no update (`EntityManager._tick_corrosion`), mas o dano
+        é aplicado aqui porque dano passa pelo roteador único (§8): é o
+        `apply_hit` que resolve escudo, explosão de morte, som, pontuação e o
+        evento de kill.
+
+        Alvo já morto é descartado em silêncio — a fila é montada no update e o
+        passe de projéteis roda antes deste, então o inimigo pode ter morrido
+        para as balas do próprio frame.
+        """
+        pending = entity_manager.take_corrosion_ticks()
+        if not pending:
+            return 0, 0, []
+
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[ScoreEvent] = []
+
+        for target, cx, cy, damage, owner in pending:
+            if getattr(target, "dead", False):
+                continue
+            if getattr(target, "is_boss", False):
+                # Mesmo nerf global dos demais upgrades contra chefe.
+                damage = max(
+                    1, int(damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
+                )
+            result = self._apply_hit(
+                target,
+                damage,
+                cx,
+                cy,
+                entity_manager,
+                entity_manager.floating_scores,
+            )
+            score_gain += result.points
+            if result.killed:
+                destroyed_count += 1
+                if result.points > 0:
+                    score_events.append(ScoreEvent(cx, cy, result.points))
+                if owner is not None and hasattr(owner, "register_kill"):
+                    owner.register_kill()
+
+        return score_gain, destroyed_count, score_events
 
     def cryo_bombs_vs_enemies(
         self,
@@ -1702,6 +1729,12 @@ class Collisions:
         encadeado — o raio elétrico vira uma teia de estilhaços. Usa o mesmo
         ``ExplosiveEffect`` do tiro explosivo, com raio/dano reduzidos, então o
         dano em área é resolvido pelo passe ``explosive_effects_vs_enemies``.
+
+        Combo Chain + marcas de disparo (gelo, ácido, e o que vier depois): o
+        raio PROPAGA a marca do dono para cada inimigo do encadeamento, e muda de
+        cor para dizer o que está carregando. Não há um caso por upgrade aqui —
+        as duas linhas abaixo valem para o registro inteiro (`shot_marks`), então
+        um modificador novo herda a sinergia sem tocar neste método.
         """
         score_gain = 0
         destroyed_count = 0
@@ -1709,6 +1742,8 @@ class Collisions:
 
         radius = config_instance.CHAIN_SHOT_RADIUS
         damage_factor = config_instance.CHAIN_SHOT_DAMAGE_FACTOR
+        marks = shot_marks.active_marks(owner_ship)
+        bolt_color = shot_marks.propagation_color(marks, ChainLightning.DEFAULT_COLOR)
 
         current_x = hit_x
         current_y = hit_y
@@ -1750,8 +1785,16 @@ class Collisions:
                 ChainLightning(
                     start_pos=(current_x, current_y),
                     end_pos=(best_cx, best_cy),
+                    color=bolt_color,
                 )
             )
+
+            # O salto marca o alvo como a bala original marcaria. Antes do dano:
+            # um inimigo que morre neste salto já morre marcado, e é a marca que
+            # decide o que a morte dele desencadeia (a bomba de gelo estoura no
+            # `apply_hit` de quem morre cristalizado).
+            if marks:
+                shot_marks.apply_marks(marks, best, owner_ship)
 
             result = self._apply_hit(
                 best, current_damage, best_cx, best_cy, entity_manager

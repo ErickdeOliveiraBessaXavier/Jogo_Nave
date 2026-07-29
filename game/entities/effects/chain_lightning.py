@@ -11,9 +11,16 @@ LIGHTNING_MAX_OFFSET: Final[int] = 8
 
 
 class ChainLightning:
-    """Efeito visual de raio que conecta dois pontos por um breve instante."""
+    """Efeito visual de raio que conecta dois pontos por um breve instante.
+
+    A cor é parâmetro porque o raio PROPAGA as marcas de disparo do dono
+    (`systems/shot_marks`) e muda de tom para dizer o que está carregando —
+    verde-ácido com o Corrosive, azul-gelo com o Cryo. Sem marca nenhuma, o
+    ciano elétrico de sempre (`DEFAULT_COLOR`).
+    """
 
     LIFETIME: Final[float] = 0.15  # Flash muito rápido
+    DEFAULT_COLOR: Final[Tuple[int, int, int]] = colors.CYAN
     _shared_overlay: pygame.Surface | None = None
 
     @classmethod
@@ -26,8 +33,9 @@ class ChainLightning:
         self,
         start_pos: Tuple[float, float],
         end_pos: Tuple[float, float],
-        color: Tuple[int, int, int] = colors.CYAN,
+        color: Tuple[int, int, int] | None = None,
     ) -> None:
+        color = color if color is not None else self.DEFAULT_COLOR
         self.start_pos = start_pos
         self.end_pos = end_pos
         self.color = color

@@ -113,6 +113,10 @@ class ShipPowerups:
         ship = self.ship
         ship.shockwave_timer = max(ship.shockwave_timer, duration)
 
+    def activate_corrosive_ammo(self, duration: float) -> None:
+        ship = self.ship
+        ship.corrosive_timer = max(ship.corrosive_timer, duration)
+
     def activate_repulsion_shield(self, duration: float | None = None) -> None:
         ship = self.ship
         d = duration if duration is not None else Config.REPULSION_SHIELD_DURATION
@@ -175,6 +179,7 @@ class ShipPowerups:
         ship.critical_core_timer = max(0.0, ship.critical_core_timer - dt)
         ship.cryo_shot_timer = max(0.0, ship.cryo_shot_timer - dt)
         ship.shockwave_timer = max(0.0, ship.shockwave_timer - dt)
+        ship.corrosive_timer = max(0.0, ship.corrosive_timer - dt)
         ship.repulsion_shield_timer = max(0.0, ship.repulsion_shield_timer - dt)
 
         ship.shield_timer = max(0.0, ship.shield_timer - dt)

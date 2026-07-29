@@ -284,6 +284,17 @@ class CollisionOrchestrator:
         destroyed += bomb_destroyed
         score_events.extend(bomb_events)
 
+        # Tiques de corrosão devidos neste frame (Corrosive Ammo). Depois do
+        # passe de projéteis pela mesma razão da bomba de gelo: quem ia morrer
+        # para as balas deste frame morre pelo caminho normal, e o ácido cai
+        # sobre a situação já resolvida.
+        acid_gain, acid_destroyed, acid_events = self.collisions.corrosion_vs_enemies(
+            self.entity_manager
+        )
+        gain += acid_gain
+        destroyed += acid_destroyed
+        score_events.extend(acid_events)
+
         laser_gain, laser_destroyed, laser_events = (
             self.collisions.player_lasers_vs_enemies(
                 self.entity_manager.player_lasers,

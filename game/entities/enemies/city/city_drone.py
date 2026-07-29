@@ -217,6 +217,18 @@ class CityDrone(EnemyHitMixin):
             return
         if random.random() >= self.CHANNEL_CHANCE:
             return
+        # Ritmo das fusões (teto simultâneo + intervalo mínimo): o ritual só
+        # começa se houver vaga E se ele for COMPLETAR depois do intervalo — daí
+        # passar a DURATION como lead time. Gate aqui, no começo, e não na fusão:
+        # um ritual que só quebrasse no fim desperdiçaria a canalização inteira,
+        # e a reserva feita pelo grupo em andamento é o que faz duas fusões
+        # simultâneas virarem uma. Checado por último de propósito: é a única
+        # etapa que varre a lista de inimigos, e chega aqui só quem já achou 4
+        # drones perto e passou no sorteio.
+        if not ctx.fusion_governor.allows_new_ritual(
+            ctx.other_enemies, ChannelingGroup.DURATION
+        ):
+            return
 
         nearby.sort(key=lambda t: t[0])
         members = [self] + [e for _, e in nearby[: self.CHANNEL_GROUP_SIZE - 1]]

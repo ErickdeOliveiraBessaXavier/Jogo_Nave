@@ -193,6 +193,7 @@ class ShootingSystem:
                 boss_damage_mult=_BERSERK_BOSS_DAMAGE_MULT,  # nerf só em boss
                 critical=critical,
                 cryo=ship.has_cryo_shot,
+                corrosive=ship.has_corrosive_ammo,
             )
 
         # Efeito sonoro
@@ -298,6 +299,7 @@ class ShootingSystem:
                 size_multiplier=size_mult,
                 critical=spec.critical,
                 cryo=spec.cryo,
+                corrosive=spec.corrosive,
             )
             self._apply_subframe_catchup(bullet, overshoot)
             fired_explosive = fired_explosive or spec.explosive

@@ -301,6 +301,7 @@ PT: dict[str, str] = {
     "upgrade.critical_core.desc": "Cada tiro tem chance de sair crítico e causar dano multiplicado.",
     "upgrade.cryo_shot.desc": "A nave passa a atirar um trio de cristais maiores e mais fortes. Acertos seguidos no mesmo inimigo o deixam cada vez mais lento; no 3º ele cristaliza — e os cristais explodem no fim (ou na morte dele), ferindo o alvo e cuspindo estilhaços na vizinhança. Chefes cristalizam e explodem, mas nunca congelam.",
     "upgrade.shockwave.desc": "Cada inimigo que morre explode numa área pequena, ferindo os vizinhos e apagando tiros inimigos por perto.",
+    "upgrade.corrosive_ammo.desc": "Cada acerto deixa ácido no alvo, até 3 cargas. O ácido corrói sozinho por alguns segundos e queima mais quanto mais cargas tiver — insistir no MESMO inimigo é o que compensa. Funciona em chefes.",
 
     # ── HUD (partida) ────────────────────────────────────────────────────────
     "hud.score": "Pontos: {}",

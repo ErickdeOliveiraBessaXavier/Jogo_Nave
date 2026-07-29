@@ -8,6 +8,7 @@ from ...core.config import config as Config
 from ...core.player_tint import player_shot_color
 from ...core.visual_quality import visual_quality as vq
 from ...core.upgrades_config import (
+    CORROSIVE_COLOR,
     CRYO_SHARD_LIFETIME,
     CRYO_SHARD_SIZE,
     CRYO_SHARD_SPEED,
@@ -200,6 +201,90 @@ def _get_cryo_bullet_surface(w: int, h: int, player_index: int) -> pygame.Surfac
     except pygame.error:
         pass
     _CRYO_BULLET_CACHE[key] = surf
+    return surf
+
+
+# ── Tiro corrosivo (Corrosive Ammo) ─────────────────────────────────────────
+# Verde MUSGO, não neon: o verde saturado já é do tiro teleguiado (0,255,100) e
+# do halo do Estilete, e um ácido fluorescente competiria com os dois na tela.
+# Ácido lê como líquido pesado e opaco — a leitura vem da forma (bolha assimétrica
+# com poços escuros), não do brilho.
+_CORROSIVE_FILL: Tuple[int, int, int] = (124, 176, 72)
+_CORROSIVE_EDGE: Tuple[int, int, int] = (68, 106, 44)
+_CORROSIVE_SHINE: Tuple[int, int, int] = (196, 232, 142)
+_CORROSIVE_PIT: Tuple[int, int, int] = (54, 82, 36)
+# Gotejamento: pingos que se soltam da bolha e escurecem para trás. Sem alpha
+# pelo mesmo motivo do rastro do gelo — escurecer lê como desvanecer contra o
+# fundo escuro e custa um `draw.circle` em vez de uma Surface por bala (§7).
+_CORROSIVE_TRAIL: Tuple[Tuple[int, int, int], ...] = (
+    (138, 190, 86),
+    (100, 144, 62),
+    (66, 96, 44),
+)
+_CORROSIVE_BULLET_CACHE: Dict[Tuple[int, int, int], pygame.Surface] = {}
+
+
+def _get_corrosive_bullet_surface(w: int, h: int, player_index: int) -> pygame.Surface:
+    """Bolha de ácido do tamanho do tiro, memoizada.
+
+    A silhueta é o que carrega a fantasia: DUAS elipses sobrepostas e
+    descentradas, não uma cápsula — é a assimetria que lê como gota viscosa
+    prestes a escorrer, em vez de "bala verde". Por cima vão dois poços escuros
+    (o ácido comendo a própria gota) e um brilho úmido fora do centro.
+
+    Tudo derivado de `w`/`h`, então a mesma receita serve do Estilete (2px) ao
+    tiro gigante — e o cache satura nos primeiros disparos, como o do gelo.
+    """
+    key = (w, h, player_index)
+    cached = _CORROSIVE_BULLET_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    fill = player_shot_color(_CORROSIVE_FILL, player_index)
+    edge = player_shot_color(_CORROSIVE_EDGE, player_index)
+    shine = player_shot_color(_CORROSIVE_SHINE, player_index)
+    pit = player_shot_color(_CORROSIVE_PIT, player_index)
+
+    if w < 4 or h < 4:
+        # Tiro minúsculo: nem elipse nem poço cabem. Vira um pixel de ácido com
+        # contorno — sem isto o tiro do Estilete some numa mancha indistinta.
+        surf.fill(edge)
+        surf.set_at((w // 2, h // 2), fill)
+        try:
+            surf = surf.convert_alpha()
+        except pygame.error:
+            pass
+        _CORROSIVE_BULLET_CACHE[key] = surf
+        return surf
+
+    # Corpo: elipse cheia + lobo menor deslocado no eixo MAIOR. A gota fica
+    # "pesada" de um lado, que é o que a diferencia de uma cápsula simétrica.
+    pygame.draw.ellipse(surf, fill, (0, 0, w, h))
+    if w >= h:  # deitada (side-scroll / leque horizontal)
+        lobe = pygame.Rect(int(w * 0.42), int(h * 0.10), int(w * 0.56), int(h * 0.80))
+    else:  # em pé (top-down, o caso comum)
+        lobe = pygame.Rect(int(w * 0.10), int(h * 0.42), int(w * 0.80), int(h * 0.56))
+    if lobe.width >= 2 and lobe.height >= 2:
+        pygame.draw.ellipse(surf, fill, lobe)
+        pygame.draw.ellipse(surf, edge, lobe, 1)
+    pygame.draw.ellipse(surf, edge, (0, 0, w, h), 1)
+
+    # Poços de corrosão: o buraco escuro é o detalhe que diz "isto come coisas".
+    # Dois, em quadrantes opostos, para a gota não ficar com cara de olho.
+    pit_r = max(1, min(w, h) // 6)
+    pygame.draw.circle(surf, pit, (int(w * 0.62), int(h * 0.34)), pit_r)
+    if min(w, h) >= 8:
+        pygame.draw.circle(surf, pit, (int(w * 0.34), int(h * 0.66)), max(1, pit_r - 1))
+
+    # Brilho úmido: fora do centro, senão vira miolo e a gota lê como esfera.
+    pygame.draw.circle(surf, shine, (int(w * 0.33), int(h * 0.30)), max(1, pit_r))
+
+    try:
+        surf = surf.convert_alpha()
+    except pygame.error:
+        pass
+    _CORROSIVE_BULLET_CACHE[key] = surf
     return surf
 
 
@@ -475,11 +560,16 @@ class Bullet:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        corrosive: bool = False,
         ice_shard: bool = False,
     ):
         self.x, self.y = x, y
         self.damage = damage
         self.dead = False
+        # Corrosive Ammo: só VISUAL na bala (o halo verde-ácido), pelo mesmo
+        # motivo do `cryo` abaixo — quem empilha o ácido é o sistema de colisão,
+        # lendo `owner_ship.has_corrosive_ammo`.
+        self.corrosive = corrosive
         # Cryo Shot: só VISUAL na bala. Quem aplica a escada de gelo é o sistema
         # de colisão, lendo `owner_ship.has_cryo_shot` — a marca é do dono, não
         # do projétil, porque em coop cada nave responde pelo próprio upgrade.
@@ -573,6 +663,7 @@ class Bullet:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        corrosive: bool = False,
         ice_shard: bool = False,
     ):
         """Reconfigura a bala para reutilização no pool.
@@ -585,6 +676,7 @@ class Bullet:
         self.damage = damage
         self.critical = critical
         self.cryo = cryo
+        self.corrosive = corrosive
         self.ice_shard = ice_shard
         self.shard_life = CRYO_SHARD_LIFETIME if ice_shard else 0.0
         self.shard_source_id = 0
@@ -854,6 +946,8 @@ class Bullet:
             self._draw_explosive_bullet(surface)
         elif self.cryo:
             self._draw_cryo_bullet(surface)
+        elif self.corrosive:
+            self._draw_corrosive_bullet(surface)
         else:
             self._draw_ship_specific_bullet(surface)
 
@@ -886,6 +980,43 @@ class Bullet:
             rect.topleft,
         )
 
+    def _draw_corrosive_bullet(self, surface: pygame.Surface) -> None:
+        """Bolha de ácido gotejando.
+
+        Fica DEPOIS do teleguiado e do explosivo na cadeia de despacho, e depois
+        do gelo, pela mesma razão dos irmãos: aqueles visuais comunicam MECÂNICA
+        (o '+' persegue, a granada explode, o cristal gela) e escondê-los custa
+        leitura de jogo. Nos combos o ácido continua se anunciando no halo e,
+        sobretudo, no próprio INIMIGO (`corrosion_stain`) — que é onde a mecânica
+        dele mora.
+
+        Os pingos ficam MENORES e mais escuros para trás, e alternam de lado do
+        eixo: gota que escorre não deixa um rastro reto, e o desalinhamento é o
+        que separa a leitura "líquido pingando" da leitura "linha pontilhada".
+        """
+        rect = self.rect
+        if self.size_multiplier > 1.0 and self.ship_id != "berserk":
+            rect = self._breathing_rect(rect)
+
+        # Pingos primeiro: ficam ATRÁS da bolha, saindo por trás dela.
+        speed = math.hypot(self.vx, self.vy)
+        if speed > 1.0:
+            step = max(2, min(rect.width, rect.height))
+            ux, uy = -self.vx / speed, -self.vy / speed
+            px_, py_ = -uy, ux  # perpendicular, para o zigue-zague do escorrido
+            cx, cy = rect.centerx, rect.centery
+            base_r = max(1, step // 3)
+            for i, color in enumerate(_CORROSIVE_TRAIL, start=1):
+                sway = (1 if i % 2 else -1) * (base_r * 0.6)
+                dx = int(cx + ux * step * i + px_ * sway)
+                dy = int(cy + uy * step * i + py_ * sway)
+                pygame.draw.circle(surface, color, (dx, dy), max(1, base_r - i + 1))
+
+        surface.blit(
+            _get_corrosive_bullet_surface(rect.width, rect.height, self.player_index),
+            rect.topleft,
+        )
+
     def _draw_power_pulse(self, surface: pygame.Surface) -> None:
         """Halo pulsante ('respiração') dos tiros de power-up.
 
@@ -910,7 +1041,12 @@ class Bullet:
         # Cor + ritmo por fantasia. Prioridade quando combinados: o efeito mais
         # dramático manda na cor do halo.
         is_common = not (
-            self.explosive or is_chain or self.homing or is_giant or self.cryo
+            self.explosive
+            or is_chain
+            or self.homing
+            or is_giant
+            or self.cryo
+            or self.corrosive
         )
         radius_factor = 1.4
         if self.cryo:
@@ -920,6 +1056,13 @@ class Bullet:
             # (que comunica mecânica) e o halo é o que mantém o gelo visível.
             base_color = _CRYO_EDGE
             speed = 0.004  # respiração lenta: gelo não crepita
+        elif self.corrosive:
+            # Logo abaixo do gelo: quando os dois estão ativos o corpo do tiro
+            # já é o cristal, e o halo azul é o que mantém o Cryo legível. O
+            # ácido não fica sem aviso por isso — ele se anuncia no INIMIGO
+            # (`corrosion_stain`), que é onde a mecânica dele mora de fato.
+            base_color = CORROSIVE_COLOR
+            speed = 0.012  # borbulhar nervoso, mais rápido que o gelo
         elif self.explosive:
             base_color = (255, 120, 0)  # laranja de pavio
             speed = 0.009

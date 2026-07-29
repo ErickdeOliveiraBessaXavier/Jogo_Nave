@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, List
 
+from .fusion_governor import FusionGovernor
+
 
 def _empty_any_list() -> List[Any]:
     return []
@@ -36,6 +38,12 @@ class EnemyUpdateContext:
     screen_width: int
     screen_height: int
     other_enemies: List[Any]
+    # Ritmo das fusões City Drone → FusedDrone. Campo OBRIGATÓRIO de propósito:
+    # é estado que precisa sobreviver ao frame (o ctx é descartado a cada
+    # update), então quem monta o contexto tem de passar a instância viva do
+    # EntityManager. Um default aqui daria um governador novo por frame — o
+    # intervalo mínimo nunca correria, e o no-op seria silencioso (§11).
+    fusion_governor: FusionGovernor
 
     # Buffers de emissão preenchidos pelos inimigos durante o update.
     # O EntityManager consome-os após o loop para evitar mutação concorrente.

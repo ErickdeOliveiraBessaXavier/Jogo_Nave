@@ -48,6 +48,7 @@ class BulletPool:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        corrosive: bool = False,
         ice_shard: bool = False,
     ) -> Bullet:
         """
@@ -71,6 +72,7 @@ class BulletPool:
                 boss_damage_mult=boss_damage_mult,
                 critical=critical,
                 cryo=cryo,
+                corrosive=corrosive,
                 ice_shard=ice_shard,
             )
             self.active.append(bullet)
@@ -93,6 +95,7 @@ class BulletPool:
             boss_damage_mult=boss_damage_mult,
             critical=critical,
             cryo=cryo,
+            corrosive=corrosive,
             ice_shard=ice_shard,
         )
         self.pool.append(bullet)
