@@ -45,6 +45,23 @@ SPREAD_SHOT_ROTATIONS: tuple[tuple[float, float], ...] = tuple(
     for deg in Config.SPREAD_SHOT_ANGLES
 )
 
+# Distância entre a BORDA do sprite (no eixo do voo) e o CENTRO da bala que
+# nasce. É o único número que controla "quão à frente do casco o tiro aparece", e
+# vale igual nas quatro direções — antes eram quatro valores diferentes, e o de
+# cima nascia dentro da nave.
+#
+# 8px deixa a traseira do projétil ligeiramente fora do casco para o elenco todo
+# (a bala mais comprida é a do Estilete, 15px no eixo). Sob Giant Shot o
+# projétil é grande o bastante para engolir o nariz da nave de qualquer forma —
+# aceito, é o que o upgrade comunica.
+MUZZLE_STANDOFF: float = 8.0
+
+# Meia-abertura das duas bocas do Double Shot, em fração do sprite no eixo
+# perpendicular ao voo. Antes eram 0.3 no eixo vertical e 0.2 no horizontal: a
+# mesma arma abria diferente só por causa da direção. 0.25 é o meio-termo, a ~3px
+# de cada um dos dois valores antigos num sprite de 60px.
+MUZZLE_DUAL_SPREAD: float = 0.25
+
 # Trio do Cryo Shot, pré-resolvido pela mesma razão do leque acima. Mesma forma
 # de dado (pares cos/sin), então os dois passam pelo mesmo `_rotate_fan`.
 CRYO_SHOT_ROTATIONS: tuple[tuple[float, float], ...] = tuple(
@@ -890,25 +907,54 @@ class Ship:
     def _muzzle_positions(
         self, sprite_w: float, sprite_h: float, dual: bool
     ) -> list[tuple[float, float]]:
-        """Bocas de saída da bala para o `facing` atual.
+        """Bocas de saída da bala para o `facing` atual, como CENTRO do projétil.
 
         `dual` pede as duas bocas laterais do Double Shot; sem ele, a boca
         central. Só geometria: quantas balas saem de cada boca e em que direção
         é decisão de `bullet_spawn`.
-        """
-        if self.facing in ("north", "south"):
-            y = self.y if self.facing == "north" else self.y + sprite_h
-            if dual:
-                return [
-                    (self.x + sprite_w * 0.2 - 3.5 + 2.2, y),
-                    (self.x + sprite_w * 0.8 - 3.5 + 2.2, y),
-                ]
-            return [(self.x + sprite_w / 2 - 3.5 + 2.2, y)]
 
-        x = self.x + sprite_w + 5 if self.facing == "east" else self.x - 15
-        if dual:
-            return [(x, self.y + sprite_h * 0.3), (x, self.y + sprite_h * 0.7)]
-        return [(x, self.y + sprite_h / 2)]
+        **Uma regra, rotacionada pelo `facing`** — e não quatro casos escritos à
+        mão. Tudo sai do centro do sprite mais dois deslocamentos ortogonais:
+        `MUZZLE_STANDOFF` ao longo do eixo do voo e, no Double Shot,
+        `MUZZLE_DUAL_SPREAD` na perpendicular. Girar a nave gira o mesmo
+        offset; não há direção com fórmula própria para divergir das outras.
+
+        **Por que a regra existe** (medido): as quatro fórmulas manuais que isto
+        substitui divergiam entre si. Atirando para cima a bala nascia 11px
+        DENTRO do casco (o ponto era o topo do sprite, usado como topo da bala);
+        para baixo, 0px; para leste, +5px; para oeste, +4px. E havia um `-3.5`
+        cravado só no eixo vertical — a meia-largura de uma bala de 7px —
+        tentando compensar o que hoje é responsabilidade do
+        `Bullet._anchor_on_center`, que é o único lugar que conhece o tamanho
+        real do projétil.
+
+        O ponto devolvido é o **centro** da bala, não o canto: a conversão é da
+        bala, porque só ela sabe o próprio `w`/`h` (que troca com a orientação).
+        """
+        cx = self.x + sprite_w / 2.0
+        cy = self.y + sprite_h / 2.0
+        ux, uy = self.get_facing_vector()
+
+        # Meio-sprite ao longo do eixo do voo: com `facing` cardinal, um dos dois
+        # termos é sempre zero. Escrito como projeção (e não como `if`) para a
+        # fórmula continuar valendo se algum dia a nave apontar na diagonal.
+        half_axial = (sprite_w / 2.0) * abs(ux) + (sprite_h / 2.0) * abs(uy)
+        reach = half_axial + MUZZLE_STANDOFF
+        ax, ay = cx + ux * reach, cy + uy * reach
+
+        if not dual:
+            return [(ax, ay)]
+
+        # Perpendicular ao voo: as duas bocas do Double Shot abrem no eixo que
+        # sobra, então elas acompanham a rotação junto com o resto.
+        px, py = -uy, ux
+        spread = (
+            sprite_w * abs(px) + sprite_h * abs(py)
+        ) * MUZZLE_DUAL_SPREAD
+        return [
+            (ax - px * spread, ay - py * spread),
+            (ax + px * spread, ay + py * spread),
+        ]
 
     @staticmethod
     def _rotate_fan(

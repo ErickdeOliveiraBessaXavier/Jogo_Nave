@@ -169,6 +169,13 @@ class Bullet:
     ):
         """Reconfigura a bala para reutilização no pool.
 
+        Args:
+            x, y: **CENTRO** de onde o projétil sai (a boca do canhão), não o
+                canto. A conversão para `topleft` acontece em
+                `_anchor_on_center`, depois de `w`/`h` estarem resolvidos — é o
+                ponto único de alinhamento do projétil.
+
+
         Todo campo de modificador tem que ser reescrito aqui, inclusive quando o
         valor é `False`: a bala vem de uma vida anterior e, sem isto, herda o
         crítico (ou o explosivo) do disparo que a usou por último.
@@ -366,6 +373,44 @@ class Bullet:
         return max(1, int(size[0])), max(1, int(size[1]))
 
     def _configure_shape_and_velocity(
+        self, direction: tuple[float, float] | None
+    ) -> None:
+        """Resolve tamanho e velocidade, e ancora o projétil no ponto de origem.
+
+        As duas coisas na mesma chamada porque a segunda DEPENDE da primeira: o
+        `x`/`y` que chega é o **centro** de onde o tiro sai, e converter centro
+        em canto exige o `w`/`h` que só existe depois de resolver a orientação.
+        """
+        self._resolve_shape_and_velocity(direction)
+        self._anchor_on_center()
+
+    def _anchor_on_center(self) -> None:
+        """Converte a origem recebida (CENTRO) no canto do rect.
+
+        **Este é o ponto único de alinhamento do projétil.** Quem dispara entrega
+        o ponto de onde o tiro sai — a boca do canhão, o centro da nave no
+        Berserk, o corpo do alvo que estilhaçou — e é aqui que ele vira o
+        `topleft` que o `rect` usa.
+
+        Precisa ser aqui, e não no produtor, porque o deslocamento é metade do
+        tamanho do projétil, e esse tamanho depende da nave, do Giant Shot, do
+        Cryo, do Corrosive **e da orientação** — `w` e `h` trocam entre si
+        conforme a direção predominante (ver `_resolve_shape_and_velocity`).
+
+        **Por que a regra existe** (medido): antes, o produtor entregava o centro
+        e a bala usava como canto, então cada tiro nascia deslocado por meio
+        tamanho — e o deslocamento MUDAVA ao girar a nave, porque `w`/`h`
+        trocavam. Medido no Padrão: +0,7px de erro atirando para cima contra
+        +2,0px para o lado; no Magneto, +5,2 contra +6,5. O `_muzzle_positions`
+        tentava compensar com um `-3.5` cravado — a meia-largura de uma bala de
+        7px, aplicada a todas as naves e só no eixo vertical. No Berserk, cuja
+        direção gira livre, a origem SALTAVA 3,5px nos dois eixos ao cruzar 45°,
+        onde `abs(dx) >= abs(dy)` inverte.
+        """
+        self.x -= self.w / 2.0
+        self.y -= self.h / 2.0
+
+    def _resolve_shape_and_velocity(
         self, direction: tuple[float, float] | None
     ) -> None:
         """Configura dimensões e velocidade do projétil com base na direção e nave."""

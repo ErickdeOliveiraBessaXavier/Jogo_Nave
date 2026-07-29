@@ -18,12 +18,17 @@ class MiniShipBullet:
         owner_ship: Optional[Any] = None,
         boss_damage_mult: float = 1.0,
     ):
-        self.x = x
-        self.y = y
-        self.vx = vx
-        self.vy = vy
         self.w = 4
         self.h = 4
+        # `x`/`y` chegam como o CENTRO de onde o tiro sai (o `MiniShip` já dispara
+        # do centro dele) e o `rect` é ancorado no canto — a conversão é aqui,
+        # como em `Bullet._anchor_on_center`. São 2px, mas a escolta gira para
+        # mirar, e sem isto o desvio aponta sempre para o mesmo canto da tela em
+        # vez de acompanhar a direção do tiro.
+        self.x = x - self.w / 2.0
+        self.y = y - self.h / 2.0
+        self.vx = vx
+        self.vy = vy
         self.damage = damage
         self.dead = False
         self.piercing = piercing  # Now configurable

@@ -60,6 +60,13 @@ class HomingBullet:
         # Size and collision rect
         self.w = 10
         self.h = 10
+        # `x`/`y` chegam como o CENTRO de onde o tiro sai (a boca do canhão, via
+        # `Ship._muzzle_positions`) e o rect é ancorado no canto — a conversão
+        # é aqui, como em `Bullet._anchor_on_center`. Sem ela o projétil nasce
+        # 5px deslocado nos dois eixos, e o desvio muda de lado conforme a nave
+        # gira, porque a boca gira e o deslocamento não.
+        self.x -= self.w / 2.0
+        self.y -= self.h / 2.0
         self.rect = pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
         # Initial velocity

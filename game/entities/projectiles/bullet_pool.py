@@ -53,6 +53,8 @@ class BulletPool:
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
+
+        `x`/`y` são o **CENTRO** de onde o tiro sai — ver `Bullet._anchor_on_center`.
         """
         if self.free:
             bullet = self.free.pop()
