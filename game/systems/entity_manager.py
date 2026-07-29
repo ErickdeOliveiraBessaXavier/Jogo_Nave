@@ -32,7 +32,11 @@ from ..entities.enemies.space.eye_enemy import EyeEnemy
 from ..entities.projectiles.eye_laser import EyeLaser
 from ..entities.enemies.city.captor_emp import CaptorEMP
 from ..core.upgrades_config import (
+    CRYO_BOMB_EXPLOSION_SIZE,
+    CRYO_BOMB_SHARDS,
     CRYO_MAX_STACKS,
+    CRYO_SHARD_DAMAGE,
+    CRYO_SHARD_SIZE,
     CRYO_SLOW_STEPS,
     IMPLOSION_SLOW_FACTOR,
 )
@@ -147,6 +151,17 @@ class EntityManager:
         # das peças do golem. Mesmo molde de splitter/carrier_debris.
         self.ice_shards: list[Any] = []
         self.captor_emps: list[CaptorEMP] = []
+        # Bombas de gelo prontas para estourar NESTE frame (Cryo Shot): cada item
+        # é `(alvo, cx, cy, raio, dono)`, enfileirado quando o pavio
+        # (`cryo_slow_timer` com a escada cheia) zera no update. Quem consome é
+        # `Collisions.cryo_bombs_vs_enemies`, porque o estouro fere o alvo e dano
+        # passa pelo roteador de colisão (§8).
+        #
+        # A fila é limpa no INÍCIO de cada `update`: assim nenhum item sobrevive
+        # ao frame em que nasceu. Sem isso, um frame sem passe de colisão (fim de
+        # fase, transição) deixaria uma entrada apontando para uma entidade que
+        # já voltou ao pool — e o dano cairia no inimigo que herdou o slot.
+        self.cryo_detonations: list[tuple[Any, float, float, float, Any]] = []
         # Blasts de área one-shot (cx, cy, raio) emitidos por efeitos/inimigos neste
         # frame; consumidos pela cena (handle_mine_explosion) p/ aplicar dano à nave.
         self.area_blasts: list[tuple[float, float, float]] = []
@@ -353,7 +368,16 @@ class EntityManager:
 
         O NÍVEL (`cryo_stacks`) escolhe o degrau; o timer só diz se a escada
         ainda está de pé. Marca posta em `Collisions._apply_cryo`; aqui só se lê.
+
+        **Boss e miniboss são imunes à lentidão** — cristalizam, acumulam as
+        cargas e detonam a bomba de gelo, mas nunca têm o movimento nem o ataque
+        freados. É aqui que a regra mora (e não no guard da marca): frear um
+        chefe dessincroniza padrão roteirizado e peça coreografada, que é a
+        mesma classe de bug que derrubou o puxão da Implosão. Pelo atributo
+        formal `is_boss`, nunca por nome de classe (§5).
         """
+        if getattr(entity, "is_boss", False):
+            return 1.0
         if getattr(entity, "cryo_slow_timer", 0.0) <= 0.0:
             return 1.0
         stacks = int(getattr(entity, "cryo_stacks", 0))
@@ -362,21 +386,186 @@ class EntityManager:
         return CRYO_SLOW_STEPS[min(stacks, CRYO_MAX_STACKS) - 1]
 
     @staticmethod
-    def _update_cryo_linger(entity: Any, dt: float) -> None:
-        """Decrementa o timer do Cryo e DERRUBA a escada inteira quando ele zera.
+    def _update_cryo_linger(entity: Any, dt: float) -> bool:
+        """Decrementa o timer do Cryo. Devolve True quando a BOMBA está pronta.
 
-        Zerar `cryo_stacks` junto é o que faz o upgrade ser condicional: soltar o
-        alvo custa o nível inteiro, não um degrau. Sem isso o nível ficaria
-        guardado no inimigo esperando o próximo acerto, e a escada — que é a
-        identidade do upgrade — viraria só um bônus permanente com atraso.
+        Duas saídas para o mesmo timer, conforme o degrau em que ele expirou:
+
+        - **degrau intermediário** → a escada cai INTEIRA (`cryo_stacks = 0`). É
+          o que faz o upgrade ser condicional: soltar o alvo custa o nível todo,
+          não um degrau. Sem isso o nível ficaria guardado no inimigo esperando o
+          próximo acerto, e a escada viraria um bônus permanente com atraso;
+        - **escada cheia** → o congelamento acabou, e o congelamento é o pavio:
+          devolve True e deixa as marcas de pé. Quem as consome é
+          `queue_cryo_detonation`, porque detonar exige aplicar dano — e dano
+          passa pelo roteador de colisão (§8), não pelo `EntityManager`.
         """
         t = getattr(entity, "cryo_slow_timer", 0.0)
         if t <= 0.0:
-            return
+            return False
         t = max(0.0, t - dt)
         setattr(entity, "cryo_slow_timer", t)
-        if t == 0.0:
-            setattr(entity, "cryo_stacks", 0)
+        if t > 0.0:
+            return False
+        if int(getattr(entity, "cryo_stacks", 0)) >= CRYO_MAX_STACKS:
+            return True
+        setattr(entity, "cryo_stacks", 0)
+        return False
+
+    def _tick_cryo(self, entity: Any, dt: float) -> None:
+        """`_update_cryo_linger` + enfileiramento do estouro. Usado nos loops."""
+        if self._update_cryo_linger(entity, dt):
+            self.queue_cryo_detonation(entity)
+
+    # ── Bomba de gelo (Cryo Shot) ────────────────────────────────────────────
+
+    @staticmethod
+    def _cryo_geometry(entity: Any) -> tuple[float, float, float] | None:
+        """(cx, cy, raio) do alvo pelo `collision_circle`, ou None se não der.
+
+        Nunca por `x + w/2`: nem toda entidade tem `w`, e em algumas (`Mountain
+        Geode`) `x`/`y` já é o CENTRO — as duas suposições que derrubaram o jogo
+        quando a Implosão as fez, e as mesmas que os cristais evitam no draw.
+        """
+        circle = getattr(entity, "collision_circle", None)
+        if circle is None:
+            return None
+        try:
+            cx, cy, radius = circle()
+        except (TypeError, ValueError, AttributeError):
+            return None
+        if radius <= 0.0:
+            return None
+        return float(cx), float(cy), float(radius)
+
+    def _consume_cryo_marks(self, entity: Any) -> Any:
+        """Apaga a escada de gelo do alvo e devolve o dono das cargas.
+
+        Chamado no instante do estouro. Zerar aqui é o que garante que a bomba
+        detona UMA vez: sem as marcas, `is_frozen` é falso, os cristais somem no
+        mesmo frame e nenhum outro caminho reenfileira o mesmo alvo.
+        """
+        owner = getattr(entity, "cryo_owner", None) or None
+        try:
+            entity.cryo_stacks = 0
+            entity.cryo_slow_timer = 0.0
+            entity.cryo_owner = None
+        except AttributeError:
+            # Entidade com `__slots__` que aceitou a marca mas não declarou
+            # todos os campos. Nunca deve derrubar o jogo no meio do combate.
+            pass
+        return owner
+
+    def queue_cryo_detonation(self, entity: Any) -> bool:
+        """Enfileira o estouro da bomba de gelo de um alvo VIVO.
+
+        Só o dano precisa esperar o passe de colisão; o estouro em si é
+        instantâneo do ponto de vista do jogador, porque a fila é consumida no
+        mesmo frame (ver `cryo_detonations`).
+        """
+        if int(getattr(entity, "cryo_stacks", 0)) < CRYO_MAX_STACKS:
+            return False
+        geometry = self._cryo_geometry(entity)
+        if geometry is None:
+            self._consume_cryo_marks(entity)
+            return False
+        cx, cy, radius = geometry
+        owner = self._consume_cryo_marks(entity)
+        self.cryo_detonations.append((entity, cx, cy, radius, owner))
+        return True
+
+    def take_cryo_detonations(self) -> list[tuple[Any, float, float, float, Any]]:
+        """Retira e devolve as bombas pendentes (a fila fica vazia)."""
+        if not self.cryo_detonations:
+            return []
+        pending = self.cryo_detonations
+        self.cryo_detonations = []
+        return pending
+
+    def burst_cryo_bomb(self, entity: Any) -> bool:
+        """Estoura a bomba do alvo que MORREU cristalizado, sem passar pela fila.
+
+        Alvo morto não tem dano a receber, então o estouro é só efeito + leque —
+        e efeito o `EntityManager` sabe criar sozinho. Resolver na hora (em vez
+        de enfileirar) fecha a única janela em que a fila poderia envelhecer: o
+        alvo morre DURANTE o passe de colisão, e um item enfileirado ali só seria
+        lido no frame seguinte, quando ele já pode ter voltado ao pool.
+        """
+        if int(getattr(entity, "cryo_stacks", 0)) < CRYO_MAX_STACKS:
+            return False
+        geometry = self._cryo_geometry(entity)
+        owner = self._consume_cryo_marks(entity)
+        if geometry is None:
+            return False
+        cx, cy, radius = geometry
+        self.detonate_cryo_bomb(cx, cy, radius, owner, source_id=id(entity))
+        return True
+
+    def detonate_cryo_bomb(
+        self,
+        cx: float,
+        cy: float,
+        radius: float,
+        owner: Any = None,
+        source_id: int = 0,
+    ) -> None:
+        """Parte VISUAL do estouro: explosão de gelo + leque de fragmentos.
+
+        Som próprio (o colapso da gema do IceGolem, o cristal quebrando do
+        elenco) e não o da explosão comum: o estouro tem que se anunciar como
+        gelo, senão a bomba se perde no meio do combate como mais um `boom`.
+        """
+        self.spawn_explosion(
+            cx,
+            cy,
+            size=CRYO_BOMB_EXPLOSION_SIZE,
+            explosion_type=ExplosionType.ICE_CORE,
+        )
+        self.spawn_cryo_shards(cx, cy, radius, owner, source_id=source_id)
+        if self.sound_manager is not None:
+            self.sound_manager.play_gem_death()
+
+    def spawn_cryo_shards(
+        self,
+        cx: float,
+        cy: float,
+        radius: float,
+        owner: Any = None,
+        source_id: int = 0,
+    ) -> list[Bullet]:
+        """Cospe o leque de fragmentos de gelo do estouro.
+
+        Os cacos nascem NA BORDA do alvo, não no centro: saindo de dentro do
+        sprite, os primeiros frames de voo ficam escondidos atrás dele e o leque
+        parece brotar do nada. Da borda, o estilhaço é visível desde o frame um.
+
+        `shard_source_id` marca o alvo de origem — ele não pode ser atingido
+        pelos próprios cacos, que sairiam de dentro do corpo e cobrariam o dano
+        do estouro duas vezes (num boss, oito vezes).
+        """
+        shards: list[Bullet] = []
+        # Ângulo inicial sorteado: dois estouros seguidos no mesmo ponto não
+        # saem com o leque idêntico. É evento pontual, não hot path (§7).
+        base = random.uniform(0.0, math.tau)
+        step = math.tau / CRYO_BOMB_SHARDS
+        cos, sin = math.cos, math.sin
+        half = CRYO_SHARD_SIZE / 2
+        edge = radius + half
+        for i in range(CRYO_BOMB_SHARDS):
+            angle = base + i * step
+            dx, dy = cos(angle), sin(angle)
+            shard = self.spawn_bullet(
+                cx + dx * edge - half,
+                cy + dy * edge - half,
+                damage=CRYO_SHARD_DAMAGE,
+                direction=(dx, dy),
+                owner_ship=owner,
+                cryo=True,
+                ice_shard=True,
+            )
+            shard.shard_source_id = source_id
+            shards.append(shard)
+        return shards
 
     @staticmethod
     def _update_implosion_linger(entity: Any, dt: float) -> None:
@@ -938,6 +1127,12 @@ class EntityManager:
         self._screen_size = (screen_width, screen_height)
         self._rebuild_enemy_caches()
 
+        # Bomba de gelo pendente que ninguém consumiu (frame sem passe de
+        # colisão: fim de fase, transição) morre aqui, antes de qualquer
+        # `cleanup` devolver o alvo ao pool. A fila nunca atravessa um frame.
+        if self.cryo_detonations:
+            self.cryo_detonations.clear()
+
         self._update_visual_effects(dt)
 
         new_alien_bullets: list[AlienBullet] = self._update_formations(dt, enemy_dt)
@@ -956,6 +1151,12 @@ class EntityManager:
         self._update_floating_scores_and_mini_ships(dt)
 
         self._update_spikes(dt, enemy_dt, player_x, player_y)
+        # Pavio do boss no `dt` REAL, como os demais lingers de controle — e
+        # fora do `_update_boss`, que recebe só o `enemy_dt`. O boss cristaliza
+        # mas não é freado (`_cryo_multiplier`), então o `enemy_dt` dele segue
+        # intocado: aqui só anda o relógio da bomba.
+        if self.boss is not None and not getattr(self.boss, "dead", False):
+            self._tick_cryo(self.boss, dt)
         self._update_boss(enemy_dt, player_x, player_y)
 
         ctx_emissions = self._update_enemies(
@@ -1118,7 +1319,7 @@ class EntityManager:
             self._update_ice_linger(f, dt)
             self._update_vortex_linger(f, dt)
             self._update_implosion_linger(f, dt)
-            self._update_cryo_linger(f, dt)
+            self._tick_cryo(f, dt)
             mul = (
                 self._emp_multiplier(f, slow_active, slow_factor, dt)
                 * self._ice_multiplier(f)
@@ -1359,7 +1560,7 @@ class EntityManager:
             self._update_ice_linger(s, dt)
             self._update_vortex_linger(s, dt)
             self._update_implosion_linger(s, dt)
-            self._update_cryo_linger(s, dt)
+            self._tick_cryo(s, dt)
             mul = (
                 self._emp_multiplier(s, slow_active, slow_factor, dt)
                 * self._ice_multiplier(s)
@@ -1427,7 +1628,7 @@ class EntityManager:
             self._update_ice_linger(en, dt)
             self._update_vortex_linger(en, dt)
             self._update_implosion_linger(en, dt)
-            self._update_cryo_linger(en, dt)
+            self._tick_cryo(en, dt)
             mul = (
                 self._emp_multiplier(en, slow_active, slow_factor, dt)
                 * self._ice_multiplier(en)
@@ -1890,6 +2091,7 @@ class EntityManager:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        ice_shard: bool = False,
     ) -> Bullet:
         bullet = self.bullet_pool.get(
             x=x,
@@ -1907,6 +2109,7 @@ class EntityManager:
             boss_damage_mult=boss_damage_mult,
             critical=critical,
             cryo=cryo,
+            ice_shard=ice_shard,
         )
         if homing:
             target = self._assign_homing_target(bullet)
@@ -2132,6 +2335,7 @@ class EntityManager:
         self.carrier_debris.clear()
         self.ice_shards.clear()
         self.captor_emps.clear()
+        self.cryo_detonations.clear()
         self.area_blasts.clear()
         self.powerups.clear()
         self.stars.clear()
@@ -2191,6 +2395,7 @@ class EntityManager:
         self.carrier_debris.clear()
         self.ice_shards.clear()
         self.captor_emps.clear()
+        self.cryo_detonations.clear()
         self.area_blasts.clear()
         # Lasers do boss (incl. cerca elétrica da Fase 3): o boss já era; limpeza
         # definitiva aqui evita qualquer vazamento de feixe-limite para o próximo nível.

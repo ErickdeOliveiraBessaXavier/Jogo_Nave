@@ -20,6 +20,7 @@ from ..core.sound import sound_manager
 from ..core.upgrades_config import (
     CRITICAL_CORE_CHANCE,
     CRITICAL_CORE_MULTIPLIER,
+    CRYO_SHOT_DAMAGE_MULTIPLIER,
     HOMING_DAMAGE_MULTIPLIER,
 )
 from ..events import game_events as events
@@ -147,12 +148,18 @@ class ShootingSystem:
         cx = ship.x + ship.w / 2
         cy = ship.y + ship.h / 2
 
-        # Bônus de dano Berserk (1.5x)
+        # Bônus de dano Berserk (1.5x), e o do Cryo por cima quando ativo — o
+        # leque do Berserk não passa pelo `bullet_spawn`, então sem esta linha o
+        # upgrade ficaria pela metade justamente na nave que mais atira.
+        # O trio do Cryo NÃO entra aqui: a Estrela Espiral já dispara nas 4
+        # direções, e abrir cada uma em três seria uma parede de 12 projéteis.
+        cryo_mult = CRYO_SHOT_DAMAGE_MULTIPLIER if ship.has_cryo_shot else 1.0
         adjusted_damage = _round_damage(
             Config.BULLET_BASE_DAMAGE
             * player_damage_multiplier
             * ship.damage_multiplier
             * 1.5
+            * cryo_mult
         )
 
         # O Berserk também crita: a regra é "toda BALA da nave pode sair
@@ -260,6 +267,14 @@ class ShootingSystem:
                 if spec.homing
                 else adjusted_damage
             )
+            # Cryo Shot: o cristal bate mais forte que a bala comum. Multiplica
+            # aqui (e não em `adjusted_damage`) pelo mesmo motivo do teleguiado —
+            # é bônus DO PROJÉTIL, e o `adjusted_damage` é o dano da nave, lido
+            # uma vez para a salva inteira.
+            if spec.cryo:
+                bullet_damage = _round_damage(
+                    bullet_damage * CRYO_SHOT_DAMAGE_MULTIPLIER
+                )
             # Crítico multiplica DEPOIS de tudo (perfil da nave, power-up de
             # dano, teleguiado), então ele vale sempre os mesmos 2,5× sobre o
             # dano que aquela bala causaria — e não uma fração dele.

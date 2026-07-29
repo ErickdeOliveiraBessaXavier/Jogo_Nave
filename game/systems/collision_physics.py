@@ -6,12 +6,12 @@ import pygame
 
 from ..entities.projectiles.bullet import Bullet
 from ..entities.effects.explosion import ExplosionType
-from ..entities.effects.floating_score import FloatingScore
+from ..entities.effects.floating_score import FloatingScore, score_color
 from ..entities._shared.impact_styles import ImpactStyle
 from ..entities.projectiles.mini_ship_bullet import MiniShipBullet
 from ..events import game_events as events
 from . import enemy_shield, hit_sounds
-from .collision_protocols import Enemy
+from .collision_protocols import Enemy, ScoreEvent
 from .hit_result import NO_HIT, HitResult
 
 # Feedback imutável reusado quando o escudo bloqueia o hit inteiro (sem dano ao
@@ -190,6 +190,7 @@ class CollisionPhysics:
         floating_scores: list[FloatingScore] | None = None,
         impact: ImpactStyle | None = None,
         impact_scale: float = 1.0,
+        critical: bool = False,
     ) -> HitResult:
         """Roteador único: chama `target.on_hit` e materializa o HitResult.
 
@@ -202,6 +203,12 @@ class CollisionPhysics:
         `impact_scale` (> 1.0 sob Giant Shot) engorda o burst do impacto da nave
         junto com o tiro aumentado. Só afeta o efeito estético NÃO-letal — a
         explosão de morte do hostil segue no tamanho que ele pede.
+
+        `critical` pinta de vermelho o número de score que ESTE caminho emite —
+        o dos alvos que recebem `floating_scores` (boss e afins). Os inimigos
+        comuns não passam por aqui: o número deles é agrupado antes de virar
+        evento, e a cor é escolhida na cena a partir do `ScoreEvent.critical`.
+        Não dá para derivar do `impact_scale`, que também sobe com o Giant Shot.
         """
         # Escudo temporário (enemy_shield): absorve antes do HP. Som de quebra
         # quando o escudo é esgotado; clink quando aguenta. Se engole o hit
@@ -254,17 +261,20 @@ class CollisionPhysics:
 
         if result.killed and result.points > 0:
             if floating_scores is not None:
+                color = score_color(critical)
                 if self._event_bus is not None:
                     self._event_bus.emit(
                         events.SpawnFloatingScore(
                             x=hit_x,
                             y=hit_y,
                             score=result.points,
-                            color=(255, 255, 0),
+                            color=color,
                         )
                     )
                 else:
-                    floating_scores.append(FloatingScore(hit_x, hit_y, result.points))
+                    floating_scores.append(
+                        FloatingScore(hit_x, hit_y, result.points, color)
+                    )
 
         if (
             result.killed
@@ -281,6 +291,16 @@ class CollisionPhysics:
 
         if result.triggers_special_death:
             entity_manager.trigger_death_sequence(target)
+
+        # Bomba de gelo do Cryo Shot: quem morre cristalizado estoura NA HORA,
+        # em vez de levar os cristais junto. O pavio existe para ser cobrado —
+        # matar o alvo no meio dele adianta o estouro, não o cancela.
+        #
+        # Aqui e não numa varredura de mortos porque este é o roteador único de
+        # dano (§8): passar por ele cobre bala, laser, área, cadeia e contato,
+        # sem um caminho de morte ficando de fora em silêncio.
+        if result.killed:
+            entity_manager.burst_cryo_bomb(target)
 
         return result
 
@@ -304,6 +324,9 @@ class CollisionPhysics:
             )
         if result.sound is not None:
             result.sound()
+        if result.killed:
+            # Mesma regra do `apply_hit`: morreu cristalizado, estoura.
+            entity_manager.burst_cryo_bomb(target)
         return result
 
     def apply_area_damage(
@@ -315,11 +338,11 @@ class CollisionPhysics:
         enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
         damage: int = 1,
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Aplica dano em área (explosive effects, air strikes, explosive bullets)."""
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for enemy in enemies:
             if enemy.dead:
@@ -351,6 +374,6 @@ class CollisionPhysics:
                 if result.killed:
                     destroyed_count += 1
                     if result.points > 0:
-                        score_events.append((cx, cy, result.points))
+                        score_events.append(ScoreEvent(cx, cy, result.points))
 
         return score_gain, destroyed_count, score_events

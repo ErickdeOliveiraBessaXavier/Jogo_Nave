@@ -7,12 +7,33 @@ materializa o HitResult retornado.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, runtime_checkable
 
 import pygame
 
 if TYPE_CHECKING:
     from .hit_result import HitResult
+
+
+class ScoreEvent(NamedTuple):
+    """Um número flutuante pedido por um passe de colisão.
+
+    Era uma tupla anônima `(x, y, pontos)` repetida em ~50 assinaturas. Virou
+    NamedTuple quando o **crítico** passou a pintar o número de vermelho: sem um
+    campo com nome, a única forma de levar "este abate foi crítico" da colisão
+    até a cena era alargar a tupla e torcer para todo mundo desempacotar na
+    ordem certa.
+
+    `critical` viaja pelo agrupamento (`_batch_floating_scores`) e é lido pela
+    cena, que escolhe a cor. É o único feedback do Critical Core além do impacto
+    aumentado — e o abate é o momento em que o pico de dano do upgrade
+    finalmente aparece.
+    """
+
+    x: float
+    y: float
+    points: int
+    critical: bool = False
 
 
 @runtime_checkable

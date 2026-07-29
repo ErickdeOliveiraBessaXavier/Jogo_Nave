@@ -252,8 +252,7 @@ class TestSemResiduoNoPool:
 
 class TestFeedback:
     def test_o_impacto_do_critico_e_maior(self):
-        """Único feedback do upgrade: sem número flutuante nem som de crítico,
-        se o impacto não crescer o upgrade é literalmente invisível."""
+        """Um dos dois feedbacks do upgrade (o outro é a cor do score)."""
         em = EntityManager()
         normal = em.spawn_bullet(100.0, 100.0)
         critica = em.spawn_bullet(100.0, 100.0, critical=True)
@@ -270,3 +269,112 @@ class TestFeedback:
             size_multiplier = 1.0
 
         assert impact_scale_for_projectile(ProjetilQualquer()) == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# A cor do score — o feedback do abate
+# ---------------------------------------------------------------------------
+
+
+class TestCorDoScore:
+    """Abate crítico pinta o número flutuante de vermelho.
+
+    O impacto aumentado só se vê em hit NÃO-letal (é a regra do
+    `impact_styles`): no abate ele dá lugar à explosão de morte do inimigo.
+    Ou seja, o crítico que MATA — o mais satisfatório — era o único que não
+    aparecia. A cor do número cobre exatamente esse buraco.
+
+    O que estes testes travam é a fiação (a marca sai da bala que matou e chega
+    à cor), não o tom exato do vermelho, que é estética e pode mudar.
+    """
+
+    @staticmethod
+    def _abater(*, critical: bool):
+        """Mata um inimigo com uma bala pelo caminho real de colisão."""
+        import pygame
+
+        from game.core.spatial_grid import SpatialGrid
+        from game.systems.collisions import Collisions
+        from game.systems.hit_result import HitResult
+
+        class Alvo:
+            def __init__(self):
+                self.x, self.y = 600.0, 300.0
+                self.w = self.h = 30
+                self.dead = False
+                self.health = 1
+
+            @property
+            def rect(self):
+                return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+            def collision_circle(self):
+                return (self.x + 15, self.y + 15, 15)
+
+            def on_hit(self, damage, hx, hy):
+                self.dead = True
+                return HitResult(killed=True, points=100, explosion_size=0)
+
+            def get_points_value(self):
+                return 100
+
+        em = EntityManager()
+        alvo = Alvo()
+        em.enemies = [alvo]
+        bala = em.spawn_bullet(alvo.x + 10, alvo.y + 10, damage=50, critical=critical)
+
+        grid: SpatialGrid = SpatialGrid(cell_size=200)
+        r = alvo.rect
+        grid.insert(alvo, r.x, r.y, r.width, r.height)
+        _, _, eventos = Collisions(event_bus=Bus()).projectiles_vs_enemies(
+            [bala], grid, em
+        )
+        assert eventos, "premissa: o abate gerou um score event"
+        return eventos[0]
+
+    def test_abate_critico_marca_o_evento(self):
+        assert self._abater(critical=True).critical is True
+
+    def test_abate_comum_nao_marca(self):
+        assert self._abater(critical=False).critical is False
+
+    def test_a_marca_vira_vermelho_e_o_resto_amarelo(self):
+        from game.entities.effects.floating_score import (
+            COMBAT_COLOR,
+            CRITICAL_COLOR,
+            score_color,
+        )
+
+        assert score_color(True) == CRITICAL_COLOR
+        assert score_color(False) == COMBAT_COLOR
+        assert CRITICAL_COLOR != COMBAT_COLOR
+
+    def test_o_vermelho_do_critico_e_legivel(self):
+        """O número é pequeno e fica sobre explosões laranja. Vermelho escuro
+        ou puro some ali — o tom precisa de brilho e de dominância clara."""
+        from game.entities.effects.floating_score import CRITICAL_COLOR
+
+        r, g, b = CRITICAL_COLOR
+        assert r >= 220, "vermelho apagado demais para ler sobre explosão"
+        assert r - max(g, b) >= 100, "sem dominância de vermelho: lê como branco"
+
+    def test_a_animacao_do_score_nao_muda_com_a_cor(self):
+        """Só a COR muda. Se o crítico ganhasse vida/velocidade própria, dois
+        números lado a lado sairiam dessincronizados e o efeito viraria ruído."""
+        from game.entities.effects.floating_score import (
+            COMBAT_COLOR,
+            CRITICAL_COLOR,
+            FloatingScore,
+        )
+
+        comum = FloatingScore(10.0, 20.0, 100, COMBAT_COLOR)
+        critico = FloatingScore(10.0, 20.0, 100, CRITICAL_COLOR)
+        for _ in range(10):
+            comum.update()
+            critico.update()
+
+        assert (comum.y, comum.alpha, comum.lifetime) == (
+            critico.y,
+            critico.alpha,
+            critico.lifetime,
+        )

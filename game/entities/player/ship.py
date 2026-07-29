@@ -8,7 +8,12 @@ import pygame
 
 from ...core.config import config as Config
 from ...core.ship_types import ShipProfile, get_ship_profile
-from ...core.upgrades_config import CRITICAL_CORE_CHANCE
+from ...core.upgrades_config import (
+    CRITICAL_CORE_CHANCE,
+    CRYO_SHOT_ANGLES,
+    CRYO_SHOT_SIZE_MULTIPLIER,
+    GIANT_SHOT_SIZE_MULTIPLIER,
+)
 from ...core.sound import sound_manager
 from ..effects.particle_types import ParticleDict, step_particle
 from .ship_movement import ShipMovement
@@ -38,6 +43,14 @@ SPREAD_SHOT_ROTATIONS: tuple[tuple[float, float], ...] = tuple(
     (math.cos(math.radians(deg)), math.sin(math.radians(deg)))
     for deg in Config.SPREAD_SHOT_ANGLES
 )
+
+# Trio do Cryo Shot, pré-resolvido pela mesma razão do leque acima. Mesma forma
+# de dado (pares cos/sin), então os dois passam pelo mesmo `_rotate_fan`.
+CRYO_SHOT_ROTATIONS: tuple[tuple[float, float], ...] = tuple(
+    (math.cos(math.radians(deg)), math.sin(math.radians(deg)))
+    for deg in CRYO_SHOT_ANGLES
+)
+
 
 class BulletSpec(NamedTuple):
     """Uma bala a nascer: de onde, para onde, e com quais modificadores.
@@ -455,15 +468,21 @@ class Ship:
 
     @property
     def bullet_size_multiplier(self) -> float:
-        """Fator de escala das balas (visual + hitbox) enquanto o Giant Shot dura.
+        """Fator de escala das balas (visual + hitbox): Giant Shot × Cryo Shot.
 
         1.0 = tamanho normal. Lido pelo `ShootingSystem` no spawn de cada bala.
-        """
-        if self.big_shot_timer > 0.0:
-            from ...core.upgrades_config import GIANT_SHOT_SIZE_MULTIPLIER
 
-            return GIANT_SHOT_SIZE_MULTIPLIER
-        return 1.0
+        Os dois se COMPÕEM por multiplicação, como todo modificador de disparo
+        nesta base: o cristal de gelo sob Giant Shot é um bloco (3,0 × 1,6). É a
+        mesma escolha que faz leque + perfurante + explosivo valerem juntos sem
+        um caso especial por combinação.
+        """
+        mult = 1.0
+        if self.big_shot_timer > 0.0:
+            mult *= GIANT_SHOT_SIZE_MULTIPLIER
+        if self.has_cryo_shot:
+            mult *= CRYO_SHOT_SIZE_MULTIPLIER
+        return mult
 
     @property
     def rect(self) -> pygame.Rect:
@@ -871,21 +890,30 @@ class Ship:
         return [(x, self.y + sprite_h / 2)]
 
     @staticmethod
-    def _fan_directions(
+    def _rotate_fan(
         base: tuple[float, float],
+        rotations: tuple[tuple[float, float], ...],
     ) -> list[tuple[float, float]]:
-        """Abre a direção base no leque do Spread Shot.
+        """Abre a direção base num leque pré-resolvido (Spread Shot ou Cryo).
 
-        Rotação 2D pura: preserva o módulo do vetor, então as cinco balas saem
+        Rotação 2D pura: preserva o módulo do vetor, então todas as balas saem
         com a MESMA velocidade do tiro normal — muda só o rumo inicial. O termo
-        central de `SPREAD_SHOT_ROTATIONS` é (1, 0), ou seja, o tiro do meio é
-        bit a bit o tiro padrão.
+        central das duas tabelas é (1, 0), ou seja, o tiro do meio é bit a bit o
+        tiro padrão.
         """
         bx, by = base
         return [
             (bx * cos_a - by * sin_a, bx * sin_a + by * cos_a)
-            for cos_a, sin_a in SPREAD_SHOT_ROTATIONS
+            for cos_a, sin_a in rotations
         ]
+
+    @classmethod
+    def _fan_directions(
+        cls,
+        base: tuple[float, float],
+    ) -> list[tuple[float, float]]:
+        """Leque de 5 do Spread Shot."""
+        return cls._rotate_fan(base, SPREAD_SHOT_ROTATIONS)
 
     def bullet_spawn(self, apply_spread: bool = True) -> list[BulletSpec]:
         """Monta as balas do próximo disparo.
@@ -928,7 +956,20 @@ class Ship:
         muzzles = self._muzzle_positions(
             sprite_w, sprite_h, dual=self.double_shot_timer > 0 and not spread
         )
-        directions = self._fan_directions(facing_vector) if spread else [facing_vector]
+        # Ordem dos leques: Spread (5) > trio do Cryo (3) > tiro único. Eles não
+        # se multiplicam — 5×3 seriam 15 projéteis por puxada de gatilho, uma
+        # parede que nenhum dos dois upgrades promete. Vale o mais largo, mesma
+        # regra (e mesmo motivo) do leque sobre as duas bocas do Double Shot.
+        #
+        # `apply_spread=False` (charge shots) desliga os dois pela mesma razão:
+        # 5 lasers do Magneto ou 5×5 teleguiados do Caçador já SÃO o "muitos de
+        # uma vez" da nave, e abri-los em trio multiplicaria isso.
+        if spread:
+            directions = self._fan_directions(facing_vector)
+        elif is_cryo and apply_spread:
+            directions = self._rotate_fan(facing_vector, CRYO_SHOT_ROTATIONS)
+        else:
+            directions = [facing_vector]
 
         return [
             BulletSpec(

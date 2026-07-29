@@ -296,7 +296,7 @@ EN: dict[str, str] = {
     "upgrade.link.desc": "High-voltage beam between players.",
     "upgrade.implosion_shot.desc": "Every hit creates an area that slows enemies and deals light damage.",
     "upgrade.critical_core.desc": "Each shot has a chance to crit for multiplied damage.",
-    "upgrade.cryo_shot.desc": "Repeated hits on the same enemy slow it further. The 3rd hit freezes it for 5s, encased in crystals. The effect drops if you switch targets.",
+    "upgrade.cryo_shot.desc": "Your ship fires a trio of bigger, harder-hitting ice crystals. Repeated hits on the same enemy slow it further; the 3rd encases it in crystals — which shatter when the freeze ends (or when it dies), damaging the target and spraying shards at everything nearby. Bosses crystallize and shatter, but never freeze.",
     "upgrade.shockwave.desc": "Every enemy that dies explodes in a small area, hurting neighbours and clearing nearby enemy shots.",
 
     # ── HUD (in-game) ────────────────────────────────────────────────────────

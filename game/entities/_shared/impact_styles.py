@@ -149,10 +149,13 @@ def impact_scale_for_projectile(projectile: object) -> float:
     crescer junto com o tiro aumentado. Projéteis sem `size_multiplier` (ex.:
     teleguiado do Caçador) caem em 1.0 — impacto do tamanho de sempre.
 
-    A bala crítica engorda o impacto por cima disso. É o único feedback do
-    Critical Core: o jogo não tem número de dano flutuante nem som de crítico,
-    então o pico de dano precisa aparecer no impacto ou o upgrade fica invisível
-    — e "invisível" é o modo de falha de todo upgrade que só mexe num número.
+    A bala crítica engorda o impacto por cima disso. É metade do feedback do
+    Critical Core; a outra metade é a cor do score (ver `floating_score`), e as
+    duas se dividem por escopo: o impacto só pinta hit NÃO-LETAL (regra do topo
+    deste módulo), então no abate — o crítico mais satisfatório — quem avisa é o
+    número vermelho. O jogo não tem número de dano flutuante nem som de crítico,
+    então sem esses dois o pico de dano fica invisível — e "invisível" é o modo
+    de falha de todo upgrade que só mexe num número.
     """
     scale = giant_visual_scale(getattr(projectile, "size_multiplier", 1.0))
     if getattr(projectile, "critical", False):

@@ -60,6 +60,7 @@ from ..core.world_config import (
     is_side_scroll_mode,
     resolve_theme_key,
 )
+from ..entities.effects.floating_score import score_color
 from ..entities.player.mini_ship import MiniShip
 from ..entities.player.revival_beacon import RevivalBeacon
 from ..entities.player.ship import Ship
@@ -1714,13 +1715,14 @@ class PlayingScene(Scene):
                 result.enemies_destroyed, self.entity_manager.stars
             )
 
-        for x, y, pts in result.floating_scores:
+        for event in result.floating_scores:
             self.app.event_bus.emit(
                 events.SpawnFloatingScore(
-                    x=x,
-                    y=y,
-                    score=pts,
-                    color=(255, 255, 0),  # Amarelo para pontos de combate
+                    x=event.x,
+                    y=event.y,
+                    score=event.points,
+                    # Amarelo de combate; vermelho quando o abate foi crítico.
+                    color=score_color(event.critical),
                 )
             )
 

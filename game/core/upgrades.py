@@ -37,7 +37,7 @@ class UpgradeType(Enum):
     COOP_LINK = auto()  # Feixe de dano cooperativo
     IMPLOSION_SHOT = auto()  # Cada acerto abre uma área que deixa os inimigos lentos
     CRITICAL_CORE = auto()  # Chance de cada bala sair crítica (dano multiplicado)
-    CRYO_SHOT = auto()  # Acertos acumulam lentidão no mesmo inimigo (25/50/75%)
+    CRYO_SHOT = auto()  # Acertos acumulam lentidão, congelam e a bomba de gelo estoura
     SHOCKWAVE = auto()  # A morte de cada inimigo vira uma explosão pequena
 
 

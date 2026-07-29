@@ -8,6 +8,7 @@ from ..core.spatial_grid import SpatialGrid
 from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
 from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
 from ..core.upgrades_config import (
+    CRYO_BOMB_DAMAGE,
     CRYO_FREEZE_DURATION,
     CRYO_MAX_STACKS,
     CRYO_SLOW_DURATION,
@@ -15,7 +16,7 @@ from ..core.upgrades_config import (
     IMPLOSION_DAMAGE_INTERVAL,
     IMPLOSION_SLOW_LINGER,
 )
-from ..entities._shared.control_marks import can_be_controlled
+from ..entities._shared.control_marks import accepts_cryo, can_be_controlled
 from ..entities.projectiles.air_strike_bomb import AirStrikeBomb
 from ..entities.projectiles.boss_laser import BossLaser
 from ..entities.bosses.boss_square import BossSquare
@@ -52,7 +53,7 @@ from .collision_physics import (
     get_enemy_collision_mask_data,
     get_rect_mask,
 )
-from .collision_protocols import Damageable, Enemy
+from .collision_protocols import Damageable, Enemy, ScoreEvent
 from .hit_result import HitResult
 
 if TYPE_CHECKING:
@@ -343,6 +344,7 @@ class Collisions:
         floating_scores: list[FloatingScore] | None = None,
         impact: ImpactStyle | None = None,
         impact_scale: float = 1.0,
+        critical: bool = False,
     ) -> HitResult:
         return self.physics.apply_hit(
             target,
@@ -353,6 +355,7 @@ class Collisions:
             floating_scores,
             impact,
             impact_scale,
+            critical,
         )
 
     def _apply_ship_contact(
@@ -375,7 +378,7 @@ class Collisions:
         enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
         damage: int = 1,
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         return self.physics.apply_area_damage(
             source_x,
             source_y,
@@ -429,7 +432,13 @@ class Collisions:
         if not projectiles or not boss or boss.dead:
             return 0
 
+        boss_id = id(boss)
         for proj in projectiles[:]:
+            # Caco da bomba de gelo do PRÓPRIO boss: nasce colado ao corpo dele,
+            # que é largo, e sem esta guarda o leque inteiro voltaria para dentro
+            # — o estouro cobraria oito vezes o que cobra num inimigo comum.
+            if getattr(proj, "shard_source_id", 0) == boss_id:
+                continue
             if proj.dead or not self._check_mask_collision(
                 proj.rect, None, boss, proj.x, proj.y
             ):
@@ -454,8 +463,20 @@ class Collisions:
                 floating_scores,
                 impact=impact_for_projectile(proj),
                 impact_scale=impact_scale_for_projectile(proj),
+                critical=getattr(proj, "critical", False),
             )
             score_gain += result.points
+
+            # Cryo no boss: ele acumula as cargas e cristaliza como qualquer
+            # alvo — o que ele nunca recebe é a lentidão (ver `_apply_cryo`).
+            # Fragmento de gelo não recarrega a escada, senão a bomba se
+            # realimentaria sozinha enquanto o boss estivesse no alcance.
+            if not getattr(proj, "ice_shard", False):
+                proj_owner = getattr(proj, "owner_ship", None)
+                if proj_owner is not None and getattr(
+                    proj_owner, "has_cryo_shot", False
+                ):
+                    self._apply_cryo(boss, proj_owner)
 
         return score_gain
 
@@ -465,7 +486,7 @@ class Collisions:
         mine_explosions: list[MineExplosion],
         ships: Sequence[Ship],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
+    ) -> tuple[int, int, list[ScoreEvent], set[int]]:
         """
         Processa explosões de minas.
 
@@ -483,7 +504,7 @@ class Collisions:
 
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
         ship_hits: set[int] = set()
 
         # 1) Criar explosões para minas cujo timer de explosão acabou
@@ -522,7 +543,7 @@ class Collisions:
                     pts = self._get_points_value(mine)
                     score_gain += pts
                     destroyed_count += 1
-                    score_events.append((cx, cy, pts))
+                    score_events.append(ScoreEvent(cx, cy, pts))
 
         # 2) Processar explosões ativas: dano usa raio máximo (visual cresce gradualmente)
         for explosion in mine_explosions[:]:
@@ -566,7 +587,7 @@ class Collisions:
                     if result.killed:
                         destroyed_count += 1
                         if result.points > 0:
-                            score_events.append((enemy_cx, enemy_cy, result.points))
+                            score_events.append(ScoreEvent(enemy_cx, enemy_cy, result.points))
 
         return score_gain, destroyed_count, score_events, ship_hits
 
@@ -576,10 +597,10 @@ class Collisions:
         enemies: Sequence[Any],
         ships: Sequence[Ship],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for zone in zones:
             if zone.dead:
@@ -606,7 +627,7 @@ class Collisions:
                     if result.killed:
                         destroyed_count += 1
                         if result.points > 0:
-                            score_events.append((cx, cy, result.points))
+                            score_events.append(ScoreEvent(cx, cy, result.points))
 
         return score_gain, destroyed_count, score_events
 
@@ -616,10 +637,10 @@ class Collisions:
         enemies: Sequence[Any],
         ships: Sequence[Ship],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
+    ) -> tuple[int, int, list[ScoreEvent], set[int]]:
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
         ship_hits: set[int] = set()
 
         for zone in zones:
@@ -652,7 +673,7 @@ class Collisions:
                     if result.killed:
                         destroyed_count += 1
                         if result.points > 0:
-                            score_events.append((cx, cy, result.points))
+                            score_events.append(ScoreEvent(cx, cy, result.points))
 
         return score_gain, destroyed_count, score_events, ship_hits
 
@@ -699,14 +720,14 @@ class Collisions:
         explosive_effects: list[ExplosiveEffect],
         enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Verifica colisão contínua entre efeitos explosivos ativos e inimigos."""
         if not explosive_effects:
             return 0, 0, []
 
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for effect in explosive_effects:
             if not effect.damage_active:
@@ -763,11 +784,11 @@ class Collisions:
         air_strike_bombs: list[AirStrikeBomb],
         enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Verifica colisão entre explosões de bombas e inimigos."""
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for bomb in air_strike_bombs:
             if not bomb.exploding or not bomb.damage_active:
@@ -798,11 +819,11 @@ class Collisions:
         cannon_mines: list[CannonMine],
         enemies: Sequence[Enemy],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Verifica colisão entre minas de torres e inimigos."""
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for mine in cannon_mines[:]:
             # Processar qualquer mina que tenha dano ativo
@@ -894,7 +915,7 @@ class Collisions:
         projectiles: list[Projectile],
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Projéteis do jogador (Bullet e MiniShipBullet) vs. inimigos normais.
 
         Chain Shot é avaliado por bala via `owner_ship`: em coop, cada nave
@@ -905,7 +926,7 @@ class Collisions:
         """
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         if not projectiles:
             return 0, 0, []
@@ -924,15 +945,30 @@ class Collisions:
                 continue
 
             owner = getattr(b, "owner_ship", None)
-            bullet_chain_active = owner is not None and getattr(
-                owner, "has_chain_shot", False
+            # Fragmento da bomba de gelo: é um projétil do jogador para efeito de
+            # dano e crédito de kill, mas NÃO propaga os upgrades de tiro do dono.
+            # Sem esta trava, o caco herdaria o Cryo (congelando quem ele acerta →
+            # nova bomba → novos cacos, em cascata sem fim), a cadeia e a implosão,
+            # e um estouro dispararia oito vezes o efeito de uma salva inteira.
+            is_shard = getattr(b, "ice_shard", False)
+            bullet_chain_active = (
+                not is_shard
+                and owner is not None
+                and getattr(owner, "has_chain_shot", False)
             )
-            bullet_implosion_active = owner is not None and getattr(
-                owner, "has_implosion_shot", False
+            bullet_implosion_active = (
+                not is_shard
+                and owner is not None
+                and getattr(owner, "has_implosion_shot", False)
             )
-            bullet_cryo_active = owner is not None and getattr(
-                owner, "has_cryo_shot", False
+            bullet_cryo_active = (
+                not is_shard
+                and owner is not None
+                and getattr(owner, "has_cryo_shot", False)
             )
+            # O alvo que estilhaçou não é atingido pelos próprios cacos: o dano
+            # dele já veio do estouro, e os cacos nascem colados ao corpo dele.
+            shard_source_id = getattr(b, "shard_source_id", 0)
             # Uma vez por bala, não por inimigo atingido: o estilo não muda
             # entre os alvos da mesma bala (piercing acerta vários).
             impact = impact_for_projectile(b)
@@ -950,6 +986,8 @@ class Collisions:
             for enemy in potential_enemies:
                 if enemy.dead:
                     continue
+                if shard_source_id and id(enemy) == shard_source_id:
+                    continue
                 if self._projectile_collides_with_enemy(b.rect, enemy):
                     result = self._apply_hit(
                         enemy,
@@ -965,7 +1003,20 @@ class Collisions:
                         destroyed_count += 1
                         self._credit_kill(b)
                         if result.points > 0:
-                            score_events.append((b.x, b.y, result.points))
+                            # `critical` pinta o número de vermelho na cena. É a
+                            # bala QUE MATOU que decide — cadeia e AoE derivadas
+                            # dela seguem amarelas, porque o multiplicador do
+                            # crítico se aplicou só a este acerto. Vermelho quer
+                            # dizer "este abate foi o crítico", e não "houve um
+                            # crítico por perto".
+                            score_events.append(
+                                ScoreEvent(
+                                    b.x,
+                                    b.y,
+                                    result.points,
+                                    getattr(b, "critical", False),
+                                )
+                            )
 
                     # Cryo: acumula POR INIMIGO ATINGIDO, sem a trava de "uma vez
                     # por bala" que a implosão e a cadeia usam. As travas delas
@@ -974,7 +1025,7 @@ class Collisions:
                     # é uma marca no alvo, então uma bala perfurante que atravessa
                     # três inimigos deve gelar os três — é o prêmio de alinhá-los.
                     if bullet_cryo_active:
-                        self._apply_cryo(enemy)
+                        self._apply_cryo(enemy, owner)
 
                     if bullet_implosion_active and not implosion_triggered:
                         implosion_triggered = True
@@ -1153,7 +1204,7 @@ class Collisions:
         pulses: Sequence[Any],
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Lentidão + dano contínuo das zonas do upgrade Implosão.
 
         Roda por frame sobre quem está dentro NAQUELE momento — não sobre uma
@@ -1166,7 +1217,7 @@ class Collisions:
         """
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for pulse in pulses:
             if pulse.dead:
@@ -1207,23 +1258,34 @@ class Collisions:
                 if result.killed:
                     destroyed_count += 1
                     if result.points > 0:
-                        score_events.append((ecx, ecy, result.points))
+                        score_events.append(ScoreEvent(ecx, ecy, result.points))
 
         return score_gain, destroyed_count, score_events
 
     @staticmethod
-    def _apply_cryo(enemy: Any) -> None:
-        """Sobe um degrau da escada de gelo no inimigo e renova a duração.
+    def _apply_cryo(enemy: Any, owner: Any = None) -> None:
+        """Sobe um degrau da escada de gelo no alvo e renova a duração.
 
-        O nível mora no INIMIGO (`cryo_stacks`), não na nave nem na bala: é o que
+        O nível mora no ALVO (`cryo_stacks`), não na nave nem na bala: é o que
         faz P1 e P2 alimentarem a mesma escada em coop, e o que faz o nível cair
         junto com o alvo em vez de sobreviver a ele.
 
         A duração é REPOSTA a cada acerto (não somada): é isso que torna o
         upgrade condicional — o nível cheio dura enquanto o jogador insistir no
-        mesmo alvo, e cai inteiro quando ele solta.
+        mesmo alvo, e cai inteiro quando ele solta. Cheia, ela é também o pavio
+        da bomba de gelo, então reacertar o alvo ADIA o estouro: o jogador
+        escolhe entre segurar o controle e colher o dano.
+
+        `owner` fica gravado no alvo para que o leque de fragmentos saia com a
+        cor do jogador certo e credite o kill a ele (combo do Reverberador).
+        Quem marcou por último leva o crédito — em coop é o que responde à
+        pergunta "de quem foi esse estouro?" da forma que o jogador espera.
+
+        O guard é o `accepts_cryo`, não o `can_be_controlled`: **boss e miniboss
+        acumulam as cargas** e cristalizam. O que eles não recebem é a lentidão,
+        recusada em `EntityManager._cryo_multiplier`.
         """
-        if not can_be_controlled(enemy):
+        if not accepts_cryo(enemy):
             return
         stacks = min(CRYO_MAX_STACKS, int(getattr(enemy, "cryo_stacks", 0)) + 1)
         enemy.cryo_stacks = stacks
@@ -1232,6 +1294,67 @@ class Collisions:
         enemy.cryo_slow_timer = (
             CRYO_FREEZE_DURATION if stacks >= CRYO_MAX_STACKS else CRYO_SLOW_DURATION
         )
+        if owner is not None:
+            enemy.cryo_owner = owner
+
+    def cryo_bombs_vs_enemies(
+        self,
+        entity_manager: "EntityManager",
+    ) -> tuple[int, int, list[ScoreEvent]]:
+        """Estoura as bombas de gelo cujo pavio queimou neste frame.
+
+        O ciclo do Cryo Shot fecha aqui: cargas → cristalizar → **estouro** →
+        fragmentos. O alvo leva `CRYO_BOMB_DAMAGE` de uma vez e o leque de cacos
+        segue para a vizinhança (spawnado pelo `EntityManager`, que é quem tem os
+        pools).
+
+        Roda no passe de colisão, e não no update onde o pavio zera, porque dano
+        passa pelo roteador único (§8): é o `apply_hit` que resolve escudo,
+        explosão de morte, som, pontuação e o evento de kill.
+
+        A fila que este passe consome só contém alvos VIVOS (quem morre
+        cristalizado estoura na hora, dentro do `apply_hit`) e nunca sobrevive ao
+        frame em que foi montada — ver `EntityManager.cryo_detonations`.
+        """
+        pending = entity_manager.take_cryo_detonations()
+        if not pending:
+            return 0, 0, []
+
+        score_gain = 0
+        destroyed_count = 0
+        score_events: list[ScoreEvent] = []
+
+        for target, cx, cy, radius, owner in pending:
+            if not getattr(target, "dead", False):
+                damage = CRYO_BOMB_DAMAGE
+                if getattr(target, "is_boss", False):
+                    # Mesmo nerf global dos demais upgrades contra chefe. O boss
+                    # nunca é freado, mas paga o estouro como qualquer um.
+                    damage = max(
+                        1,
+                        int(damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER),
+                    )
+                result = self._apply_hit(
+                    target,
+                    damage,
+                    cx,
+                    cy,
+                    entity_manager,
+                    entity_manager.floating_scores,
+                )
+                score_gain += result.points
+                if result.killed:
+                    destroyed_count += 1
+                    if result.points > 0:
+                        score_events.append(ScoreEvent(cx, cy, result.points))
+                    if owner is not None and hasattr(owner, "register_kill"):
+                        owner.register_kill()
+
+            entity_manager.detonate_cryo_bomb(
+                cx, cy, radius, owner, source_id=id(target)
+            )
+
+        return score_gain, destroyed_count, score_events
 
     def _trigger_implosion(
         self,
@@ -1251,7 +1374,7 @@ class Collisions:
         bullet: Bullet,
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Materializa o efeito AoE de uma bala explosiva ao primeiro impacto."""
         cx = bullet.x + bullet.w / 2
         cy = bullet.y + bullet.h / 2
@@ -1263,7 +1386,7 @@ class Collisions:
 
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for nearby in enemy_grid.query(
             cx - radius, cy - radius, radius * 2, radius * 2
@@ -1280,7 +1403,7 @@ class Collisions:
                 destroyed_count += 1
                 self._credit_kill(bullet)
                 if r.points > 0:
-                    score_events.append((ncx, ncy, r.points))
+                    score_events.append(ScoreEvent(ncx, ncy, r.points))
 
         return score_gain, destroyed_count, score_events
 
@@ -1289,13 +1412,13 @@ class Collisions:
         homing_bullets: list[HomingBullet],
         enemy_grid: SpatialGrid[Any],
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Colisão de tiros teleguiados consumíveis com inimigos.
         Consome vida do projétil baseada no HP do inimigo.
         """
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         if not homing_bullets:
             return 0, 0, []
@@ -1339,7 +1462,7 @@ class Collisions:
                         destroyed_count += 1
                         self._credit_kill(b)
                         if result.points > 0:
-                            score_events.append((b.x, b.y, result.points))
+                            score_events.append(ScoreEvent(b.x, b.y, result.points))
 
                     # Se a bala morreu por falta de vida, para de processar inimigos para ela
                     if b.life <= 0:
@@ -1357,11 +1480,11 @@ class Collisions:
         entity_manager: "EntityManager",
         extra_padding: int = 0,
         owner_ship: Any | None = None,
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Aplica dano de um feixe (linha p1→p2) aos inimigos na grid."""
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         pad = CollisionConstants.SPATIAL_QUERY_PADDING + extra_padding
         min_x = min(p1[0], p2[0]) - pad
@@ -1383,7 +1506,7 @@ class Collisions:
                         if owner_ship is not None and hasattr(owner_ship, "register_kill"):
                             owner_ship.register_kill()
                         if result.points > 0:
-                            score_events.append((hx, hy, result.points))
+                            score_events.append(ScoreEvent(hx, hy, result.points))
                     break
 
         return score_gain, destroyed_count, score_events
@@ -1394,14 +1517,14 @@ class Collisions:
         enemy_grid: SpatialGrid[Any],
         dt: float,
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Dano contínuo dos escudos orbitais a inimigos em contato."""
         if not orbital_shields or dt <= 0.0:
             return 0, 0, []
 
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for shield in orbital_shields:
             if getattr(shield, "dead", False):
@@ -1427,7 +1550,7 @@ class Collisions:
                     if owner is not None and hasattr(owner, "register_kill"):
                         owner.register_kill()
                     if result.points > 0:
-                        score_events.append((hx, hy, result.points))
+                        score_events.append(ScoreEvent(hx, hy, result.points))
 
         return score_gain, destroyed_count, score_events
 
@@ -1437,14 +1560,14 @@ class Collisions:
         enemy_grid: SpatialGrid[Any],
         dt: float,
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Dano contínuo do feixe de plasma a inimigos na linha."""
         if not plasma_beams or dt <= 0.0:
             return 0, 0, []
 
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for beam in plasma_beams:
             if getattr(beam, "dead", False):
@@ -1469,14 +1592,14 @@ class Collisions:
         enemy_grid: SpatialGrid[Any],
         dt: float,
         entity_manager: "EntityManager",
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Dano contínuo do CoopLink (linha entre dois jogadores) a inimigos."""
         if not coop_links or dt <= 0.0:
             return 0, 0, []
 
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for link in coop_links:
             if getattr(link, "dead", False):
@@ -1566,7 +1689,7 @@ class Collisions:
         entity_manager: "EntityManager",
         owner_ship: Any | None = None,
         explosive: bool = False,
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Executa os saltos do Chain Shot iterativamente.
 
         Cada salto busca o inimigo vivo mais próximo dentro de CHAIN_SHOT_RADIUS
@@ -1582,7 +1705,7 @@ class Collisions:
         """
         score_gain = 0
         destroyed_count = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         radius = config_instance.CHAIN_SHOT_RADIUS
         damage_factor = config_instance.CHAIN_SHOT_DAMAGE_FACTOR
@@ -1639,7 +1762,7 @@ class Collisions:
                 if owner_ship is not None and hasattr(owner_ship, "register_kill"):
                     owner_ship.register_kill()
                 if result.points > 0:
-                    score_events.append((best_cx, best_cy, result.points))
+                    score_events.append(ScoreEvent(best_cx, best_cy, result.points))
 
             # Combo Chain + Explosive: cada salto detona uma mini-explosão. Raio e
             # dano reduzidos (~60%/50% do tiro explosivo) para o combo ser um
@@ -2261,11 +2384,11 @@ class Collisions:
         _floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         enemy_grid: "SpatialGrid[Any] | None" = None,
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Colisão dos lasers do jogador com inimigos (atravessa múltiplos alvos)."""
         score_gain: int = 0
         destroyed_count: int = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for laser in player_lasers:
             if laser.w <= 0:  # Laser ainda não expandiu ou já retraiu
@@ -2322,7 +2445,7 @@ class Collisions:
                         destroyed_count += 1
                         self._credit_kill(laser)
                         if result.points > 0:
-                            score_events.append((cx, cy, result.points))
+                            score_events.append(ScoreEvent(cx, cy, result.points))
         return score_gain, destroyed_count, score_events
 
     def player_lasers_vs_boss(
@@ -2430,11 +2553,11 @@ class Collisions:
         _floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         enemy_grid: "SpatialGrid[Any] | None" = None,
-    ) -> tuple[int, int, list[tuple[float, float, int]]]:
+    ) -> tuple[int, int, list[ScoreEvent]]:
         """Colisão dos lasers especiais do Caçador (BossLaser) com inimigos."""
         score_gain: int = 0
         destroyed_count: int = 0
-        score_events: list[tuple[float, float, int]] = []
+        score_events: list[ScoreEvent] = []
 
         for laser in lasers:
             if laser.w <= 0:
@@ -2490,7 +2613,7 @@ class Collisions:
                         destroyed_count += 1
                         self._credit_kill(laser)
                         if result.points > 0:
-                            score_events.append((cx, cy, result.points))
+                            score_events.append(ScoreEvent(cx, cy, result.points))
         return score_gain, destroyed_count, score_events
 
     def cacador_lasers_vs_boss(

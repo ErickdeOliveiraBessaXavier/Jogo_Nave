@@ -48,6 +48,7 @@ class BulletPool:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        ice_shard: bool = False,
     ) -> Bullet:
         """
         Obtém uma bala do pool, reutilizando uma inativa ou criando nova.
@@ -70,6 +71,7 @@ class BulletPool:
                 boss_damage_mult=boss_damage_mult,
                 critical=critical,
                 cryo=cryo,
+                ice_shard=ice_shard,
             )
             self.active.append(bullet)
             return bullet
@@ -91,6 +93,7 @@ class BulletPool:
             boss_damage_mult=boss_damage_mult,
             critical=critical,
             cryo=cryo,
+            ice_shard=ice_shard,
         )
         self.pool.append(bullet)
         self.active.append(bullet)

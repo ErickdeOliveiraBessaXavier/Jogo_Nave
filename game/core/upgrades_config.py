@@ -183,9 +183,13 @@ IMPLOSION_SLOW_LINGER: float = 3.0
 # é o que dá o pico perceptível: 2,5× mata em uma bala o que exigia três.
 CRITICAL_CORE_CHANCE: float = 0.25
 CRITICAL_CORE_MULTIPLIER: float = 2.5
-# O impacto do crítico é maior — é o ÚNICO feedback que o upgrade tem hoje (não
-# há som nem número flutuante no vocabulário do jogo). Passa pelo mesmo
-# `impact_scale` do Giant Shot, então os dois se compõem por multiplicação.
+# O impacto do crítico é maior. Passa pelo mesmo `impact_scale` do Giant Shot,
+# então os dois se compõem por multiplicação.
+#
+# É um dos DOIS feedbacks do upgrade, divididos por escopo: o impacto vale no
+# hit não-letal, e no abate quem avisa é o número de score vermelho
+# (`floating_score.CRITICAL_COLOR`) — no abate o impacto dá lugar à explosão de
+# morte do inimigo, então sem a cor o crítico que MATA seria o único invisível.
 CRITICAL_CORE_IMPACT_SCALE: float = 1.6
 
 # Parâmetros do Cryo Shot
@@ -203,6 +207,31 @@ CRITICAL_CORE_IMPACT_SCALE: float = 1.6
 # ou "descongelou" é legível; "está no nível 2 descendo para 1" não.
 CRYO_SLOW_STEPS: tuple[float, ...] = (0.75, 0.50, 0.25)
 CRYO_MAX_STACKS: int = len(CRYO_SLOW_STEPS)
+
+# ── O tiro enquanto o Cryo está ativo ──────────────────────────────────────
+#
+# O Cryo não muda só a cor do projétil: enquanto dura, a nave atira um TRIO de
+# cristais, maiores e mais fortes que o tiro comum. Os três parâmetros abaixo
+# são a face ofensiva do upgrade — a face de controle (escada, congelamento) e a
+# de payoff (bomba de gelo) estão logo acima e abaixo.
+#
+# Leque APERTADO (±9°, contra os ±17° do Spread Shot): o Cryo é um upgrade de
+# alvo único — a escada só sobe insistindo no MESMO inimigo. Um leque largo
+# espalharia as cargas por três alvos diferentes e trabalharia contra a própria
+# mecânica; apertado, os três cristais tendem a cair no mesmo corpo e é isso que
+# torna o congelamento rápido de alcançar.
+CRYO_SHOT_ANGLES: tuple[float, ...] = (-9.0, 0.0, 9.0)
+# Área do projétil (visual + hitbox), pelo mesmo `size_multiplier` do Giant
+# Shot. Cristal de gelo é um caco grosso, não uma agulha — e a área maior é o
+# que faz o trio conectar inteiro num alvo médio em vez de só o tiro do meio.
+# Consequência herdada do canal: tiro com `size_multiplier != 1.0` também ganha
+# o `GIANT_SHOT_SPEED_MULTIPLIER`, então o cristal viaja ~15% mais rápido. É
+# aceito de propósito — projétil grande e lento lê como pesado, e este é gelo.
+CRYO_SHOT_SIZE_MULTIPLIER: float = 1.6
+# Dano por cristal, sobre o dano já ajustado da nave. Multiplica ANTES do
+# crítico, como o teleguiado — assim o crítico continua valendo os mesmos 2,5×
+# sobre o que aquela bala causaria.
+CRYO_SHOT_DAMAGE_MULTIPLIER: float = 1.35
 # Renovado a cada acerto. 2.5s é o bastante para a troca de alvo custar o nível,
 # sem punir a mira imperfeita entre dois tiros da cadência mais lenta do elenco
 # (Aríete, ~3.7 tiros/s).
@@ -211,6 +240,10 @@ CRYO_SLOW_DURATION: float = 2.5
 # dura mais que os degraus de baixo. É a recompensa por ter mantido a pressão —
 # subir custa 3 acertos, e o topo compra o dobro de tempo do que os degraus
 # intermediários davam. Continua sendo reposto a cada acerto novo.
+#
+# O congelamento é TAMBÉM o pavio da bomba de gelo: os cristais armazenam
+# energia por esta duração e estilhaçam no fim (ou na hora, se o alvo morrer
+# antes). Ver `CRYO_BOMB_*` logo abaixo.
 CRYO_FREEZE_DURATION: float = 5.0
 # Quantos cristais se formam em volta do inimigo congelado. Poucos e grandes,
 # não muitos e pequenos: o pedido é "parcialmente encapsulado", e cristal
@@ -222,14 +255,57 @@ CRYO_CRYSTAL_COUNT: int = 6
 # inimigo tem que continuar reconhecível.
 CRYO_CRYSTAL_INNER: float = 0.78
 CRYO_CRYSTAL_OUTER: float = 1.5
+# Tetos em PIXELS para alvos grandes (bosses). As frações acima são do raio, e
+# num boss de 120px de raio um cristal de 0.5*raio viraria uma lâmina de 60px
+# cobrindo meia tela. Acima destes limites o gelo passa a crescer em NÚMERO
+# (mais cristais ao longo do perímetro) em vez de em tamanho — o que lê como
+# "casca de gelo se formando", e não como uma estrela gigante.
+CRYO_CRYSTAL_MAX_LENGTH: float = 30.0  # o quanto a ponta passa da borda
+CRYO_CRYSTAL_MAX_WIDTH: float = 11.0  # meia-largura do cristal
+CRYO_CRYSTAL_ARC: float = 34.0  # px de perímetro por cristal em alvo grande
+CRYO_CRYSTAL_COUNT_MAX: int = 16
 # Paleta azul-gelo dessaturada: preenchimento, aresta e faceta de brilho.
 CRYO_CRYSTAL_FILL: tuple[int, int, int] = (120, 185, 220)
 CRYO_CRYSTAL_EDGE: tuple[int, int, int] = (205, 240, 255)
 CRYO_CRYSTAL_SHINE: tuple[int, int, int] = (255, 255, 255)
-# Tempo final em que os cristais se dissolvem. Sem isto o gelo SOME num frame,
-# e some justamente quando o jogador está olhando para o inimigo que voltou a
-# acelerar — o momento em que a transição mais precisa ser legível.
-CRYO_CRYSTAL_FADE: float = 0.7
+# Janela final em que os cristais CARREGAM: clareiam rumo ao branco, crescem e
+# cintilam mais rápido. É o aviso de que a bomba vai estourar — antes daqui o
+# gelo era só um debuff silencioso que sumia sozinho, e o jogador não tinha como
+# antecipar o estilhaço. Não é fade: o gelo não se dissolve mais, ele detona.
+CRYO_CRYSTAL_CHARGE: float = 1.1
+
+# ── Bomba de gelo (o payoff do Cryo Shot) ──────────────────────────────────
+#
+# Congelar deixou de ser só controle: os cristais são um pavio. Ao fim do
+# congelamento (ou na morte do alvo, o que vier primeiro) eles estilhaçam,
+# ferindo o alvo e cuspindo fragmentos que atingem a vizinhança.
+#
+# É o que dá ao upgrade um CICLO fechado — cargas → cristalizar → estouro —
+# em vez de um debuff que expira sem evento nenhum. O dano continua condicional:
+# só sai de três acertos mantidos no MESMO alvo.
+#
+# 40 = quatro balas comuns (`BULLET_BASE_DAMAGE` = 10) entregues de uma vez, no
+# alvo que já custou três balas para congelar. Alto o bastante para o estouro
+# ser o que mata um inimigo médio, baixo o bastante para não trivializar tanques.
+# Contra boss ainda passa pelo `BOSS_UPGRADE_DAMAGE_MULTIPLIER` global.
+CRYO_BOMB_DAMAGE: int = 40
+# Explosão visual do estouro (raio em px do design base).
+CRYO_BOMB_EXPLOSION_SIZE: int = 34
+# Fragmentos cuspidos em leque completo. 8 fecha o círculo com espaçamento
+# legível; mais que isso vira uma bola branca e o jogador perde os projéteis
+# individuais de vista, que é justamente o que comunica "estilhaçou".
+CRYO_BOMB_SHARDS: int = 8
+# Dano por fragmento. Abaixo de uma bala comum de propósito: o prêmio do estouro
+# é ATINGIR VÁRIOS, não repetir o dano do alvo principal em cada vizinho.
+CRYO_SHARD_DAMAGE: int = 8
+# Rápidos: o estilhaço tem que ler como explosão, não como salva de tiros. O
+# tiro comum anda a `Config.BULLET_SPEED`; o fragmento passa disso.
+CRYO_SHARD_SPEED: float = 620.0
+# Alcance CURTO por tempo de vida, não por distância: o estouro limpa a
+# vizinhança do alvo, não a tela. 0.4s × 620px/s ≈ 250px de raio útil.
+CRYO_SHARD_LIFETIME: float = 0.4
+# Lado do fragmento em px (quadrado — o sprite de cristal do tiro de gelo).
+CRYO_SHARD_SIZE: int = 8
 
 # Parâmetros do Shockwave
 #

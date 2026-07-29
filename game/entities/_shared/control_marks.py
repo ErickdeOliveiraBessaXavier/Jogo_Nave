@@ -29,6 +29,7 @@ CONTROL_MARKS: tuple[str, ...] = (
     "implosion_damage_cd",
     "cryo_slow_timer",
     "cryo_stacks",
+    "cryo_owner",
     "_ice_slow_timer",
     "vortex_slow_timer",
     "emp_linger_timer",
@@ -80,6 +81,30 @@ def can_be_controlled(enemy: Any) -> bool:
     if getattr(enemy, "dead", False):
         return False
     if getattr(enemy, "is_boss", False):
+        return False
+    if getattr(enemy, "position_locked", False):
+        return False
+    return accepts_control(enemy)
+
+
+def accepts_cryo(enemy: Any) -> bool:
+    """A entidade pode acumular a ESCADA do Cryo Shot?
+
+    Igual ao `can_be_controlled` **menos o opt-out de boss**, e é essa a única
+    diferença que existe entre os dois — por isso são funções separadas e não um
+    parâmetro: quem lê o call site vê qual regra está em jogo.
+
+    Boss e miniboss **cristalizam mas não congelam**: acumulam as cargas, ganham
+    os cristais e detonam a bomba de gelo no fim, mas nunca são freados. Quem
+    garante a segunda metade é `EntityManager._cryo_multiplier`, que devolve 1.0
+    para `is_boss` — a lentidão é o que dessincroniza padrão roteirizado e peça
+    coreografada, não a marca em si. Assim o upgrade continua entregando dano
+    contra chefe sem tocar na IA nem no ritmo da luta.
+
+    `position_locked` continua de fora: estrutura ancorada tem ciclo próprio
+    (RISE→LINGER→SHATTER) e não sobrevive à janela do pavio de forma previsível.
+    """
+    if getattr(enemy, "dead", False):
         return False
     if getattr(enemy, "position_locked", False):
         return False

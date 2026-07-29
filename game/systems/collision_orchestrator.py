@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Sequence, cast
 
 from ..entities.projectiles.spike_boss_laser import SpikeBossLaser
+from .collision_protocols import ScoreEvent
 
 if TYPE_CHECKING:
     from ..core.spatial_grid import SpatialGrid
@@ -34,8 +35,8 @@ class CollisionResult:
 
     score_gain: int = 0
     enemies_destroyed: int = 0
-    # (x, y, score) já com o multiplicador aplicado — prontos para emitir.
-    floating_scores: list[tuple[float, float, int]] = field(default_factory=list)
+    # Já com o multiplicador aplicado e agrupados — prontos para emitir.
+    floating_scores: list[ScoreEvent] = field(default_factory=list)
 
 
 class CollisionOrchestrator:
@@ -96,8 +97,10 @@ class CollisionOrchestrator:
         batched_events = self._batch_floating_scores(
             score_events, proximity_threshold=self._get_batch_threshold()
         )
-        for x, y, pts in batched_events:
-            result.floating_scores.append((x, y, self._apply_score_multiplier(pts)))
+        for event in batched_events:
+            result.floating_scores.append(
+                event._replace(points=self._apply_score_multiplier(event.points))
+            )
 
         result.score_gain += self._apply_score_multiplier(gain)
         result.enemies_destroyed = destroyed
@@ -159,13 +162,18 @@ class CollisionOrchestrator:
 
     def _batch_floating_scores(
         self,
-        score_events: list[tuple[float, float, int]],
+        score_events: list[ScoreEvent],
         proximity_threshold: float = 60.0,
-    ) -> list[tuple[float, float, int]]:
+    ) -> list[ScoreEvent]:
         """Agrupa score events próximos num único evento somado.
 
         Para poucos eventos (≤8), usa O(n²) simples.
         Para muitos eventos, usa grid spatial para melhor performance.
+
+        Um grupo é crítico se QUALQUER abate dele foi crítico. O número somado é
+        um só, então ou ele é vermelho ou o crítico desaparece — e some
+        justamente na hora em que há mais coisa morrendo na tela, que é quando o
+        jogador mais precisa ver o upgrade rendendo.
         """
         if not score_events:
             return []
@@ -178,42 +186,44 @@ class CollisionOrchestrator:
 
         # Grid binning para muitos eventos (picos de dano)
         cell_size = proximity_threshold
-        buckets: dict[tuple[int, int], list[tuple[float, float, int]]] = {}
+        buckets: dict[tuple[int, int], list[ScoreEvent]] = {}
 
-        for x, y, pts in score_events:
-            key = (int(x // cell_size), int(y // cell_size))
+        for event in score_events:
+            key = (int(event.x // cell_size), int(event.y // cell_size))
             if key not in buckets:
                 buckets[key] = []
-            buckets[key].append((x, y, pts))
+            buckets[key].append(event)
 
         # Agregar pontos dentro de cada célula
-        batched: list[tuple[float, float, int]] = []
+        batched: list[ScoreEvent] = []
         for event_list in buckets.values():
             if not event_list:
                 continue
-            avg_x = sum(e[0] for e in event_list) / len(event_list)
-            avg_y = sum(e[1] for e in event_list) / len(event_list)
-            total_pts = sum(e[2] for e in event_list)
-            batched.append((avg_x, avg_y, total_pts))
+            avg_x = sum(e.x for e in event_list) / len(event_list)
+            avg_y = sum(e.y for e in event_list) / len(event_list)
+            total_pts = sum(e.points for e in event_list)
+            critical = any(e.critical for e in event_list)
+            batched.append(ScoreEvent(avg_x, avg_y, total_pts, critical))
 
         return batched
 
     def _batch_floating_scores_quadratic(
         self,
-        score_events: list[tuple[float, float, int]],
+        score_events: list[ScoreEvent],
         proximity_threshold: float,
-    ) -> list[tuple[float, float, int]]:
+    ) -> list[ScoreEvent]:
         """Batching O(n²) para poucos eventos (manutenção de compatibilidade)."""
-        batched: list[tuple[float, float, int]] = []
+        batched: list[ScoreEvent] = []
         used = [False] * len(score_events)
 
-        for i, (x1, y1, pts1) in enumerate(score_events):
+        for i, (x1, y1, pts1, crit1) in enumerate(score_events):
             if used[i]:
                 continue
             batch_x, batch_y, batch_pts, batch_count = x1, y1, pts1, 1
+            batch_crit = crit1
             used[i] = True
 
-            for j, (x2, y2, pts2) in enumerate(score_events):
+            for j, (x2, y2, pts2, crit2) in enumerate(score_events):
                 if used[j] or i == j:
                     continue
                 dist = math.hypot(x2 - x1, y2 - y1)
@@ -222,9 +232,10 @@ class CollisionOrchestrator:
                     batch_y = (batch_y * batch_count + y2) / (batch_count + 1)
                     batch_pts += pts2
                     batch_count += 1
+                    batch_crit = batch_crit or crit2
                     used[j] = True
 
-            batched.append((batch_x, batch_y, batch_pts))
+            batched.append(ScoreEvent(batch_x, batch_y, batch_pts, batch_crit))
 
         return batched
 
@@ -234,7 +245,7 @@ class CollisionOrchestrator:
 
     def _check_projectile_vs_enemies(
         self, enemy_grid: "SpatialGrid[Any]"
-    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
+    ) -> tuple[int, int, list[ScoreEvent], set[int]]:
         """Projéteis da nave vs. inimigos normais. Retorna (score, kills, events, ship_hits).
 
         `ship_hits` é um set de `id(ship)` para naves atingidas por mine/fire zones.
@@ -261,6 +272,17 @@ class CollisionOrchestrator:
             enemy_grid,
             self.entity_manager,
         )
+
+        # Bombas de gelo cujo pavio queimou no update deste frame (Cryo Shot).
+        # Depois do passe de projéteis, e não antes: assim um alvo que ia morrer
+        # para as balas deste frame morre pelo caminho normal, e o estouro cai
+        # sobre a situação já resolvida em vez de sobre uma foto do frame passado.
+        bomb_gain, bomb_destroyed, bomb_events = self.collisions.cryo_bombs_vs_enemies(
+            self.entity_manager
+        )
+        gain += bomb_gain
+        destroyed += bomb_destroyed
+        score_events.extend(bomb_events)
 
         laser_gain, laser_destroyed, laser_events = (
             self.collisions.player_lasers_vs_enemies(
@@ -419,8 +441,8 @@ class CollisionOrchestrator:
         return gain, destroyed, score_events, ship_hits
 
     def _check_formation_collisions(
-        self, gain: int, destroyed: int, score_events: list[tuple[float, float, int]]
-    ) -> tuple[int, int, list[tuple[float, float, int]], set[int]]:
+        self, gain: int, destroyed: int, score_events: list[ScoreEvent]
+    ) -> tuple[int, int, list[ScoreEvent], set[int]]:
         """Colisões de área vs. formações e inimigos avulsos.
 
         Retorna ship_hits como set de `id(ship)` para naves atingidas por

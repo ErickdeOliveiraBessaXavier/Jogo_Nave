@@ -8,6 +8,9 @@ from ...core.config import config as Config
 from ...core.player_tint import player_shot_color
 from ...core.visual_quality import visual_quality as vq
 from ...core.upgrades_config import (
+    CRYO_SHARD_LIFETIME,
+    CRYO_SHARD_SIZE,
+    CRYO_SHARD_SPEED,
     GIANT_SHOT_SPEED_MULTIPLIER,
     GIANT_SHOT_SQUARENESS,
     giant_visual_scale,
@@ -472,6 +475,7 @@ class Bullet:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        ice_shard: bool = False,
     ):
         self.x, self.y = x, y
         self.damage = damage
@@ -480,6 +484,20 @@ class Bullet:
         # de colisão, lendo `owner_ship.has_cryo_shot` — a marca é do dono, não
         # do projétil, porque em coop cada nave responde pelo próprio upgrade.
         self.cryo = cryo
+        # Fragmento da bomba de gelo (estilhaço do congelado que detonou). É uma
+        # bala de verdade — reusa pool, colisão, crédito de kill — mas com regras
+        # próprias: tamanho/velocidade fixos (não herda a nave), vida curta, sem
+        # perfuração, e NÃO propaga upgrades do dono (ver `collisions`).
+        self.ice_shard = ice_shard
+        # Tempo de vida restante do fragmento (só ele usa). O alcance do estouro
+        # é limitado por TEMPO e não por distância percorrida: dois fragmentos
+        # que saem juntos somem juntos, e o leque morre como um evento só.
+        self.shard_life = CRYO_SHARD_LIFETIME if ice_shard else 0.0
+        # Alvo que originou o fragmento: ele não pode ser atingido pelos próprios
+        # estilhaços (o dano dele já veio do estouro). Sem isso a bomba cobraria
+        # duas vezes do mesmo inimigo — e num boss, cujo raio de colisão é largo,
+        # o leque inteiro voltaria para dentro do corpo.
+        self.shard_source_id = 0
         # Crítico (Critical Core): o `damage` acima JÁ vem multiplicado. A flag
         # não é lida para calcular dano nenhum — só para o impacto sair maior
         # (`impact_scale_for_projectile`), que é o feedback do upgrade.
@@ -555,6 +573,7 @@ class Bullet:
         boss_damage_mult: float = 1.0,
         critical: bool = False,
         cryo: bool = False,
+        ice_shard: bool = False,
     ):
         """Reconfigura a bala para reutilização no pool.
 
@@ -566,6 +585,9 @@ class Bullet:
         self.damage = damage
         self.critical = critical
         self.cryo = cryo
+        self.ice_shard = ice_shard
+        self.shard_life = CRYO_SHARD_LIFETIME if ice_shard else 0.0
+        self.shard_source_id = 0
         self.dead = False
         self.size_multiplier = size_multiplier
         self.boss_damage_mult = boss_damage_mult
@@ -622,6 +644,14 @@ class Bullet:
                 else:
                     # Top-down: movimento para cima
                     self.y -= Config.BULLET_SPEED * dt
+
+        if self.ice_shard:
+            # Alcance do estouro por TEMPO de vida. Sem isto o fragmento
+            # atravessaria a tela e a bomba viraria uma salva de 8 tiros grátis
+            # em qualquer direção — o oposto de "limpa a vizinhança do alvo".
+            self.shard_life -= dt
+            if self.shard_life <= 0.0:
+                self.dead = True
 
         if self.y + self.h < 0 or self.y > Config.SCREEN_HEIGHT:
             self.dead = True
@@ -707,9 +737,11 @@ class Bullet:
         """Alvos extras que o tiro comum atravessa, vindos do perfil do dono.
 
         Só vale para o tiro básico: teleguiado e explosivo têm as próprias
-        regras de impacto e não devem herdar a perfuração da nave.
+        regras de impacto e não devem herdar a perfuração da nave. O fragmento
+        de gelo também fica de fora — ele não saiu do canhão da nave, e deixá-lo
+        atravessar multiplicaria o dano do estouro pela nave equipada.
         """
-        if self.homing or self.explosive:
+        if self.homing or self.explosive or self.ice_shard:
             return 0
         profile = getattr(self.owner_ship, "profile", None)
         try:
@@ -721,6 +753,18 @@ class Bullet:
         self, direction: tuple[float, float] | None
     ) -> None:
         """Configura dimensões e velocidade do projétil com base na direção e nave."""
+        # Fragmento da bomba de gelo: geometria PRÓPRIA, não a da nave. Ele não
+        # é o tiro de ninguém — é um caco do inimigo que estilhaçou —, então nem
+        # o `bullet_speed_mult` do perfil nem o Giant Shot mexem nele. Sai antes
+        # de tudo: nenhuma das regras abaixo se aplica.
+        if self.ice_shard:
+            self.w = self.h = CRYO_SHARD_SIZE
+            dx, dy = direction if direction is not None else (0.0, -1.0)
+            self.vx = dx * CRYO_SHARD_SPEED
+            self.vy = dy * CRYO_SHARD_SPEED
+            self.homing_speed = _HOMING_BASE_SPEED
+            return
+
         # Dimensões baseadas na nave
         base_w, base_h = 10, 3  # Padrão
 
