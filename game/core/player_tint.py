@@ -14,7 +14,7 @@ partículas de impacto, desenhados em código), mas com um giro MUITO menor — 
 
 import colorsys
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, TypeVar, cast
 
 import pygame
 
@@ -88,16 +88,31 @@ P2_SHOT_HUE_SHIFT: float = 0.08
 # multiplicador frio: esfria o metal sem apagar o sombreado.
 _P2_SHOT_GREY_CAST: Tuple[int, int, int] = (200, 235, 255)
 
+# Cor de tiro: RGB ou RGBA. O TypeVar existe para o retorno de
+# `player_shot_color` manter o COMPRIMENTO da entrada — ver o docstring de lá.
+_ColorT = TypeVar("_ColorT", bound=Tuple[int, ...])
 
-def player_shot_color(color: Tuple[int, ...], player_index: int) -> Tuple[int, ...]:
+
+def player_shot_color(color: _ColorT, player_index: int) -> _ColorT:
     """`color` de tiro/impacto na cor do jogador: P1 (0) intacta, P2 (1) desviada.
 
     Devolve o próprio objeto para o P1 — este caminho roda por cor, por bala,
     por frame, e não há motivo para alocar uma tupla idêntica à entrada.
+
+    Genérica no tipo da cor porque ela **preserva o comprimento**: RGB entra,
+    RGB sai; RGBA entra, RGBA sai (o alpha atravessa intacto, ver
+    `_shot_shifted`). Anotada como `Tuple[int, ...]` nos dois lados, a saída
+    perdia o comprimento e todo consumidor que exige um RGB de três posições
+    — os caches de glow do tiro, a paleta de impacto — reclamava ou precisava
+    de um `type: ignore`.
+
+    O `cast` é a única parte que o verificador não consegue provar sozinho: a
+    reconstrução em `_shot_shifted` monta a tupla a partir do `color[3:]` do
+    original, então o comprimento sai igual ao da entrada por construção.
     """
     if player_index != 1:
         return color
-    return _shot_shifted(tuple(color))
+    return cast(_ColorT, _shot_shifted(tuple(color)))
 
 
 def _shot_shifted(color: Tuple[int, ...]) -> Tuple[int, ...]:

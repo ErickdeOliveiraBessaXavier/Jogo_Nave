@@ -113,7 +113,7 @@ def impact_style(ship_id: str, player_index: int = 0) -> Optional[ImpactStyle]:
     if player_index == 1:
         style = ImpactStyle(
             base.pattern,
-            tuple(player_shot_color(c, player_index) for c in base.palette),  # type: ignore[arg-type]
+            tuple(player_shot_color(c, player_index) for c in base.palette),
         )
     else:
         style = base

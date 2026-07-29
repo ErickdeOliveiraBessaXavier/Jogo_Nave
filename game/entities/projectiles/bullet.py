@@ -6,7 +6,8 @@ import pygame
 from ...core import colors
 from ...core.config import config as Config
 from ...core.player_tint import player_shot_color
-from ...core.visual_quality import visual_quality as vq
+from ...core.ship_types import get_ship_profile
+from . import bullet_styles
 from ...core.upgrades_config import (
     CORROSIVE_COLOR,
     CRYO_SHARD_LIFETIME,
@@ -16,6 +17,7 @@ from ...core.upgrades_config import (
     GIANT_SHOT_SQUARENESS,
     giant_visual_scale,
 )
+from ...core.visual_quality import visual_quality as vq
 from ...systems.targeting import target_point
 
 # Velocidade de rastreamento do tiro teleguiado (px/s), antes do Giant Shot.
@@ -35,31 +37,6 @@ _HOMING_IDLE_SPIN_SPEED: float = 900.0
 # chave, o primeiro jogador a desenhar venceria e os dois atirariam igual. São
 # só duas cópias por chave — o custo de memória é irrelevante e o de tempo é
 # zero depois do primeiro frame.
-
-
-# Cache estático de surfaces do Fantasma — evita alocar Surface SRCALPHA por
-# frame por bala. Chave: (w, h, player_index) — a bala só tem 2 orientações.
-_FANTASMA_SURFACE_CACHE: Dict[Tuple[int, int, int], pygame.Surface] = {}
-
-
-def _get_fantasma_surface(w: int, h: int, player_index: int) -> pygame.Surface:
-    key = (w, h, player_index)
-    cached = _FANTASMA_SURFACE_CACHE.get(key)
-    if cached is None:
-        s = pygame.Surface((w, h), pygame.SRCALPHA)
-        pygame.draw.rect(
-            s,
-            player_shot_color((180, 255, 255, 160), player_index),
-            s.get_rect(),
-            border_radius=2,
-        )
-        try:
-            s = s.convert_alpha()
-        except pygame.error:
-            pass
-        _FANTASMA_SURFACE_CACHE[key] = s
-        return s
-    return cached
 
 
 # Cache estático de frames pré-rotacionados do tiro teleguiado.
@@ -157,6 +134,47 @@ _CRYO_TRAIL: Tuple[Tuple[int, int, int], ...] = (
     (95, 160, 205),
     (55, 100, 145),
 )
+# Segundos que um bloco leva para descer UMA casa do rastro. É a velocidade do
+# escoamento, não a do tiro: a bala não muda de rumo nem de ritmo por causa
+# disto. Rápido o bastante para o gelo parecer correr atrás do projétil, lento
+# o bastante para o olho acompanhar cada bloco encolhendo.
+_CRYO_TRAIL_STEP_TIME: float = 0.11
+
+
+def cryo_trail_blocks(
+    anim_time: float, slots: int = len(_CRYO_TRAIL)
+) -> Tuple[Tuple[float, float], ...]:
+    """Blocos do rastro de gelo: `(casa, fração de tamanho)` por bloco visível.
+
+    O rastro **escoa**: cada bloco desce uma casa por `_CRYO_TRAIL_STEP_TIME`,
+    encolhendo conforme se afasta, e some ao chegar na última. Um bloco novo
+    surge na FRENTE do rastro, no tamanho cheio, e a fila inteira desce — é o
+    que dá a leitura de gelo escorrendo, e não de três quadrados carimbados
+    atrás do tiro.
+
+    A casa 0 é desenhada um passo atrás do projétil (ver `_draw_cryo_bullet`) e
+    não sobre ele: com o bloco novo nascendo sob o sprite, o jogador via só dois
+    dos três blocos a maior parte do tempo.
+
+    A `casa` é contínua (0.0 → `slots`), então o movimento é suave e não um
+    salto por bloco. O tamanho é linear na casa: cheio em 0, zero na última.
+
+    Função pura de `anim_time` — sem estado por bloco, nada para vazar pelo pool
+    e nada que o `draw` precise mutar (§3). O `anim_time` vem do update.
+    """
+    phase = (anim_time / _CRYO_TRAIL_STEP_TIME) % 1.0
+    out = []
+    # Começa em -1: é o bloco recém-nascido, que só entra em cena quando a fase
+    # o empurra para dentro (`slot >= 0`). Sem ele haveria um buraco entre a
+    # bala e o primeiro bloco no fim de cada ciclo.
+    for k in range(-1, slots):
+        slot = k + phase
+        if slot < 0.0 or slot >= slots:
+            continue
+        out.append((slot, 1.0 - slot / slots))
+    return tuple(out)
+
+
 # Sprite do cristal por (w, h, jogador). O tiro tem meia dúzia de tamanhos no
 # jogo inteiro, então o cache satura nos primeiros disparos.
 _CRYO_BULLET_CACHE: Dict[Tuple[int, int, int], pygame.Surface] = {}
@@ -182,10 +200,20 @@ def _get_cryo_bullet_surface(w: int, h: int, player_index: int) -> pygame.Surfac
 
     if w >= h:  # cristal deitado (side-scroll / leque horizontal)
         body = [(0, cy), (w * 0.3, 0), (w, cy * 0.75), (w, cy * 1.25), (w * 0.3, h)]
-        facet = [(w * 0.25, cy), (w * 0.5, cy * 0.45), (w * 0.8, cy), (w * 0.5, cy * 1.55)]
+        facet = [
+            (w * 0.25, cy),
+            (w * 0.5, cy * 0.45),
+            (w * 0.8, cy),
+            (w * 0.5, cy * 1.55),
+        ]
     else:  # cristal em pé (top-down, o caso comum)
         body = [(cx, 0), (w, h * 0.3), (cx * 1.25, h), (cx * 0.75, h), (0, h * 0.3)]
-        facet = [(cx, h * 0.18), (w * 0.8, h * 0.42), (cx, h * 0.72), (w * 0.2, h * 0.42)]
+        facet = [
+            (cx, h * 0.18),
+            (w * 0.8, h * 0.42),
+            (cx, h * 0.72),
+            (w * 0.2, h * 0.42),
+        ]
 
     pygame.draw.polygon(surf, fill, body)
     if w >= 4 and h >= 4:
@@ -222,6 +250,67 @@ _CORROSIVE_TRAIL: Tuple[Tuple[int, int, int], ...] = (
     (66, 96, 44),
 )
 _CORROSIVE_BULLET_CACHE: Dict[Tuple[int, int, int], pygame.Surface] = {}
+
+# ── Serpenteio do rastro de ácido ───────────────────────────────────────────
+# Quantos pingos formam a cauda. Mais que os 3 do gelo: a onda precisa de
+# amostras para LER como onda — com três pontos ela vira um zigue-zague.
+_CORROSIVE_TRAIL_SEGMENTS: int = 6
+# Período da ondulação (s) e defasagem entre pingos vizinhos (rad). A defasagem
+# é o que faz a onda VIAJAR pela cauda em vez de todos os pingos balançarem
+# juntos — é ela, e não a amplitude, que dá a leitura de serpente.
+_CORROSIVE_WAVE_PERIOD: float = 0.42
+_CORROSIVE_WAVE_LAG: float = 1.15
+# Espaçamento entre pingos, em frações do passo do rastro. Menor que 1 de
+# propósito: com os pingos separados por um passo cheio a cauda vira uma fila de
+# pontos soltos, e onda em pontos soltos não lê como onda. Apertados, eles quase
+# se tocam e a cauda vira uma FITA — que é o que ondula de forma legível.
+_CORROSIVE_SEGMENT_SPACING: float = 0.62
+# Amplitude do desvio lateral, em frações do passo entre pingos.
+_CORROSIVE_WAVE_AMP: float = 0.85
+# Borbulhar: cada pingo pulsa de tamanho num ritmo PRÓPRIO, mais rápido que a
+# ondulação e defasado por índice. São dois movimentos independentes de
+# propósito — juntos leem como líquido instável, sincronizados leem como
+# animação em loop.
+_CORROSIVE_BUBBLE_PERIOD: float = 0.19
+_CORROSIVE_BUBBLE_LAG: float = 2.1
+_CORROSIVE_BUBBLE_DEPTH: float = 0.3
+
+
+def corrosive_trail_segments(
+    anim_time: float, segments: int = _CORROSIVE_TRAIL_SEGMENTS
+) -> Tuple[Tuple[float, float, float], ...]:
+    """Pingos do rastro de ácido: `(casa, desvio lateral, fração de tamanho)`.
+
+    Duas oscilações independentes sobre o eixo do tiro:
+
+    * **serpenteio** — desvio lateral senoidal com defasagem crescente por
+      pingo, o que faz a onda percorrer a cauda de trás para frente. A amplitude
+      cresce com a distância (perto do projétil o líquido ainda está preso a
+      ele; longe, chicoteia solto) — é o mesmo perfil de um rabo de serpente;
+    * **borbulhar** — o tamanho de cada pingo pulsa num ritmo próprio, mais
+      rápido e defasado, para o ácido parecer fervendo enquanto avança.
+
+    Tudo puramente visual: quem chama só desenha nas coordenadas devolvidas, e
+    o `x`/`y`/`vx`/`vy` da bala não entram na conta nem saem alterados.
+
+    Função pura de `anim_time` (que o update alimenta), sem estado por pingo —
+    nada para vazar pelo pool e nada que o `draw` precise mutar (§3).
+    """
+    wave = math.tau * anim_time / _CORROSIVE_WAVE_PERIOD
+    bubble = math.tau * anim_time / _CORROSIVE_BUBBLE_PERIOD
+    out = []
+    for i in range(segments):
+        t = i / (segments - 1) if segments > 1 else 0.0
+        sway = math.sin(wave - i * _CORROSIVE_WAVE_LAG)
+        # Amplitude crescente: 35% colada ao projétil, 100% na ponta da cauda.
+        amp = _CORROSIVE_WAVE_AMP * (0.35 + 0.65 * t)
+        pulse = 1.0 + _CORROSIVE_BUBBLE_DEPTH * math.sin(
+            bubble - i * _CORROSIVE_BUBBLE_LAG
+        )
+        # Afina para trás: a cauda se dissolve em vez de terminar em bloco.
+        slot = (i + 1) * _CORROSIVE_SEGMENT_SPACING
+        out.append((slot, sway * amp, (1.0 - 0.72 * t) * pulse))
+    return tuple(out)
 
 
 def _get_corrosive_bullet_surface(w: int, h: int, player_index: int) -> pygame.Surface:
@@ -286,52 +375,6 @@ def _get_corrosive_bullet_surface(w: int, h: int, player_index: int) -> pygame.S
         pass
     _CORROSIVE_BULLET_CACHE[key] = surf
     return surf
-
-
-# Giro do tiro do Berserk ("Estrela Espiral") no próprio eixo, em graus/s. As
-# rajadas já giram EM VOLTA da nave (o padrão espiral, em shooting_system); isto
-# gira cada projétil em torno do próprio centro. Mais rápido que o teleguiado
-# (360°/s) porque a bala do Berserk vive pouco: num giro por segundo, ela
-# morreria antes de completar meia volta.
-_BERSERK_SPIN_SPEED: float = 540.0
-
-# Frames pré-rotacionados do tiro do Berserk, por tamanho. Rotacionar a cada
-# frame de cada bala seria alocação e transform por projétil por frame — e o
-# Berserk cospe 4 balas por disparo. Chave: (w, h, player_index) — o tamanho
-# muda com o tamanho-base e com o Giant Shot, daí o dict em vez da lista fixa
-# do teleguiado.
-_BERSERK_NUM_FRAMES: int = 24
-_BERSERK_FRAMES: Dict[Tuple[int, int, int], List[pygame.Surface]] = {}
-
-
-def _get_berserk_frames(w: int, h: int, player_index: int) -> List[pygame.Surface]:
-    """Frames do Berserk girado em 360°, memoizados por tamanho e jogador."""
-    key = (w, h, player_index)
-    frames = _BERSERK_FRAMES.get(key)
-    if frames is not None:
-        return frames
-
-    base = pygame.Surface((w, h), pygame.SRCALPHA)
-    pygame.draw.ellipse(
-        base, player_shot_color((150, 0, 255), player_index), (0, 0, w, h)
-    )
-    inner = pygame.Rect(0, 0, w, h).inflate(-4, -4)
-    if inner.width > 0 and inner.height > 0:
-        pygame.draw.ellipse(
-            base, player_shot_color((255, 100, 255), player_index), inner
-        )
-
-    step = 360.0 / _BERSERK_NUM_FRAMES
-    frames = []
-    for i in range(_BERSERK_NUM_FRAMES):
-        frame = pygame.transform.rotate(base, -i * step)
-        try:
-            frame = frame.convert_alpha()
-        except pygame.error:
-            pass
-        frames.append(frame)
-    _BERSERK_FRAMES[key] = frames
-    return frames
 
 
 # Cache estático do corpo do tiro explosivo (outer + body sem o core pulsante).
@@ -401,7 +444,9 @@ _COMMON_GLOW_PEAK: float = 0.45
 # Expoente da queda radial. Acima de 2 o brilho se concentra num núcleo apertado
 # em vez de se espalhar — é o que mantém o tiro "aceso" sem borrar a vizinhança.
 _COMMON_GLOW_FALLOFF: float = 3.0
-_COMMON_GLOW_CACHE: Dict[Tuple[int, int, Tuple[int, int, int], int], pygame.Surface] = {}
+_COMMON_GLOW_CACHE: Dict[
+    Tuple[int, int, Tuple[int, int, int], int], pygame.Surface
+] = {}
 
 
 def _get_common_shot_glow(
@@ -488,48 +533,6 @@ def _get_power_glow(
 # Rampa de cor do tiro do Reverberador: violeta apagado (sem combo) -> magenta
 # pleno (metade do cap) -> rosa quase branco (cap). O tiro esquenta junto com o
 # bônus de dano, então dá para ler a força do combo sem olhar o HUD.
-_REVERB_COLD = (140, 30, 180)
-_REVERB_MID = (255, 0, 255)
-_REVERB_HOT = (255, 190, 255)
-_REVERB_RING_COLD = (180, 70, 210)
-_REVERB_RING_HOT = (255, 225, 255)
-
-
-def _lerp_color(
-    a: Tuple[int, int, int], b: Tuple[int, int, int], t: float
-) -> Tuple[int, int, int]:
-    return (
-        int(a[0] + (b[0] - a[0]) * t),
-        int(a[1] + (b[1] - a[1]) * t),
-        int(a[2] + (b[2] - a[2]) * t),
-    )
-
-
-def _reverberador_colors(k: float) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]:
-    """Cores (corpo, anel) do tiro do Reverberador para o combo `k` (0..1)."""
-    if k < 0.5:
-        body = _lerp_color(_REVERB_COLD, _REVERB_MID, k / 0.5)
-    else:
-        body = _lerp_color(_REVERB_MID, _REVERB_HOT, (k - 0.5) / 0.5)
-    return body, _lerp_color(_REVERB_RING_COLD, _REVERB_RING_HOT, k)
-
-
-# Cor-base do halo do tiro COMUM de cada nave. Espelha o corpo desenhado em
-# `_draw_ship_specific_bullet` — mudou a cor do tiro lá, mude aqui também, senão
-# o halo deixa de refletir o próprio tiro. Naves ausentes caem no default
-# (roxo perfurante / amarelo).
-_SHIP_GLOW_COLORS: Dict[str, Tuple[int, int, int]] = {
-    "magneto": (150, 150, 255),  # média do corpo azul + núcleo claro
-    "estilete": (0, 255, 100),
-    "ariete": (255, 110, 20),
-    "cofre": (255, 220, 100),
-    "fantasma": (180, 255, 255),
-    "engenheiro": (0, 150, 255),
-    "cacador": (192, 192, 220),
-    "berserk": (200, 60, 255),  # entre o roxo externo e o rosa interno
-}
-
-
 def _owner_combo_intensity(owner_ship: Optional[Any]) -> float:
     """Progresso do combo (0..1) do dono no instante do disparo.
 
@@ -613,6 +616,11 @@ class Bullet:
         # orgânico e não mudar de rumo de forma abrupta. None = ainda não voou.
         self.homing_heading: Optional[float] = None
         self.rotation_angle = 0.0  # Ângulo de rotação visual (graus)
+        # Relógio das animações de rastro (gelo escorrendo, ácido serpenteando).
+        # Acumulador PRÓPRIO alimentado pelo update, nunca `time.get_ticks()`
+        # (§3): assim o rastro para junto com o jogo na pausa e desacelera com
+        # ele na câmera lenta, em vez de continuar correndo por fora.
+        self.anim_time = 0.0
         self.is_side_scroll = is_side_scroll  # Se está em modo side-scroll
         self.laser_sound_channel: Optional[pygame.mixer.Channel] = None
         self.vx = 0.0
@@ -693,6 +701,9 @@ class Bullet:
         self.assigned_target_id = None
         self.homing_heading = None
         self.rotation_angle = 0.0
+        # Zerado como todo campo de estado: a bala vem de uma vida anterior e o
+        # rastro herdado entraria no meio do ciclo, com um salto visível.
+        self.anim_time = 0.0
         self.laser_sound_channel = None
         self.vx = 0.0
         self.vy = 0.0
@@ -706,6 +717,9 @@ class Bullet:
         self._sync_rect()
 
     def update(self, dt: float, enemies: Optional[List[Any]] = None) -> None:
+        # Relógio do rastro, antes de qualquer ramo: vale para toda bala, e é o
+        # update que o alimenta para o draw poder ficar sem efeito colateral (§3).
+        self.anim_time += dt
         if self.homing:
             # `enemies` pode vir vazio (nenhum hostil): ainda assim entramos aqui
             # para pairar no lugar, em vez de cair no `else` e subir para fora da
@@ -718,13 +732,14 @@ class Bullet:
             )
             self.rotation_angle = (self.rotation_angle + spin * dt) % 360.0
         else:
-            # Berserk: gira no próprio eixo enquanto viaja. Fica fora do `if
+            # Estilos que giram no próprio eixo (Berserk). Fica fora do `if
             # homing` acima porque as duas rotações são independentes — um tiro
-            # do Berserk não é teleguiado.
-            if self.ship_id == "berserk":
-                self.rotation_angle = (
-                    self.rotation_angle + _BERSERK_SPIN_SPEED * dt
-                ) % 360.0
+            # do Berserk não é teleguiado. A velocidade vem do estilo, e não de
+            # um `ship_id ==` aqui: quem gira é quem tem frames pré-rotacionados
+            # para consumir o ângulo, e isso é propriedade do desenho.
+            spin = bullet_styles.style_for(self.ship_id).spin_speed
+            if spin:
+                self.rotation_angle = (self.rotation_angle + spin * dt) % 360.0
             if self.vx != 0.0 or self.vy != 0.0:
                 self.x += self.vx * dt
                 self.y += self.vy * dt
@@ -841,6 +856,22 @@ class Bullet:
         except (TypeError, ValueError):
             return 0
 
+    def _bullet_base_size(self) -> Tuple[int, int]:
+        """`(comprimento, espessura)` do tiro, vindo do perfil da nave.
+
+        Resolve pelo **`ship_id`**, e não pelo `owner_ship.profile` como os
+        vizinhos `_owner_bullet_speed_mult`/`_owner_pierce_count`. A diferença é
+        deliberada: o Berserk dispara com `ship_id="berserk"` mas passa a nave
+        real como dono, e o tiro dele tem forma PRÓPRIA — igual para todo o
+        elenco. Resolver pelo dono faria a Estrela Espiral herdar o formato de
+        cada nave, que é justamente o que ela não quer.
+
+        `get_ship_profile` já cai no perfil padrão para id desconhecido, então
+        "berserk" e qualquer pseudo-nave futura continuam na forma de referência.
+        """
+        size = get_ship_profile(self.ship_id).bullet_size
+        return max(1, int(size[0])), max(1, int(size[1]))
+
     def _configure_shape_and_velocity(
         self, direction: tuple[float, float] | None
     ) -> None:
@@ -857,19 +888,9 @@ class Bullet:
             self.homing_speed = _HOMING_BASE_SPEED
             return
 
-        # Dimensões baseadas na nave
-        base_w, base_h = 10, 3  # Padrão
-
-        if self.ship_id == "estilete":
-            base_w, base_h = 14, 2
-        elif self.ship_id == "ariete":
-            base_w, base_h = 8, 6
-        elif self.ship_id == "magneto":
-            base_w, base_h = 8, 8
-        elif self.ship_id == "cacador":
-            base_w, base_h = 12, 4
-        elif self.ship_id == "engenheiro":
-            base_w, base_h = 6, 6
+        # Dimensões-base vindas do PERFIL da nave, não de uma cascata de
+        # `ship_id` aqui dentro (§5) — ver `_bullet_base_size`.
+        base_w, base_h = self._bullet_base_size()
 
         # Tamanho-base de todas as naves (visual + hitbox). Aplicado ANTES do
         # Giant Shot, que passa a escalar a partir do base novo — o "3x" do
@@ -952,12 +973,18 @@ class Bullet:
             self._draw_ship_specific_bullet(surface)
 
     def _draw_cryo_bullet(self, surface: pygame.Surface) -> None:
-        """Cristal de gelo com rastro congelante.
+        """Cristal de gelo com rastro que ESCOA.
 
         Fica DEPOIS do teleguiado e do explosivo na cadeia de despacho: aqueles
         dois visuais comunicam MECÂNICA (o '+' persegue, a granada explode) e
         escondê-los custaria leitura de jogo. O gelo ainda se anuncia nos combos
         pelo halo, que vira ciano quando o Cryo está ativo.
+
+        O rastro continua sendo três blocos, mas eles não são mais carimbos
+        fixos: cada um desce uma casa por ciclo encolhendo, o último some e um
+        novo sai de baixo do cristal (ver `cryo_trail_blocks`). A bala não muda
+        de velocidade nem de rumo por causa disso — o ciclo vive só no
+        `anim_time`, que o update alimenta.
         """
         rect = self.rect
         if self.size_multiplier > 1.0 and self.ship_id != "berserk":
@@ -969,10 +996,19 @@ class Bullet:
             step = max(2, min(rect.width, rect.height))
             ux, uy = -self.vx / speed, -self.vy / speed
             cx, cy = rect.centerx, rect.centery
-            size = max(1, step // 2)
-            for i, color in enumerate(_CRYO_TRAIL, start=1):
-                px = int(cx + ux * step * i) - size // 2
-                py = int(cy + uy * step * i) - size // 2
+            full = max(1, step // 2)
+            last = len(_CRYO_TRAIL) - 1
+            for slot, scale in cryo_trail_blocks(self.anim_time):
+                size = max(1, int(round(full * scale)))
+                # Cor pela casa, não pelo índice do bloco: assim o tom acompanha
+                # a POSIÇÃO no rastro e o bloco esfria enquanto desce, em vez de
+                # levar a própria cor consigo.
+                color = _CRYO_TRAIL[min(last, int(slot))]
+                # `slot + 1`: a fila começa um passo ATRÁS do cristal. A casa 0
+                # sobre o projétil deixaria o bloco recém-nascido escondido pelo
+                # sprite, e o rastro apareceria com dois blocos em vez de três.
+                px = int(cx + ux * step * (slot + 1.0)) - size // 2
+                py = int(cy + uy * step * (slot + 1.0)) - size // 2
                 pygame.draw.rect(surface, color, (px, py, size, size))
 
         surface.blit(
@@ -990,9 +1026,14 @@ class Bullet:
         sobretudo, no próprio INIMIGO (`corrosion_stain`) — que é onde a mecânica
         dele mora.
 
-        Os pingos ficam MENORES e mais escuros para trás, e alternam de lado do
-        eixo: gota que escorre não deixa um rastro reto, e o desalinhamento é o
-        que separa a leitura "líquido pingando" da leitura "linha pontilhada".
+        A cauda SERPENTEIA: a onda percorre os pingos de trás para frente e a
+        amplitude cresce com a distância, como o rabo de uma serpente. Por cima,
+        cada pingo borbulha de tamanho num ritmo próprio. Os dois movimentos são
+        independentes de propósito — sincronizados, leriam como animação em
+        loop; somados, leem como líquido instável (ver `corrosive_trail_segments`).
+
+        Nada disso toca a trajetória: a bala segue reta, e é só o desenho da
+        cauda que ondula em volta do eixo dela.
         """
         rect = self.rect
         if self.size_multiplier > 1.0 and self.ship_id != "berserk":
@@ -1003,14 +1044,23 @@ class Bullet:
         if speed > 1.0:
             step = max(2, min(rect.width, rect.height))
             ux, uy = -self.vx / speed, -self.vy / speed
-            px_, py_ = -uy, ux  # perpendicular, para o zigue-zague do escorrido
+            px_, py_ = -uy, ux  # perpendicular: o eixo em que a cauda ondula
             cx, cy = rect.centerx, rect.centery
             base_r = max(1, step // 3)
-            for i, color in enumerate(_CORROSIVE_TRAIL, start=1):
-                sway = (1 if i % 2 else -1) * (base_r * 0.6)
-                dx = int(cx + ux * step * i + px_ * sway)
-                dy = int(cy + uy * step * i + py_ * sway)
-                pygame.draw.circle(surface, color, (dx, dy), max(1, base_r - i + 1))
+            last = len(_CORROSIVE_TRAIL) - 1
+            segments = corrosive_trail_segments(self.anim_time)
+            span = float(len(segments))
+            for i, (slot, sway, scale) in enumerate(segments):
+                # Cor pela POSIÇÃO na cauda: o ácido escurece ao se afastar,
+                # independente de quantos pingos a cauda tenha.
+                color = _CORROSIVE_TRAIL[
+                    min(last, int(i / span * len(_CORROSIVE_TRAIL)))
+                ]
+                dx = int(cx + ux * step * slot + px_ * sway * step)
+                dy = int(cy + uy * step * slot + py_ * sway * step)
+                pygame.draw.circle(
+                    surface, color, (dx, dy), max(1, int(base_r * scale))
+                )
 
         surface.blit(
             _get_corrosive_bullet_surface(rect.width, rect.height, self.player_index),
@@ -1116,17 +1166,13 @@ class Bullet:
             surface.blit(_get_power_glow(glow_w, glow_h, color, step), pos)
 
     def _common_shot_glow_color(self) -> Tuple[int, int, int]:
-        """Cor-base do halo de um tiro comum: a mesma cor do corpo desenhado."""
-        if self.ship_id == "reverberador":
-            # A rampa do combo é contínua e cada cor vira uma entrada no cache
-            # de glow — quantizar em 5 passos mantém o cache pequeno sem que a
-            # transição fique perceptívelmente escalonada.
-            k = round(self.combo_intensity * 4) / 4.0
-            return _reverberador_colors(k)[0]
-        color = _SHIP_GLOW_COLORS.get(self.ship_id)
-        if color is not None:
-            return color
-        return colors.PURPLE if self.piercing else colors.YELLOW
+        """Cor-base do halo de um tiro comum: a mesma cor do corpo desenhado.
+
+        Vem do MESMO registro que desenha o corpo, e é essa a razão de o registro
+        existir: antes, corpo e halo eram duas tabelas distantes que um comentário
+        pedia para manter em sincronia à mão.
+        """
+        return bullet_styles.style_for(self.ship_id).glow(self)
 
     def _breathing_rect(self, rect: pygame.Rect) -> pygame.Rect:
         """Rect visual do Giant Shot pulsando ±12% em torno do centro.
@@ -1140,100 +1186,19 @@ class Bullet:
         return rect.inflate(round(rect.width * factor), round(rect.height * factor))
 
     def _draw_ship_specific_bullet(self, surface: pygame.Surface):
-        """Desenha o projétil básico customizado conforme a nave.
+        """Desenha o corpo do tiro básico com o estilo da nave.
 
-        Toda cor passa por `player_shot_color`: o P1 recebe a tupla de volta intacta
-        e o P2 a mesma cor com a matiz girada, casando com o casco ciano dele.
+        Qual estilo é decisão do registro em `bullet_styles` — aqui não há
+        cascata de `ship_id` (§5). O que fica nesta classe é o que é da BALA e
+        não da nave: qual rect desenhar (com ou sem a respiração do Giant Shot).
         """
+        style = bullet_styles.style_for(self.ship_id)
         rect = self.rect
-        # Giant Shot "respira": o corpo pulsa ±6% no tamanho VISUAL (o hitbox
-        # segue em self._rect, intacto). Berserk fica de fora — já gira no eixo e
-        # o tamanho variável estouraria o cache de frames pré-rotacionados.
-        if self.size_multiplier > 1.0 and self.ship_id != "berserk":
+        # Giant Shot "respira": o corpo pulsa no tamanho VISUAL (o hitbox segue
+        # em self._rect, intacto). Quem não respira diz isso no próprio estilo.
+        if self.size_multiplier > 1.0 and style.breathes:
             rect = self._breathing_rect(rect)
-        center = rect.center
-        tint = self.player_index
-
-        if self.ship_id == "magneto":
-            # Magneto: Tiro ovalado roxo/azul
-            pygame.draw.ellipse(surface, player_shot_color((100, 100, 255), tint), rect)
-            pygame.draw.ellipse(
-                surface, player_shot_color((200, 200, 255), tint), rect.inflate(-4, -4)
-            )
-        elif self.ship_id == "estilete":
-            # Estilete: Laser fino verde
-            pygame.draw.rect(surface, player_shot_color((0, 255, 100), tint), rect)
-            # Brilho central
-            pygame.draw.line(
-                surface,
-                player_shot_color((200, 255, 200), tint),
-                rect.topleft,
-                rect.bottomleft,
-                1,
-            )
-        elif self.ship_id == "ariete":
-            # Aríete: Retângulo largo laranja intenso
-            pygame.draw.rect(surface, player_shot_color((255, 80, 0), tint), rect)
-            pygame.draw.rect(
-                surface, player_shot_color((255, 150, 50), tint), rect.inflate(-2, -2)
-            )
-        elif self.ship_id == "cofre":
-            # Cofre: Amarelo claro arredondado
-            pygame.draw.rect(
-                surface, player_shot_color((255, 220, 100), tint), rect, border_radius=3
-            )
-        elif self.ship_id == "fantasma":
-            # Fantasma: Ciano pálido translúcido — surface pré-renderizada (cache estático).
-            surface.blit(
-                _get_fantasma_surface(rect.width, rect.height, tint), rect.topleft
-            )
-        elif self.ship_id == "engenheiro":
-            # Engenheiro: Azul elétrico com núcleo branco
-            pygame.draw.circle(
-                surface, player_shot_color((0, 150, 255), tint), center, rect.width // 2
-            )
-            pygame.draw.circle(surface, (255, 255, 255), center, rect.width // 4)
-        elif self.ship_id == "cacador":
-            # Caçador: Formato em seta/V prata
-            points = []
-            if self.vx > 0:  # Direita
-                points = [rect.topleft, (rect.right, rect.centery), rect.bottomleft]
-            elif self.vx < 0:  # Esquerda
-                points = [rect.topright, (rect.left, rect.centery), rect.bottomright]
-            elif self.vy < 0:  # Cima
-                points = [rect.bottomleft, (rect.centerx, rect.top), rect.bottomright]
-            else:  # Baixo
-                points = [rect.topleft, (rect.centerx, rect.bottom), rect.topright]
-            pygame.draw.polygon(surface, player_shot_color((192, 192, 220), tint), points)
-        elif self.ship_id == "reverberador":
-            # Reverberador: magenta com anéis que ESQUENTA com o combo — quanto
-            # maior o bônus de dano, mais clara a cor e mais um anel entra.
-            k = self.combo_intensity
-            body_color, ring_color = _reverberador_colors(k)
-            pygame.draw.rect(surface, player_shot_color(body_color, tint), rect)
-            # Núcleo branco a partir da metade do combo: o tiro fica incandescente.
-            if k >= 0.5 and rect.width > 2 and rect.height > 2:
-                core = rect.inflate(-max(2, rect.width // 3), -max(2, rect.height // 3))
-                pygame.draw.rect(surface, player_shot_color((255, 255, 255), tint), core)
-            tinted_ring = player_shot_color(ring_color, tint)
-            for i in range(1, 4 if k >= 0.6 else 3):
-                ring_rect = rect.inflate(i * 4, i * 4)
-                pygame.draw.rect(surface, tinted_ring, ring_rect, 1)
-        elif self.ship_id == "berserk":
-            # Berserk: Rosa dos Ventos — roxo brilhante, girando no próprio eixo
-            # (frames pré-rotacionados; 1 blit em vez de um transform por frame).
-            frames = _get_berserk_frames(rect.width, rect.height, tint)
-            idx = int(
-                self.rotation_angle * _BERSERK_NUM_FRAMES / 360.0
-            ) % _BERSERK_NUM_FRAMES
-            frame = frames[idx]
-            # A rotação muda o tamanho da surface — centralizar na bounding box
-            # do tiro, senão ele "orbita" o próprio hitbox ao girar.
-            surface.blit(frame, frame.get_rect(center=center))
-        else:
-            # Padrão / Outros
-            color = colors.PURPLE if self.piercing else colors.YELLOW
-            pygame.draw.rect(surface, player_shot_color(color, tint), rect)
+        style.draw(self, surface, rect)
 
     def _draw_homing_bullet(self, surface: pygame.Surface):
         """Desenha o tiro teleguiado como um '+' pixelizado que gira.

@@ -47,6 +47,21 @@ class ShipProfile:
     # tiro-metralhadora viaja mais devagar (obriga a se aproximar).
     bullet_speed_mult: float = 1.0
 
+    # Dimensões-base do projétil em px, `(comprimento, espessura)` no eixo do
+    # voo — a bala troca os dois conforme a direção predominante. É **visual e
+    # hitbox ao mesmo tempo** (o `rect` é o mesmo), então mexer aqui é
+    # balanceamento, não estética.
+    #
+    # Mora no perfil, e não numa tabela dentro da bala, pelo mesmo motivo do
+    # `bullet_speed_mult` logo acima: nave nova é UMA entrada neste registry, e
+    # não uma entrada mais um `elif` escondido no projétil. Enquanto foi cascata
+    # por `ship_id`, Cofre, Fantasma e Reverberador ficaram de fora sem que nada
+    # avisasse — atiravam com a forma da Padrão por omissão, não por decisão.
+    #
+    # O acréscimo global de `Config.BULLET_BASE_SIZE_BONUS` e o Giant Shot são
+    # aplicados por cima disto, na bala.
+    bullet_size: tuple[int, int] = (10, 3)
+
     # Alvos EXTRA que o tiro comum atravessa antes de morrer (0 = para no 1º).
     # Existe para o tiro de dano alto não desperdiçar o excedente na massa de
     # inimigos fracos — é onde a nave lenta perdia sem compensação.
@@ -85,6 +100,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         display_name="Padrão",
         description="Nave inicial balanceada. Sem multiplicadores; bom para aprender.",
         unlock_cost=0,
+        bullet_size=(10, 3),  # a forma de referência do elenco
         speed_mult=1.0,
         agility_mult=1.2,  # Ponto de equilíbrio (1.2 = resposta firme e rápida)
         thruster_intensity_mult=1.0,
@@ -97,6 +113,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         description="Atrai estrelas/powerups e possui um laser carregado ({charge}) devastador.",
         sprite_filename="ship_magnetico.png",
         unlock_cost=25,
+        bullet_size=(12, 12),  # orbe quadrado, casa com o tema magnético
         pickup_radius_mult=2.5,
         speed_mult=1.0,
         agility_mult=1.3,  # Coleta exige alcançar drops rapidamente
@@ -116,6 +133,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         sprite_filename="ship_estilete.png",
         unlock_cost=40,
+        bullet_size=(14, 2),  # agulha: o tiro mais fino e comprido do elenco
         # A nave ágil: toda a identidade está na cadência, e nenhuma no impacto.
         # Com 5 de dano (2.00/0.50) ela varria a massa E acompanhava o alvo
         # médio — não tinha ponto fraco. Em 4 de dano cada tier de HP custa
@@ -140,6 +158,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         sprite_filename="ship_ariete.png",
         unlock_cost=55,
+        bullet_size=(12, 8),  # aríete: bloco espesso, lê como projétil pesado
         fire_rate_mult=0.75,
         damage_mult=1.80,
         # Projétil pesado e veloz: menos antecipação de mira, o que compensa o
@@ -167,6 +186,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         sprite_filename="ship_cofre.png",
         unlock_cost=70,
+        bullet_size=(10, 3),  # forma da Padrão — herdada quando era cascata
         speed_mult=0.85,
         agility_mult=0.9,  # Pesada pelo carregamento
         thruster_intensity_mult=0.75,
@@ -183,6 +203,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         sprite_filename="ship_fantasma.png",
         unlock_cost=80,
+        bullet_size=(10, 3),  # forma da Padrão — herdada quando era cascata
         # 0.85 e não 0.80: a −1 vida já é um custo pesado e o output ofensivo
         # estava em 0.92 do elenco, sem o dash compensar a diferença.
         damage_mult=0.85,
@@ -203,6 +224,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         sprite_filename="ship_engenheiro.png",
         unlock_cost=90,
+        bullet_size=(12, 12),  # quadrado, combina com as mini-naves
         damage_mult=0.85,
         speed_mult=1.0,
         agility_mult=1.05,  # Mini-nave cobre área; jogador pode ser mais conservador
@@ -221,6 +243,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         sprite_filename="ship_cacador.png",
         unlock_cost=100,
+        bullet_size=(14, 6),  # dardo alongado, coerente com o charge shot
         # Alívio pequeno (era 0.70): o tiro comum rendia 0.70× contra QUALQUER
         # alvo, sem vantagem alguma. Não mais que isso porque o charge já é
         # caro de compensar — são 5 teleguiados de 3× dano (~150 de burst).
@@ -246,6 +269,7 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         ),
         sprite_filename="ship_reveberador.png",
         unlock_cost=100,
+        bullet_size=(10, 3),  # forma da Padrão — herdada quando era cascata
         fire_rate_mult=0.90,
         damage_mult=0.90,
         speed_mult=0.90,
