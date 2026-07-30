@@ -5,14 +5,17 @@
 #        .\reencode_audio.ps1 -Aplicar -Kbps 160
 #
 #  Seguranca: os MP3 estao versionados no git. O script se recusa a rodar
-#  se houver alteracoes nao commitadas em game/assets/audio (assim o
-#  original e sempre recuperavel com:  git checkout -- game/assets/audio ).
+#  se houver alteracoes nao commitadas em game/assets/audio/music (assim o
+#  original e sempre recuperavel com:  git checkout -- game/assets/audio/music ).
 # ============================================================
 
 param(
     [switch]$Aplicar,          # sem isso, roda em modo simulacao (dry-run)
     [int]$Kbps = 128,          # bitrate alvo (CBR). 128 = bom p/ jogo; 160 = mais seguro
-    [string]$Pasta = "game\assets\audio"
+    # So a MUSICA: os SFX (game\assets\audio\sfx) sao curtos e ja leves, e
+    # re-encodar por cima nao paga a perda de qualidade. Aponte para
+    # game\assets\audio se algum dia quiser incluir os dois.
+    [string]$Pasta = "game\assets\audio\music"
 )
 
 $ErrorActionPreference = "Stop"

@@ -10,7 +10,7 @@ import pygame
 
 from .music_manager import MusicManager
 from .sfx_manager import load_sfx
-from .sound_config import CHANNEL_CONFIG, SOUND_PATHS, VOLUME_CONFIG
+from .sound_config import AUDIO_SFX_ROOT, CHANNEL_CONFIG, VOLUME_CONFIG
 
 MusicPaths = Dict[str, Union[str, List[str]]]
 
@@ -214,8 +214,8 @@ class SoundManager:
 
         Mantemos compatibilidade populando `self._sounds` e `self._sound_groups`.
         """
-        base_path = get_resource_path(str(SOUND_PATHS["base"]))
-        sounds, groups = load_sfx(base_path, self.sfx_volume, self.master_volume)
+        sfx_root = get_resource_path(AUDIO_SFX_ROOT)
+        sounds, groups = load_sfx(sfx_root, self.sfx_volume, self.master_volume)
         self._sounds = sounds
         self._sound_groups = groups
 
@@ -582,8 +582,8 @@ class SoundManager:
     @require_audio
     def play_ship_explosion(self):
         """Toca som de explosão da nave do jogador."""
-        if "ship_explosion" in self._sounds:
-            self._sounds["ship_explosion"].play()
+        if "explosion_ship" in self._sounds:
+            self._sounds["explosion_ship"].play()
 
     @require_audio
     def play_upgrade_activate(self):
@@ -595,9 +595,12 @@ class SoundManager:
     def play_upgrade_denied(self):
         """Toca som de negação de aprimoramento (poder em cooldown).
 
-        `button_hover` era um placeholder de MVP: um blip de menu não lê como
-        recusa no meio da luta. `Usar_Depois.wav` já existia nos assets sem
-        nunca ter sido registrado — cai aqui, e o hover fica de reserva.
+        `button_hover` é placeholder de MVP: um blip de menu não lê como recusa
+        no meio da luta. O arquivo que ocupava esta chave (`Usar_Depois.wav`) era
+        na verdade o som de CLIQUE, mal arquivado sob um nome de rascunho — foi
+        promovido a `button_click`, que estava sendo chamado em 19 lugares sem
+        arquivo nenhum. Falta gravar o som de recusa; até então cai no hover.
+        Rastreado em `SFX_OPTIONAL` (`sound_config.py`).
         """
         if "upgrade_denied" in self._sounds:
             self._sounds["upgrade_denied"].play()
@@ -706,12 +709,12 @@ class SoundManager:
 
     @require_audio
     def play_theme(self, key: str | None = None):
-        """Música ambiente data-driven do tema `key` (pasta audio/themes/<key>/)."""
+        """Música ambiente data-driven do tema `key` (pasta audio/music/themes/<key>/)."""
         self.music_manager.play_theme(key)
 
     @require_audio
     def play_boss(self, key: str | None = None):
-        """Música exclusiva data-driven do boss `key` (pasta audio/bosses/<key>/)."""
+        """Música exclusiva data-driven do boss `key` (pasta audio/music/bosses/<key>/)."""
         self.music_manager.play_boss(key)
 
     @require_audio

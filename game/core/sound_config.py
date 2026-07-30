@@ -3,15 +3,15 @@ Configurações do sistema de som.
 """
 
 from enum import Enum
-from typing import Any, Dict, Union
+from typing import Any, Dict, FrozenSet, Union
 
 
 class MusicState(Enum):
     """Estados de alto nível da música. Genérico e data-driven: o *qual* tema/boss
     tocar viaja no `key` do `MusicStateChange`, não em um membro por boss.
 
-    `GAME` = música ambiente do tema atual (pasta `audio/themes/<tema>/`).
-    `BOSS` = música exclusiva do boss ativo (pasta `audio/bosses/<BOSS_TYPE_NAME>/`).
+    `GAME` = música ambiente do tema atual (pasta `audio/music/themes/<tema>/`).
+    `BOSS` = música exclusiva do boss ativo (pasta `audio/music/bosses/<BOSS_TYPE_NAME>/`).
     Antes existia um membro por boss (SPIKE_BOSS, STONE_GOLEM_BOSS, ...); foram
     removidos — a identidade da faixa agora vem da pasta, não do enum.
     """
@@ -99,68 +99,91 @@ CHANNEL_CONFIG: Dict[str, int] = {
     "max_channels": 17,  # 8 dedicados + 9 livres para one-shots simultâneos
 }
 
-# Diretórios-base da descoberta data-driven de música (orientada por pastas).
-# São só os DOIS roots — nenhuma lista de arquivos. Cada subpasta = uma chave
-# (tema = WorldTheme.value; boss = BOSS_TYPE_NAME). Ver `music_library.py`.
-AUDIO_THEMES_ROOT = "game/assets/audio/themes"
-AUDIO_BOSSES_ROOT = "game/assets/audio/bosses"
+# ─────────────────────────────────────────────────────────────────────────────
+# Roots da descoberta de áudio (orientada por pasta, data-driven)
+# ─────────────────────────────────────────────────────────────────────────────
+# Uma árvore só — `game/assets/audio/`, com `music/` e `sfx/` lado a lado.
+# Só ROOTS aqui: nenhum caminho de arquivo. Música indexa por SUBPASTA
+# (tema = WorldTheme.value; boss = BOSS_TYPE_NAME) — ver `music_library.py`.
+AUDIO_ROOT = "game/assets/audio"
+AUDIO_MUSIC_ROOT = "game/assets/audio/music"
+AUDIO_THEMES_ROOT = "game/assets/audio/music/themes"
+AUDIO_BOSSES_ROOT = "game/assets/audio/music/bosses"
 # Menu é contexto único (sem chave) → pasta PLANA, descoberta direta.
-AUDIO_MENU_ROOT = "game/assets/audio/menu"
+AUDIO_MENU_ROOT = "game/assets/audio/music/menu"
 
-# Configurações de paths
-# A MÚSICA é 100% data-driven por pasta (ver AUDIO_*_ROOT e `music_library.py`);
-# não há mais lista de música aqui. Boss sem pasta própria cai na genérica
-# (`bosses/normal/`). Este dict cobre só `base` e SFX.
-SOUND_PATHS: Dict[str, Union[str, Dict[str, Any]]] = {
-    "base": "game/assets/sounds",
-    # Efeitos sonoros
-    "sfx": {
-        "shots": "sfx/shots/tiro_{}.wav",  # {} será substituído por 1,2,3
-        "boss_laser_charging": "sfx/shots/som_laser_carregando.mp3",
-        "boss_laser_fire": "sfx/shots/som_laser.mp3",
-        "spike_boss_laser": "sfx/shots/laser_spike_boss.wav",  # Adicionado
-        "golem_mine_timer": "sfx/explosions/Timer_orb_Stone_Boss.wav",
-        "golem_orb_purple": "sfx/explosions/Rajada_orb_Roxa_Stone_Boss.wav",
-        "golem_eruption": "sfx/explosions/Som_Erupção_Solo.wav",
-        "explosions": {
-            "asteroid": "sfx/explosions/explosão_asteroides_{}.wav",  # {} = 0,1,2,3
-            "alien": "sfx/explosions/explosão_naves_alienigenas.wav",
-            "boss": "sfx/explosions/explisão_boss.wav",
-            "ship": "sfx/explosions/explisão_nave.wav",
-            "boss_damage": "sfx/explosions/som_dano_boss.wav",
-        },
-        "ui": {
-            "warning": "sfx/ui/warning.mp3",
-            "powerup": "sfx/ui/powerUp.wav",
-            "button_click": "sfx/ui/button_click.wav",
-            "button_hover": "sfx/ui/sound_hover.wav",
-            "upgrade_activate": "sfx/ui/Ativação_Aprimoramentos.wav",
-            "upgrade_denied": "sfx/ui/Usar_Depois.wav",  # Tentou usar poder em cooldown
-            "meteor_rain": "sfx/ui/som_chuva_meteoro_{}.wav",  # {} = 1,2,3,4
-            "laser_shot": "sfx/ui/som_laser_raio.mp3",  # Som do laser do upgrade LASER_SHOT
-            "black_hole": "sfx/ui/Buraco_negro_Som.mp3",  # Som do buraco negro
-            "hit_hurt_meteor_boss": "sfx/ui/hit_hurt_meteor_boss.wav",  # Som de rachadura do boss meteoro
-            "shield_activate": "sfx/ui/Som_Escudo_Ativando.wav",  # Pulso do SapperDrone concede escudos
-            "shield_break": "sfx/ui/Som_Escudo_Destruído.wav",  # Escudo de inimigo esgotado
-            # Parada do tempo (power-up TIME_STOP): o mundo desacelerando ao
-            # congelar e acelerando de volta na rampa de recuperação.
-            "time_stop_in": "sfx/ui/Efeito_Desacelerando.wav",
-            "time_stop_out": "sfx/ui/Efeito_Acelerando.wav",
-            "gem_birth": "sfx/ui/Birth_Energy_Sound_Gem.wav",  # Nascimento da gema do IceGolem
-            "gem_death": "sfx/ui/Death_Energy_Sound_Gem.wav",  # Colapso/morte da gema do IceGolem
-            "metropolis_overlord_laser": "sfx/ui/Laser_Boss_Loop_Metropolis_Overlord_Boss.mp3",
-            # Ataques das sentinelas orbitais do Metropolis Overlord (por papel):
-            #   missile → descarga atmosférica: antecipação (carga) + raio caindo (impacto).
-            #   emp     → zona de sobrecarga elétrica (ElectricPulse).
-            #   laser   → grade holográfica energizada (GridSnare).
-            #   neon    → trio de drones energéticos (EnergyDrone).
-            "metropolis_lightning_charge": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_04_antecipação.mp3",
-            "metropolis_lightning_strike": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_04_raio_caindo.mp3",
-            "metropolis_energy_zone": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_01_Área_Circular_de_Energia.mp3",
-            "metropolis_electric_grid": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_02_Grade_Elétrica.mp3",
-            "metropolis_triple_shot": "sfx/ui/Ataques_Boss_Sons/metropolis_overlord_boss/Ataque_Orb_Elétrico_02_Tiro_Triplo.wav",
-        },
-    },
+# SFX: a chave de cada som é o NOME DO ARQUIVO sem extensão, em qualquer
+# subpasta de `sfx/`. `impacts/shield_activate.wav` registra "shield_activate".
+# As subpastas (`ui/`, `weapons/`, `impacts/`, `powerups/`, `ambience/`,
+# `bosses/<BOSS_TYPE_NAME>/`) são organização humana — o loader varre tudo, então
+# mover um arquivo de categoria NÃO muda a chave nem exige tocar em código.
+AUDIO_SFX_ROOT = "game/assets/audio/sfx"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Contrato de SFX — o que o CÓDIGO exige, não onde os arquivos estão
+# ─────────────────────────────────────────────────────────────────────────────
+# Antes existia aqui um dict com 40+ caminhos literais, e o `sfx_manager` repetia
+# as mesmas chaves numa segunda lista (`ui_map`) só para carregá-las. Duas listas
+# à mão, espelhadas: esquecer um lado dava no-op SILENCIOSO — foi assim que
+# `button_click` ficou anos referenciado por 19 chamadas sem arquivo no disco.
+#
+# Agora o caminho é descoberto por varredura e o que fica declarado é só o
+# CONTRATO: as chaves de que o código depende. `tests/test_audio_assets.py`
+# confere contra o disco, então um som faltando falha no CI em vez de sumir.
+
+# Famílias numeradas viram grupos de sorteio aleatório (`_sound_groups`).
+# O `{}` casa qualquer inteiro: `shot_1..N` entram sem tocar em nada aqui.
+SFX_FAMILIES: Dict[str, str] = {
+    "shots": "shot_{}",
+    "explosions": "explosion_asteroid_{}",
+    "meteor_rain": "meteor_rain_{}",
+}
+
+# Tiros têm volume próprio (mais baixo — são disparados sem parar).
+SFX_SHOT_PREFIX = "shot_"
+
+# Chaves sem as quais um som que o jogador espera não sai. Ausência = falha no CI.
+SFX_REQUIRED: FrozenSet[str] = frozenset({
+    # UI
+    "button_click", "button_hover", "warning",
+    # Power-ups / aprimoramentos
+    "powerup", "upgrade_activate",
+    # Armas
+    "laser_shot", "boss_laser_charging", "boss_laser_fire",
+    # Impactos
+    "explosion_alien", "explosion_boss", "explosion_ship", "boss_damage",
+    "shield_activate", "shield_break", "gem_birth", "gem_death",
+    # Ambiente
+    "black_hole", "time_stop_in", "time_stop_out",
+    # Bosses
+    "hit_hurt_meteor_boss", "spike_boss_laser",
+    "golem_mine_timer", "golem_orb_purple", "golem_eruption",
+    "metropolis_overlord_laser",
+    # Sentinelas orbitais do Metropolis Overlord (por papel):
+    #   missile → descarga atmosférica: antecipação (carga) + raio caindo (impacto).
+    #   emp     → zona de sobrecarga elétrica (ElectricPulse).
+    #   laser   → grade holográfica energizada (GridSnare).
+    #   neon    → trio de drones energéticos (EnergyDrone).
+    "metropolis_lightning_charge", "metropolis_lightning_strike",
+    "metropolis_energy_zone", "metropolis_electric_grid", "metropolis_triple_shot",
+})
+
+# Chaves OPCIONAIS: o código já tem fallback audível documentado para cada uma,
+# então a ausência degrada o feedback sem quebrar nada. Ficam aqui para não
+# serem confundidas com esquecimento — e para o teste não cobrar o arquivo.
+SFX_OPTIONAL: Dict[str, str] = {
+    "boss_warning": "aviso específico de boss; cai em `warning` (play_boss_warning)",
+    "boss_frenzy": "frenesi do boss; cai em `boss_damage` (play_boss_frenzy)",
+    "upgrade_denied": (
+        "recusa de poder em cooldown; cai em `button_hover`, que é o placeholder "
+        "de MVP — um blip de menu não lê como recusa no meio da luta. O arquivo "
+        "que ocupava esta chave era `Usar_Depois.wav`, promovido a `button_click` "
+        "(era o som de clique, mal arquivado). Falta gravar o som de recusa."
+    ),
+    "eye_enemy_laser": (
+        "tiro do EyeEnemy; o arquivo existe em `sfx/weapons/` mas `eye_laser.py` "
+        "ainda não toca som nenhum. Conteúdo pronto, feature não ligada."
+    ),
 }
 
 # Configurações de comportamento
@@ -174,12 +197,4 @@ BEHAVIOR_CONFIG: Dict[str, Dict[str, Union[bool, float]]] = {
         "loop": True,
         "fade_duration": 0.5,  # Duração do fade ao trocar música
     },
-}
-
-# Configuração completa
-SOUND_CONFIG: Dict[str, Any] = {
-    "volumes": VOLUME_CONFIG,
-    "channels": CHANNEL_CONFIG,
-    "paths": SOUND_PATHS,
-    "behavior": BEHAVIOR_CONFIG,
 }

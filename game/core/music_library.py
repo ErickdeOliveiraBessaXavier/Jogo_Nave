@@ -44,7 +44,7 @@ class MusicLibrary:
     """Descobre faixas por pasta, com cache por chave.
 
     `themes_root`/`bosses_root` são caminhos RELATIVOS à raiz do projeto
-    (ex.: ``game/assets/audio/themes``); a resolução absoluta/PyInstaller é
+    (ex.: ``game/assets/audio/music/themes``); a resolução absoluta/PyInstaller é
     feita internamente por `get_resource_path`.
     """
 

@@ -64,7 +64,7 @@ _PROCEDURAL_THEME_CYCLE = ("mountains", "city", "volcanic")
 
 
 def resolve_theme_key(world: "WorldConfig") -> str:
-    """Chave de tema concreta de um mundo (== nome da pasta em `audio/themes/`).
+    """Chave de tema concreta de um mundo (== nome da pasta em `audio/music/themes/`).
 
     Expande `procedural` para um tema real ciclando por `world_id`. Fonte única
     usada tanto pela seleção de mundo (visual) quanto pela música ambiente, para

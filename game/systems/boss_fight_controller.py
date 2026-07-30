@@ -377,7 +377,7 @@ class BossFightController:
             setattr(active_boss, "aggressiveness_multiplier", agg)
 
     def _emit_boss_music(self) -> None:
-        # Data-driven: a faixa do boss vem da pasta `audio/bosses/<BOSS_TYPE_NAME>/`.
+        # Data-driven: a faixa do boss vem da pasta `audio/music/bosses/<BOSS_TYPE_NAME>/`.
         # Basta a chave; nenhum mapa por boss no código. Boss sem pasta cai no
         # fallback legado dentro do MusicManager.
         boss = self._em.boss

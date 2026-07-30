@@ -13,6 +13,8 @@ import pygame
 import pytest
 
 from game.core.config import config as Config
+from game.core.sfx_manager import discover_sfx
+from game.core.sound_config import AUDIO_SFX_ROOT
 from game.systems.entity_manager import EntityManager
 from game.systems import time_stop
 from game.systems.time_stop import TimeStopPhase, TimeStopState
@@ -157,7 +159,7 @@ class TestRampaDeSaida:
         assert TimeStopState().exit_ratio == 0.0
 
     def test_segura_durante_o_silencio_inicial_do_som(self):
-        """O `Efeito_Acelerando` tem 0,47s de silêncio antes do gesto.
+        """O `time_stop_out` tem 0,47s de silêncio antes do gesto.
 
         Dissolver já nesse trecho deixaria a moldura quase apagada antes de o
         som começar — exatamente a dessincronia que a rampa existe para evitar.
@@ -199,7 +201,7 @@ class TestRampaDeSaida:
 class TestSincroniaComOsEfeitosSonoros:
     """Os envelopes visuais são cronometrados pelos WAVs — o teste lê os WAVs.
 
-    Trocar `Efeito_Desacelerando`/`Efeito_Acelerando` por gravações de outra
+    Trocar `time_stop_in`/`time_stop_out` por gravações de outra
     duração dessincroniza a moldura em silêncio: nada quebra, o jogo só passa a
     parecer errado. Este teste transforma isso em falha de CI, com a instrução
     de reajustar as constantes.
@@ -208,13 +210,17 @@ class TestSincroniaComOsEfeitosSonoros:
     TOLERANCIA = 0.12  # s
 
     @staticmethod
-    def _gesto(nome: str) -> tuple[float, float, float]:
-        """(silêncio inicial, fim do trecho audível, duração do arquivo)."""
-        caminho = (
-            pathlib.Path(__file__).resolve().parent.parent
-            / "game/assets/sounds/sfx/ui"
-            / f"{nome}.wav"
-        )
+    def _gesto(chave: str) -> tuple[float, float, float]:
+        """(silêncio inicial, fim do trecho audível, duração do arquivo).
+
+        Resolve pela CHAVE do SFX (`discover_sfx`), não por caminho fixo: a
+        subpasta em que o arquivo mora é organização humana e pode mudar sem
+        que a chave mude — um caminho literal aqui quebraria na próxima
+        reorganização, que é exatamente o que aconteceu com
+        `game/assets/sounds/sfx/ui`.
+        """
+        raiz = pathlib.Path(__file__).resolve().parent.parent / AUDIO_SFX_ROOT
+        caminho = discover_sfx(str(raiz))[chave]
         with wave.open(str(caminho)) as w:
             sr, canais, quadros = w.getframerate(), w.getnchannels(), w.getnframes()
             cru = w.readframes(quadros)
@@ -234,7 +240,7 @@ class TestSincroniaComOsEfeitosSonoros:
         return inicio, fim, quadros / sr
 
     def test_a_entrada_dura_o_gesto_do_desacelerando(self):
-        inicio, fim, _ = self._gesto("Efeito_Desacelerando")
+        inicio, fim, _ = self._gesto("time_stop_in")
         assert inicio < 0.05, "esse SFX deveria começar imediatamente"
         assert abs(time_stop._VISUAL_ENTRY_RAMP - fim) < self.TOLERANCIA, (
             f"a moldura abre em {time_stop._VISUAL_ENTRY_RAMP}s mas o som cala em "
@@ -242,7 +248,7 @@ class TestSincroniaComOsEfeitosSonoros:
         )
 
     def test_a_saida_segura_o_silencio_e_dura_o_gesto_do_acelerando(self):
-        inicio, fim, _ = self._gesto("Efeito_Acelerando")
+        inicio, fim, _ = self._gesto("time_stop_out")
         assert abs(time_stop._VISUAL_EXIT_HOLD - inicio) < self.TOLERANCIA, (
             f"a moldura segura {time_stop._VISUAL_EXIT_HOLD}s mas o som só começa "
             f"em {inicio}s — reajuste _VISUAL_EXIT_HOLD"

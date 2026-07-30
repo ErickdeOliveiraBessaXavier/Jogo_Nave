@@ -2,8 +2,8 @@
 
 Isola a reprodução de música, o estado de transição e o controle de fade do
 `SoundManager`. A escolha de QUAL faixa tocar vem da **descoberta de pastas**
-(`MusicLibrary`): `audio/themes/<tema>/` para a música ambiente de cada tema e
-`audio/bosses/<BOSS_TYPE_NAME>/` para a música exclusiva de cada boss. Nenhuma
+(`MusicLibrary`): `audio/music/themes/<tema>/` para a música ambiente de cada tema e
+`audio/music/bosses/<BOSS_TYPE_NAME>/` para a música exclusiva de cada boss. Nenhuma
 lista de arquivos no código; basta soltar o arquivo na pasta certa.
 
 Rotação dentro de um tema/boss: `TrackRotation` (aleatória, sem repetição
@@ -191,7 +191,7 @@ class MusicManager:
         self._play_rotation(rotation_key, tracks, "boss")
 
     def play_menu_music_internal(self) -> None:
-        # Data-driven: pasta plana `audio/menu/`. Faixa única → loop gapless;
+        # Data-driven: pasta plana `audio/music/menu/`. Faixa única → loop gapless;
         # várias → rotação. Pasta vazia → no-op (mantém o que toca).
         self._play_rotation("menu", self.library.menu_tracks(), "menu")
 

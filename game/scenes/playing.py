@@ -797,7 +797,7 @@ class PlayingScene(Scene):
         self.pending_world_transition = None
         self._apply_world_theme()
         # Música ambiente do tema novo (data-driven): a descoberta por pasta
-        # troca a rotação para `audio/themes/<tema>/`. Re-emissão do mesmo tema
+        # troca a rotação para `audio/music/themes/<tema>/`. Re-emissão do mesmo tema
         # é deduplicada no MusicManager (não corta a faixa em andamento).
         self.app.event_bus.emit(
             events.MusicStateChange(
