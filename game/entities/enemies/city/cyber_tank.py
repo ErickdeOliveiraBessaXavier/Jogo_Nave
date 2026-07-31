@@ -116,6 +116,9 @@ class CyberTank(EnemyHitMixin):
 
     HEALTH: int = 1400  # Fortaleza móvel
     POINTS: int = 1500
+    # Alvo pesado: 1400 HP e 125px de largura — come o leque inteiro de qualquer
+    # upgrade multi-projétil. Ver `_shared.heavy_targets`.
+    is_miniboss: bool = True
 
     # ── Movimentação "Primal Aspid": predador inquieto que jockeia ────────────
     # Não atravessa a tela: entra, fica perto da zona de combate e reposiciona

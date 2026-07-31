@@ -9,11 +9,13 @@ from ..core.upgrades_config import EXPLOSIVE_BULLET_DAMAGE
 from ..core.upgrades_config import EXPLOSIVE_BULLET_RADIUS as _EXPLOSIVE_BULLET_RADIUS
 from ..core.upgrades_config import (
     CRYO_BOMB_DAMAGE,
+    CRYO_HEAVY_TARGET_DAMAGE_MULT,
     IMPLOSION_DAMAGE,
     IMPLOSION_DAMAGE_INTERVAL,
     IMPLOSION_SLOW_LINGER,
 )
 from ..entities._shared.control_marks import can_be_controlled
+from ..entities._shared.heavy_targets import is_heavy_target
 from . import shot_marks
 from ..entities.projectiles.air_strike_bomb import AirStrikeBomb
 from ..entities.projectiles.boss_laser import BossLaser
@@ -989,7 +991,7 @@ class Collisions:
                 if self._projectile_collides_with_enemy(b.rect, enemy):
                     result = self._apply_hit(
                         enemy,
-                        getattr(b, "damage", 1),
+                        self._projectile_damage_for(b, enemy),
                         b.x,
                         b.y,
                         entity_manager,
@@ -1261,6 +1263,30 @@ class Collisions:
         return score_gain, destroyed_count, score_events
 
     @staticmethod
+    def _projectile_damage_for(projectile: Any, target: Any) -> int:
+        """Dano deste projétil NESTE alvo, no passe de inimigos comuns.
+
+        Só o Cryo Shot diverge por alvo aqui, e é a metade MINIBOSS da regra
+        dele: o chefe já é cobrado no `_project_into_boss`, via o mesmo
+        `boss_damage_mult` que o Wingman e a Estrela Espiral usam, mas o
+        miniboss é inimigo comum para o roteador de colisão e passaria por este
+        caminho sem redução nenhuma — que era exatamente o buraco.
+
+        A chave é `projectile.cryo`, e ela cobre o ciclo inteiro do upgrade: o
+        trio de cristais e os cacos da bomba nascem os dois com a marca. Uma
+        bala de outra origem (Estrela Espiral) só entra aqui se o Cryo estiver
+        ativo, e nesse caso ela CARREGA o bônus de dano do gelo — reduzi-la é o
+        comportamento certo, não um efeito colateral.
+
+        Piso 1: `int()` sozinho zeraria o dano de uma nave de multiplicador
+        baixo contra um alvo pesado, e um tiro que não tira nada lê como bug.
+        """
+        damage = getattr(projectile, "damage", 1)
+        if getattr(projectile, "cryo", False) and is_heavy_target(target):
+            return max(1, int(damage * CRYO_HEAVY_TARGET_DAMAGE_MULT))
+        return damage
+
+    @staticmethod
     def _apply_cryo(enemy: Any, owner: Any = None) -> None:
         """Fachada fina sobre `shot_marks.apply_cryo` (§9).
 
@@ -1354,9 +1380,16 @@ class Collisions:
         for target, cx, cy, radius, owner in pending:
             if not getattr(target, "dead", False):
                 damage = CRYO_BOMB_DAMAGE
+                if is_heavy_target(target):
+                    # O estouro é dano do Cryo como qualquer outro, então paga o
+                    # nerf anti-alvo-pesado igual ao cristal e ao caco — o
+                    # pedido era que a redução valesse para a EXPLOSÃO também, e
+                    # não só para o dano direto.
+                    damage = max(1, int(damage * CRYO_HEAVY_TARGET_DAMAGE_MULT))
                 if getattr(target, "is_boss", False):
-                    # Mesmo nerf global dos demais upgrades contra chefe. O boss
-                    # nunca é freado, mas paga o estouro como qualquer um.
+                    # E o chefe ainda paga o nerf global de upgrade por cima, o
+                    # mesmo dos demais. Miniboss não passa por aqui: ele é
+                    # inimigo comum para o roteador (ver `_projectile_damage_for`).
                     damage = max(
                         1,
                         int(damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER),

@@ -43,9 +43,12 @@ PT: dict[str, str] = {
     "game_over.press_r": "Pressione R",
     "game_over.stars_earned": "{n} estrelas nesta partida",
     "game_over.open_upgrades": "APRIMORAMENTOS",
-    # Duas razões possíveis para o convite, ver `_init_loadout_hook`.
+    # O botão é permanente; a legenda acima dele é que varia. Duas razões
+    # possíveis para o convite (ver `_refresh_loadout_hook`) e, sem convite, o
+    # atalho de teclado ocupa a mesma linha.
     "game_over.hook_empty": "Você jogou sem nenhum equipado",
     "game_over.hook_slot": "Dá para destravar um novo slot",
+    "game_over.press_u": "Pressione U",
     "game_over.initials_title": "DIGITE SUAS INICIAIS",
     "game_over.rank": "RECORDE: #{n} LUGAR!",
     "game_over.legend_move": "↑ ↓: LETRA    ← →: COLUNA",
@@ -131,6 +134,8 @@ PT: dict[str, str] = {
     "settings.toggle.p1_keyboard": "P1 no teclado / P2 no controle",
     "settings.toggle.mouse": "Controle por Mouse",
     "settings.toggle.auto_fire": "Tiro Automático",
+    # Celular: a nave voa acima do dedo em vez de embaixo dele.
+    "settings.toggle.touch_offset": "Nave acima do dedo (toque)",
     "settings.toggle.gamepad": "Controle Xbox",
     "settings.status.disconnected": " (desconectado)",
     "settings.status.two_pads": " (2 controles — P1 + P2)",

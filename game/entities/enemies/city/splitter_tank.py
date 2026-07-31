@@ -139,6 +139,12 @@ class SplitterTank(EnemyHitMixin):
         self.health_multiplier: float = health_multiplier
         self.health: int = max(1, int(_HEALTH_BY_TIER[tier] * health_multiplier))
         self.max_health: int = self.health
+        # Alvo pesado só no tier 0 — por INSTÂNCIA, e não pela classe, porque os
+        # dois tiers são a mesma classe com corpos muito diferentes: o colosso
+        # (180 HP, chassi inteiro) come o leque de qualquer upgrade
+        # multi-projétil; o filhote (55 HP, cell menor) é inimigo comum e não
+        # deve carregar a redução. Ver `_shared.heavy_targets`.
+        self.is_miniboss: bool = tier == 0
         self.aggressiveness_multiplier: float = aggressiveness_multiplier
 
         # Velocidade: avança no eixo de profundidade (esquerda no side-scroll,

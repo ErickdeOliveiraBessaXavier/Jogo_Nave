@@ -232,7 +232,30 @@ CRYO_SHOT_SIZE_MULTIPLIER: float = 1.6
 # Dano por cristal, sobre o dano já ajustado da nave. Multiplica ANTES do
 # crítico, como o teleguiado — assim o crítico continua valendo os mesmos 2,5×
 # sobre o que aquela bala causaria.
-CRYO_SHOT_DAMAGE_MULTIPLIER: float = 1.35
+#
+# 1.15 e não 1.35: o bônus por cristal é o MENOR dos três multiplicadores que o
+# Cryo empilha, e era o mais fácil de esquecer. O upgrade já triplica a saída
+# pelo trio e engorda a hitbox em 1.6× (o que faz os três conectarem em vez de
+# só o do meio); somar +35% por projétil em cima disso colocava o dano bruto
+# acima do de upgrades que não dão controle nenhum. O cristal continua batendo
+# mais que a bala comum — que é o que ele precisa comunicar —, só não é mais o
+# lugar onde o Cryo ganha a conta.
+CRYO_SHOT_DAMAGE_MULTIPLIER: float = 1.15
+# Redução APLICADA SÓ CONTRA ALVOS PESADOS (boss e miniboss), sobre o dano do
+# cristal, da bomba e dos cacos. Ver `entities._shared.heavy_targets`.
+#
+# O valor é 0.5 porque é o mesmo que o Wingman (`_WINGMAN_BOSS_DAMAGE_MULT`) e a
+# Estrela Espiral (`_BERSERK_BOSS_DAMAGE_MULT`) já usam, pelo MESMO motivo: são
+# os três upgrades que emitem VÁRIOS projéteis por disparo. Contra um inimigo
+# comum só um deles conecta; um corpo largo come o leque inteiro, e o dano por
+# disparo salta sem que nada no upgrade tenha mudado. É um nerf de geometria,
+# não de poder — por isso incide só onde a geometria é o problema.
+#
+# Contra BOSS ele se compõe com o `BOSS_UPGRADE_DAMAGE_MULTIPLIER` global (0.5),
+# como nos outros dois: 0.5 × 0.5 = 25% do dano nominal. O miniboss não passa
+# pelo nerf global (ele é inimigo comum para o roteador de colisão), então leva
+# os 50% — a escada fica inimigo comum 100% → miniboss 50% → boss 25%.
+CRYO_HEAVY_TARGET_DAMAGE_MULT: float = 0.5
 # Renovado a cada acerto. 2.5s é o bastante para a troca de alvo custar o nível,
 # sem punir a mira imperfeita entre dois tiros da cadência mais lenta do elenco
 # (Aríete, ~3.7 tiros/s).

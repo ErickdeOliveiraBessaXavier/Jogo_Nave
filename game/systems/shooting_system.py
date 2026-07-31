@@ -20,6 +20,7 @@ from ..core.sound import sound_manager
 from ..core.upgrades_config import (
     CRITICAL_CORE_CHANCE,
     CRITICAL_CORE_MULTIPLIER,
+    CRYO_HEAVY_TARGET_DAMAGE_MULT,
     CRYO_SHOT_DAMAGE_MULTIPLIER,
     HOMING_DAMAGE_MULTIPLIER,
 )
@@ -297,6 +298,15 @@ class ShootingSystem:
                 ship_id=ship.profile.id,
                 owner_ship=ship,
                 size_multiplier=size_mult,
+                # Nerf anti-chefe do Cryo, no mesmo canal do Wingman e da
+                # Estrela Espiral. O trio só existe quando `spec.cryo`, então o
+                # tiro comum segue em 1.0 — a redução acompanha o leque, não a
+                # nave. A metade miniboss desta regra é cobrada no passe de
+                # colisão (`Collisions.bullets_vs_enemies`), porque miniboss é
+                # inimigo comum para o roteador e não passa por aqui.
+                boss_damage_mult=(
+                    CRYO_HEAVY_TARGET_DAMAGE_MULT if spec.cryo else 1.0
+                ),
                 critical=spec.critical,
                 cryo=spec.cryo,
                 corrosive=spec.corrosive,

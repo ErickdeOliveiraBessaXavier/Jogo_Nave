@@ -256,6 +256,7 @@ class PlayingScene(Scene):
             ship_y,
             mouse_control=self.app.preferences.mouse_control,
             auto_fire=self.app.preferences.auto_fire,
+            touch_offset=self.app.preferences.touch_offset,
             profile=self.player_profile.get_selected_ship_profile(),
         )
 

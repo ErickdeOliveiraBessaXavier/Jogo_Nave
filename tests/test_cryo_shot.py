@@ -19,7 +19,12 @@ O que estes testes guardam:
    mesma classe de bug que derrubou o puxão da Implosão;
 5. **compõe por multiplicação** com EMP/gelo/vórtice/implosão, em vez de
    disputar o mesmo campo;
-6. **não vaza pelo pool** nem estoura em entidade com `__slots__`.
+6. **não vaza pelo pool** nem estoura em entidade com `__slots__`;
+7. **alvo pesado leva menos** — comum 100% → miniboss 50% → boss 25%. O Cryo
+   dispara TRÊS cristais com hitbox 1.6×, e um corpo largo come os três: contra
+   o elenco comum isso é a identidade do upgrade, contra um chefe era DPS de
+   alvo único que nenhum upgrade de controle deveria ter. A redução vale para o
+   ciclo inteiro (cristal, bomba e cacos) e para nenhum outro projétil.
 """
 
 import pygame
@@ -39,6 +44,7 @@ from game.core.upgrades_config import (
     CRYO_BOMB_SHARDS,
     CRYO_CRYSTAL_CHARGE,
     CRYO_FREEZE_DURATION,
+    CRYO_HEAVY_TARGET_DAMAGE_MULT,
     CRYO_MAX_STACKS,
     CRYO_SHARD_DAMAGE,
     CRYO_SHARD_LIFETIME,
@@ -820,7 +826,7 @@ class TestBombaDeGelo:
     def test_a_fila_nao_atravessa_o_frame(self):
         """Item pendente que sobra (frame sem passe de colisão) aponta para uma
         entidade que já pode ter voltado ao pool — o dano cairia em quem herdou
-        o slot. O `update` limpa a fila antes de qualquer coisa."""
+        o slot. O `update` esvazia a fila antes de qualquer coisa."""
         em, alvo, _ = self._cena()
         gelar(alvo, vezes=CRYO_MAX_STACKS)
         em.queue_cryo_detonation(alvo)
@@ -829,6 +835,41 @@ class TestBombaDeGelo:
         em.enemies.clear()  # o alvo já foi: é exatamente o cenário do risco
         em.update(1 / 60, 600.0, 500.0)
         assert em.cryo_detonations == []
+
+    def test_a_fila_e_DRENADA_e_nao_descartada(self):
+        """A bomba pendente estoura mesmo sem passe de colisão.
+
+        Descartar quebrava a regra do upgrade: o `queue_cryo_detonation` consome
+        as marcas ao enfileirar, então um `clear()` apagava o gelo de um inimigo
+        VIVO e engolia a bomba — o jogador via os cristais sumirem e nada
+        acontecer. Acontecia em fim de fase e transição, os frames em que o passe
+        de colisão não roda.
+
+        O leque sai porque a fila carrega `cx/cy/raio/dono` por valor; o que se
+        perde é só o dano direto, que exigiria o roteador (§8) e o alvo vivo.
+        """
+        em, alvo, _ = self._cena()
+        gelar(alvo, vezes=CRYO_MAX_STACKS)
+        em.queue_cryo_detonation(alvo)
+
+        em.enemies.clear()
+        em.update(1 / 60, 600.0, 500.0)
+
+        cacos = [b for b in em.bullets if getattr(b, "ice_shard", False)]
+        assert len(cacos) == CRYO_BOMB_SHARDS
+
+    def test_o_leque_drenado_nao_volta_para_o_alvo(self):
+        """O `source_id` sobrevive à drenagem — sem ele o leque nasceria colado
+        ao corpo do alvo (reciclado ou não) e voltaria todo para dentro."""
+        em, alvo, _ = self._cena()
+        gelar(alvo, vezes=CRYO_MAX_STACKS)
+        em.queue_cryo_detonation(alvo)
+
+        em.enemies.clear()  # o alvo já saiu da lista, como no cenário real
+        em.update(1 / 60, 600.0, 500.0)
+
+        cacos = [b for b in em.bullets if getattr(b, "ice_shard", False)]
+        assert cacos and all(c.shard_source_id == id(alvo) for c in cacos)
 
     def test_o_fragmento_nao_congela_quem_ele_acerta(self):
         """A trava que impede a cascata: caco que gela cria bomba, que cria
@@ -918,6 +959,284 @@ class TestBombaDeGelo:
         assert nova.ice_shard is False
         assert nova.shard_life == 0.0
         assert nova.shard_source_id == 0
+
+
+class AlvoLargo:
+    """Corpo LARGO o bastante para o trio inteiro conectar.
+
+    É a premissa do problema que o nerf anti-alvo-pesado resolve: contra um
+    meteoro só um cristal acerta, contra um chassi de 200px acertam os três, e o
+    dano por disparo triplica sem que nada no upgrade tenha mudado.
+    """
+
+    def __init__(self, tipo: str | None = None):
+        self.x, self.y = 500.0, 300.0
+        self.w = self.h = 200
+        self.dead = False
+        self.health = 10**9
+        self.recebido = 0
+        if tipo == "boss":
+            self.is_boss = True
+        elif tipo == "miniboss":
+            self.is_miniboss = True
+
+    @property
+    def rect(self):
+        return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
+
+    def collision_circle(self):
+        return (self.x + self.w / 2, self.y + self.h / 2, self.w / 2)
+
+    def on_hit(self, damage, hx, hy):
+        from game.systems.hit_result import HitResult
+
+        self.recebido += damage
+        return HitResult(killed=False, points=0, explosion_size=0)
+
+    def get_points_value(self):
+        return 0
+
+
+def _dano_de_uma_salva(tipo: str | None, *, cryo: bool = True) -> int:
+    """Dano que UMA puxada de gatilho entrega neste alvo, ponta a ponta.
+
+    Passa pelo `ShootingSystem` real (é ele que decide o trio e o
+    `boss_damage_mult`) e pelo passe de colisão real (é ele que cobra a metade
+    miniboss). Nenhum dos dois lados é simulado: é essa fiação que quebra
+    silenciosamente quando alguém mexe num dos pontos e esquece o outro.
+    """
+    em = EntityManager()
+    alvo = AlvoLargo(tipo)
+    em.enemies = [alvo]
+    ship = Ship(600.0, 500.0, profile=get_ship_profile("padrao"))
+    if cryo:
+        ship.activate_cryo_shots(60.0)
+    ShootingSystem(em, Bus()).fire(ship, player_damage_multiplier=1.0)
+
+    balas = list(em.bullets)
+    for b in balas:  # corpo largo: todas conectam
+        b.x, b.y = alvo.x + alvo.w / 2, alvo.y + alvo.h / 2
+        b.rect.x, b.rect.y = int(b.x), int(b.y)
+
+    col = Collisions(event_bus=Bus())
+    if tipo == "boss":
+        # O chefe tem passe próprio — não está na grid de inimigos.
+        col._project_into_boss(balas, alvo, [], em)
+    else:
+        grid: SpatialGrid = SpatialGrid(cell_size=400)
+        r = alvo.rect
+        grid.insert(alvo, r.x, r.y, r.width, r.height)
+        col.projectiles_vs_enemies(balas, grid, em)
+    return alvo.recebido
+
+
+class TestAlvoPesado:
+    """O nerf anti-chefe do Cryo — a regra que impede o upgrade de controle de
+    ser também a melhor forma de derreter um chefe.
+
+    O problema nunca foi o dano nominal: era a GEOMETRIA. O Cryo dispara três
+    cristais com hitbox 1.6×, e um corpo largo come os três. Contra o elenco
+    comum isso é a identidade do upgrade (limpeza de grupo) e fica intacta;
+    contra boss e miniboss vira DPS de alvo único que nenhum upgrade de controle
+    deveria ter.
+
+    A escada é **comum 100% → miniboss 50% → boss 25%**, e as três camadas têm
+    donos diferentes: o `boss_damage_mult` no spawn (mesmo canal do Wingman e da
+    Estrela Espiral), a metade miniboss no passe de colisão, e o
+    `BOSS_UPGRADE_DAMAGE_MULTIPLIER` global por cima só do chefe.
+    """
+
+    def test_o_trio_sai_marcado_com_o_nerf(self):
+        """Mesmo canal do Wingman e da Estrela Espiral — se o campo sumir do
+        spawn, o chefe volta a levar dano cheio sem nada mais mudar."""
+        em = EntityManager()
+        ship = Ship(600.0, 500.0, profile=get_ship_profile("padrao"))
+        ship.activate_cryo_shots(10.0)
+        ShootingSystem(em, Bus()).fire(ship, player_damage_multiplier=1.0)
+
+        assert all(
+            b.boss_damage_mult == CRYO_HEAVY_TARGET_DAMAGE_MULT for b in em.bullets
+        )
+
+    def test_o_tiro_comum_nao_carrega_o_nerf(self):
+        """A redução acompanha o LEQUE, não a nave: sem o upgrade ativo o tiro
+        normal não pode sair penalizado contra chefe."""
+        em = EntityManager()
+        ship = Ship(600.0, 500.0, profile=get_ship_profile("padrao"))
+        ShootingSystem(em, Bus()).fire(ship, player_damage_multiplier=1.0)
+
+        assert all(b.boss_damage_mult == 1.0 for b in em.bullets)
+
+    def test_a_escada_comum_miniboss_boss(self):
+        """O invariante central, ponta a ponta: quanto mais pesado o alvo, menos
+        o Cryo entrega — e a ordem nunca inverte."""
+        comum = _dano_de_uma_salva(None)
+        mini = _dano_de_uma_salva("miniboss")
+        boss = _dano_de_uma_salva("boss")
+
+        assert comum > mini > boss, (
+            f"escada quebrada: comum={comum} miniboss={mini} boss={boss}"
+        )
+
+    def test_o_inimigo_comum_nao_perde_nada(self):
+        """A identidade do upgrade. O nerf é de alvo pesado; se ele vazar para o
+        elenco comum, o Cryo deixa de ser bom no que ele existe para fazer."""
+        salva = _dano_de_uma_salva(None)
+        em = EntityManager()
+        ship = Ship(600.0, 500.0, profile=get_ship_profile("padrao"))
+        ship.activate_cryo_shots(10.0)
+        ShootingSystem(em, Bus()).fire(ship, player_damage_multiplier=1.0)
+
+        assert salva == sum(b.damage for b in em.bullets)
+
+    def test_o_miniboss_leva_metade(self):
+        assert _dano_de_uma_salva("miniboss") == pytest.approx(
+            _dano_de_uma_salva(None) * CRYO_HEAVY_TARGET_DAMAGE_MULT, abs=3
+        )
+
+    def test_o_chefe_paga_as_DUAS_reducoes(self):
+        """A do Cryo e a global de upgrade — como no Wingman e na Estrela
+        Espiral. Uma só não seria "significativamente menor"."""
+        from game.core.config import config as Config
+
+        esperado = (
+            _dano_de_uma_salva(None)
+            * CRYO_HEAVY_TARGET_DAMAGE_MULT
+            * Config.BOSS_UPGRADE_DAMAGE_MULTIPLIER
+        )
+        assert _dano_de_uma_salva("boss") == pytest.approx(esperado, abs=3)
+
+    def test_bala_sem_gelo_nao_e_reduzida_contra_miniboss(self):
+        """A trava que impede o nerf de virar um imposto global: quem não é
+        projétil do Cryo passa pelo mesmo caminho sem perder nada."""
+        assert _dano_de_uma_salva("miniboss", cryo=False) == _dano_de_uma_salva(
+            None, cryo=False
+        )
+
+    def test_a_EXPLOSAO_tambem_e_reduzida(self):
+        """O pedido cobria os dois: dano direto e dano da explosão. A bomba é o
+        payoff do ciclo e seria o buraco óbvio se ficasse de fora."""
+        col = Collisions(event_bus=Bus())
+        levou = {}
+        for tipo in (None, "miniboss", "boss"):
+            em = EntityManager()
+            alvo = AlvoLargo(tipo)
+            gelar(alvo, vezes=CRYO_MAX_STACKS)
+            em.queue_cryo_detonation(alvo)
+            col.cryo_bombs_vs_enemies(em)
+            levou[tipo] = alvo.recebido
+
+        assert levou[None] == CRYO_BOMB_DAMAGE
+        assert levou["miniboss"] == int(
+            CRYO_BOMB_DAMAGE * CRYO_HEAVY_TARGET_DAMAGE_MULT
+        )
+        assert levou["boss"] < levou["miniboss"] < levou[None]
+
+    def test_o_caco_da_bomba_tambem_sai_marcado(self):
+        """Um estouro AO LADO do chefe cospe o leque inteiro nele — oito cacos
+        de um alvo que nem era ele. O `shard_source_id` só protege a origem."""
+        em = EntityManager()
+        ship = Ship(600.0, 500.0, profile=get_ship_profile("padrao"))
+
+        cacos = em.spawn_cryo_shards(600.0, 300.0, 20.0, ship)
+
+        assert all(c.boss_damage_mult == CRYO_HEAVY_TARGET_DAMAGE_MULT for c in cacos)
+
+    def test_o_cryo_continua_valendo_a_pena_contra_chefe(self):
+        """O outro lado do nerf: reduzir não é apagar.
+
+        Faixa e não número exato (§16) — o teste trava a direção e a ordem de
+        grandeza, que é o que uma regressão quebra, e deixa o micro-ajuste livre.
+        """
+        com = _dano_de_uma_salva("boss")
+        sem = _dano_de_uma_salva("boss", cryo=False)
+
+        assert com > sem, "o Cryo virou penalidade contra chefe"
+        assert com < sem * 2.5, (
+            f"o Cryo entrega {com / sem:.1f}x contra chefe — de volta ao patamar "
+            "de melhor upgrade anti-boss que o rebalanceamento removeu"
+        )
+
+
+class TestQuemEAlvoPesado:
+    """Quem declara `is_miniboss`, e por quê.
+
+    O critério é DURABILIDADE, não a cadência de spawn: o gerador chama de
+    miniboss quem aparece sozinho com cap 1, mas a regra aqui protege quem tem
+    corpo e vida para sofrer o leque inteiro.
+    """
+
+    def test_boss_e_miniboss_contam_como_pesados(self):
+        from game.entities._shared.heavy_targets import is_heavy_target
+
+        assert is_heavy_target(AlvoLargo("boss"))
+        assert is_heavy_target(AlvoLargo("miniboss"))
+
+    def test_inimigo_comum_e_stub_nao_contam(self):
+        """`getattr` com default nos dois lados: entidade que nunca ouviu falar
+        das flags responde False em vez de estourar."""
+        from game.entities._shared.heavy_targets import is_heavy_target
+
+        assert not is_heavy_target(AlvoLargo())
+        assert not is_heavy_target(Alvo())
+        assert not is_heavy_target(object())
+
+    @pytest.mark.parametrize(
+        "modulo,classe",
+        [
+            ("game.entities.enemies.city.cyber_tank", "CyberTank"),
+            ("game.entities.enemies.city.cargo_carrier", "CargoCarrier"),
+            ("game.entities.enemies.city.mirror_pylon", "MirrorPylon"),
+            ("game.entities.enemies.space.dreadnought", "Dreadnought"),
+            ("game.entities.enemies.space.bot_elemental", "ElementalRobot"),
+        ],
+    )
+    def test_os_gatekeepers_estao_marcados(self, modulo, classe):
+        import importlib
+
+        cls = getattr(importlib.import_module(modulo), classe)
+        assert cls.is_miniboss is True
+
+    def test_o_elenco_comum_tem_o_default(self):
+        """Sem o default no `EnemyHitMixin`, marcar um inimigo exigiria mexer em
+        todos os outros."""
+        from game.entities.enemies.city.city_drone import CityDrone
+
+        assert CityDrone.is_miniboss is False
+
+    def test_o_splitter_e_pesado_so_no_tier_0(self):
+        """Os dois tiers são a MESMA classe com corpos muito diferentes: o
+        colosso (180 HP) come o leque, o filhote (55 HP) é inimigo comum."""
+        from game.entities.enemies.city.splitter_tank import SplitterTank
+
+        colosso = SplitterTank(600.0, 300.0, tier=0)
+        filhote = SplitterTank(600.0, 300.0, tier=1)
+
+        assert colosso.is_miniboss
+        assert not filhote.is_miniboss
+
+    def test_o_ice_golem_fica_de_fora_apesar_do_cap_1(self):
+        """O contraexemplo que mostra que o critério NÃO é o cap do spawner.
+
+        Ele tem 220 HP e cap 1 ("tanque — sempre sozinho"), o mesmo perfil do
+        CargoCarrier, que está marcado. O que o separa é a geometria: o alvo é a
+        gema de 42px, "pequeno de propósito: é o ponto fraco focado". Alvo desse
+        tamanho não come o trio — o Cryo acerta com um cristal, como em qualquer
+        inimigo comum, e é essa mira que a luta cobra.
+        """
+        from game.entities.enemies.mountain.ice_golem import IceGolem
+
+        assert not getattr(IceGolem, "is_miniboss", False)
+        assert IceGolem.GEM_SIZE < 60, (
+            "a premissa deste teste é o hitbox pequeno; se a gema cresceu, o "
+            "IceGolem passou a comer o leque e precisa ser reavaliado"
+        )
+
+    def test_o_mountain_mage_fica_de_fora(self):
+        """Cap 1 por RITMO, não por porte: é `support`, com 24 HP."""
+        from game.entities.enemies.mountain.mountain_mage import MountainMage
+
+        assert not getattr(MountainMage, "is_miniboss", False)
 
 
 class TestSemResiduo:

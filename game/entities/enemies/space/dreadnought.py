@@ -121,6 +121,10 @@ class Dreadnought(EnemyHitMixin):
 
     HEALTH: int = 950
     POINTS: int = 1800
+    # Alvo pesado: mesmo tratamento de gatekeeper do CyberTank — cap 1 no
+    # spawner ("sempre sozinho"), gate tardio (stage>=7) e 950 HP num casco de
+    # 135px, que nenhum leque erra. Ver `_shared.heavy_targets`.
+    is_miniboss: bool = True
 
     # ── Entrada (desce do topo — top-view) ────────────────────────────────────
     ENTER_SPEED: float = 100.0

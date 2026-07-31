@@ -38,6 +38,7 @@ from ..core.upgrades_config import (
     CORROSIVE_TICK_INTERVAL,
     CRYO_BOMB_EXPLOSION_SIZE,
     CRYO_BOMB_SHARDS,
+    CRYO_HEAVY_TARGET_DAMAGE_MULT,
     CRYO_MAX_STACKS,
     CRYO_SHARD_DAMAGE,
     CRYO_SHARD_SIZE,
@@ -575,9 +576,15 @@ class EntityManager:
         if int(getattr(entity, "cryo_stacks", 0)) < CRYO_MAX_STACKS:
             return False
         geometry = self._entity_geometry(entity)
-        owner = self._consume_cryo_marks(entity)
         if geometry is None:
+            # Sem geometria não há de onde cuspir o leque — mas as marcas ficam
+            # INTACTAS. Consumi-las aqui era apagar o gelo do alvo e devolver
+            # False: os cristais sumiam e nada se espalhava, que é exatamente o
+            # sintoma que a regra "cristalizado que morre espalha" proíbe.
+            # Preservando-as, um caminho posterior (contato, área, o passe da
+            # fila) ainda pode estourar a bomba.
             return False
+        owner = self._consume_cryo_marks(entity)
         cx, cy, radius = geometry
         self.detonate_cryo_bomb(cx, cy, radius, owner, source_id=id(entity))
         return True
@@ -641,6 +648,11 @@ class EntityManager:
                 damage=CRYO_SHARD_DAMAGE,
                 direction=(dx, dy),
                 owner_ship=owner,
+                # O caco é dano do Cryo e paga o mesmo nerf anti-alvo-pesado do
+                # cristal. O alvo que estilhaçou já está protegido pelo
+                # `shard_source_id`, mas um estouro ao LADO de um chefe cospe o
+                # leque inteiro nele — oito cacos de um alvo que nem era ele.
+                boss_damage_mult=CRYO_HEAVY_TARGET_DAMAGE_MULT,
                 cryo=True,
                 ice_shard=True,
             )
@@ -1209,10 +1221,25 @@ class EntityManager:
         self._rebuild_enemy_caches()
 
         # Bomba de gelo pendente que ninguém consumiu (frame sem passe de
-        # colisão: fim de fase, transição) morre aqui, antes de qualquer
-        # `cleanup` devolver o alvo ao pool. A fila nunca atravessa um frame.
-        if self.cryo_detonations:
-            self.cryo_detonations.clear()
+        # colisão: fim de fase, transição) é DRENADA aqui, nunca descartada. A
+        # fila continua sem atravessar um frame — o que muda é o destino dela.
+        #
+        # Descartar quebrava a regra do upgrade: o `queue_cryo_detonation` já
+        # consumiu as marcas ao enfileirar, então um `clear()` apagava o gelo de
+        # um inimigo VIVO e engolia a bomba inteira — sem explosão, sem leque,
+        # sem dano. Quem cristalizou viu os cristais sumirem e nada acontecer.
+        #
+        # O leque sai porque a fila carrega `cx/cy/raio/dono` POR VALOR: dá para
+        # estourar sem tocar na entidade, que é justamente o motivo de a fila não
+        # poder envelhecer (o alvo pode já ter voltado ao pool). O que se perde é
+        # só o dano direto no alvo, que exigiria o roteador de dano (§8) e a
+        # entidade viva — e este é o frame em que não há passe de colisão.
+        # `source_id` continua sendo passado: o leque não pode voltar para dentro
+        # do alvo que estilhaçou. `id()` é seguro mesmo com o alvo já reciclado —
+        # a tupla ainda o referencia, então o objeto não foi coletado, e se o pool
+        # o reaproveitou é o MESMO objeto que o guard precisa excluir.
+        for alvo, cx, cy, radius, owner in self.take_cryo_detonations():
+            self.detonate_cryo_bomb(cx, cy, radius, owner, source_id=id(alvo))
         if self.corrosion_ticks:
             self.corrosion_ticks.clear()
 

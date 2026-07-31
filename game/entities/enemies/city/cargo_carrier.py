@@ -342,6 +342,9 @@ class CargoCarrier(EnemyHitMixin):
 
     HEALTH: int = 320                 # transporte pesado: bem mais tanky
     POINTS: int = 460
+    # Alvo pesado: 146px de largura e 320 HP. Ver `_shared.heavy_targets`.
+    # (o `CargoCrate` que ele cospe NÃO é — 70 HP, alvo macio de propósito.)
+    is_miniboss: bool = True
 
     ENTER_SPEED: float = 80.0          # entra devagar pela direita
     ADVANCE_SPEED: float = 14.0        # quase parado: persiste no canto superior-direito

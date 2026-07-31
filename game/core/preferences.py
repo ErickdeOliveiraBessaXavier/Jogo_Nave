@@ -49,6 +49,14 @@ class UserPreferences:
         # Controles
         self.mouse_control: bool = False
         self.auto_fire: bool = False
+        # Toque (celular): a nave voa ACIMA do ponteiro em vez de embaixo dele.
+        # No mouse o cursor é um pixel e some sob a nave; o dedo é uma mancha de
+        # ~1cm que cobre a nave inteira — o jogador pilota às cegas exatamente o
+        # que precisa ver. Deslocar o alvo devolve a nave para cima do polegar.
+        # Desligado por padrão: no desktop não há o que compensar, e o web roda
+        # nos dois (navegador de PC com mouse e celular com dedo), então quem
+        # decide é o jogador, não o `sys.platform`.
+        self.touch_offset: bool = False
         self.show_controls_modal: bool = True
         # False até o modal de controles fechar pela 1ª vez. Enquanto False, o
         # modal roda em modo "onboarding": esconde o checkbox "não mostrar mais"
@@ -129,6 +137,7 @@ class UserPreferences:
                 # Controles
                 self.mouse_control = data.get("mouse_control", self.mouse_control)
                 self.auto_fire = data.get("auto_fire", self.auto_fire)
+                self.touch_offset = data.get("touch_offset", self.touch_offset)
                 self.show_controls_modal = data.get(
                     "show_controls_modal", self.show_controls_modal
                 )
@@ -170,6 +179,7 @@ class UserPreferences:
                 "shot_volume": self.shot_volume,
                 "mouse_control": self.mouse_control,
                 "auto_fire": self.auto_fire,
+                "touch_offset": self.touch_offset,
                 "show_controls_modal": self.show_controls_modal,
                 "controls_modal_seen": self.controls_modal_seen,
                 "gamepad_enabled": self.gamepad_enabled,
@@ -198,6 +208,7 @@ class UserPreferences:
         self.shot_volume = VOLUME_CONFIG["shots"]
         self.mouse_control = False
         self.auto_fire = False
+        self.touch_offset = False
         self.show_controls_modal = True
         self.controls_modal_seen = False
         self.gamepad_enabled = False

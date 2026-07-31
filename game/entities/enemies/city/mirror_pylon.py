@@ -52,6 +52,9 @@ class MirrorPylon(EnemyHitMixin):
 
     HEALTH: int = 130
     POINTS: int = 400
+    # Alvo pesado: 160×205px é a maior silhueta do elenco comum — nenhum leque
+    # erra. Ver `_shared.heavy_targets`.
+    is_miniboss: bool = True
 
     ENTER_SPEED: float = 160.0
     ADVANCE_SPEED: float = 38.0

@@ -112,6 +112,7 @@ class Ship:
         x: float,
         y: float,
         mouse_control: bool = False,
+        touch_offset: bool = False,
         auto_fire: bool = False,
         profile: Optional[ShipProfile] = None,
         player_index: int = 0,
@@ -149,6 +150,11 @@ class Ship:
         self.mouse_control = mouse_control
         self.auto_fire = auto_fire
         self.auto_fire_timer = 0.0
+        # Nave voa acima do ponteiro (dedo). Só tem efeito com `mouse_control`,
+        # que é o único caminho que lê a posição do ponteiro — ver
+        # `ShipMovement` e `TOUCH_OFFSET_Y`. Escrito pela cena a partir das
+        # preferências e reescrito ao vivo pela tela de Configurações.
+        self.touch_offset = touch_offset
 
         # Elemental Debuffs (Timers)
         self.fire_rate_modifier_timer: float = 0.0  # Inferno: sobreaquecimento

@@ -23,6 +23,16 @@ if TYPE_CHECKING:
 MOUSE_BASE_STIFFNESS: float = 8.5
 MOUSE_DEAD_ZONE: float = 2.0
 
+# Deslocamento vertical do alvo quando `ship.touch_offset` está ligado (celular).
+# Em pixels LÓGICOS, como a própria nave (60×60 fixos): o canvas escala o frame
+# inteiro, então um valor fixo aqui mantém a mesma proporção em qualquer tela.
+#
+# 90 = 1,5 alturas de nave. Uma altura (60) só encosta a base da nave no dedo e
+# a mancha de contato ainda cobre metade dela; 1,5 tira a nave inteira de baixo
+# do polegar sem que ela pareça "descolada" do toque. É o número a mexer se o
+# teste no aparelho pedir mais ou menos folga — o resto da física não muda.
+TOUCH_OFFSET_Y: float = 90.0
+
 
 class ShipMovement:
     """Lida com input → posição da `Ship`: dash, gamepad, mouse spring e teclado.
@@ -153,6 +163,14 @@ class ShipMovement:
             # Spring-follow: velocidade proporcional à distância ao cursor,
             # escalada por agility_mult do profile. Sem input lag.
             mouse_x, mouse_y = pygame.mouse.get_pos()
+
+            # ANTES da inversão, de propósito: o offset corrige o DISPOSITIVO
+            # (onde o dedo está em relação a onde o jogador quer a nave), não a
+            # intenção. Aplicado depois, o controle invertido mandaria a nave
+            # para baixo do dedo — a mira de cabeça para baixo somada ao
+            # deslocamento de cabeça para baixo devolveria o problema original.
+            if ship.touch_offset:
+                mouse_y -= TOUCH_OFFSET_Y
 
             if ship.invert_controls_timer > 0.0:
                 screen_cx = getattr(Config, "SCREEN_WIDTH", 480) / 2

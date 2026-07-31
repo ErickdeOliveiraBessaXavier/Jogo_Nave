@@ -560,49 +560,71 @@ class GameOverScene(Scene):
         self.ranking_sound_played = False
 
     def _init_loadout_hook(self, btn_h: int, bottom_y: int) -> None:
-        """Decide se esta tela convida o jogador à Central de Loadout.
+        """Monta o atalho permanente para a Central de Loadout.
 
-        Este é o momento em que o convite finalmente significa alguma coisa: a
-        pessoa acabou de morrer e agora tem o contexto que faltava no menu
-        principal, onde "Aprimoramentos" é só uma palavra. Antes de jogar não dá
-        para avaliar um upgrade; depois de perder, dá.
+        O botão é fixo, e o **aviso** sobre ele é que é contextual. São duas
+        coisas diferentes que antes andavam juntas:
 
-        O convite só aparece quando há o que fazer lá — ou o loadout está vazio
-        (nunca equipou nada), ou o saldo já paga o próximo slot. Sem nenhuma das
-        duas, a tela não teria o que oferecer e o botão viraria ruído numa hora
-        em que o jogador quer é recomeçar.
+        - **Atalho** (sempre): trocar de nave ou mexer no loadout entre duas
+          tentativas custava menu → aprimoramentos → mundo → dificuldade →
+          jogar. Esse pedágio desestimula o ajuste pequeno, que é justamente o
+          que faz o jogador experimentar builds. Aqui ele é um clique, e a run
+          continua de onde parou (ver `_open_upgrades`).
+        - **Aviso** (só quando cabe): este é o momento em que o convite
+          significa alguma coisa — a pessoa acabou de morrer e tem o contexto
+          que faltava no menu principal, onde "Aprimoramentos" é só uma
+          palavra. Antes de jogar não dá para avaliar um upgrade; depois de
+          perder, dá. Se a frase aparecesse sempre, deixaria de ser sinal e
+          viraria mobília — e pior, mentiria (dizer "você jogou sem nenhum
+          equipado" para quem tem o loadout cheio).
+
+        A única coisa que pode suprimir o botão é a geometria: sem vão para um
+        terceiro botão legível, não há atalho. `show_loadout_hook` é o gate
+        único que render, input e navegação consultam — se ele mentisse, o
+        rótulo apareceria sozinho sobre um botão de largura zero.
         """
-        profile = self.app.player_profile
-
         self.stars_earned = int(
             getattr(self.playing_scene, "stars_earned_this_run", 0)
         )
 
-        loadout_empty = all(u is None for u in profile.upgrade_loadout)
-        # `unlocked_slots` é o índice do PRÓXIMO slot (os destravados são
-        # 0..unlocked_slots-1), que é exatamente o que `can_unlock_slot` espera.
-        can_buy_slot = profile.can_unlock_slot(profile.unlocked_slots)
-
-        # Duas situações, duas frases: quem nunca equipou precisa saber que o
-        # sistema existe; quem já equipou precisa saber que pode ampliar.
-        self.loadout_hook_key = (
-            "game_over.hook_empty" if loadout_empty else "game_over.hook_slot"
-        )
-
-        self.upgrades_button = pygame.Rect(0, 0, 0, 0)
-        if loadout_empty or can_buy_slot:
-            self.upgrades_button = self._center_between_buttons(bottom_y, btn_h)
-        # A geometria também decide: sem vão para um terceiro botão legível, não
-        # há convite. `show_loadout_hook` é o gate único que render, input e
-        # navegação consultam — se ele mentisse, o rótulo apareceria sozinho
-        # sobre um botão de largura zero.
+        self.upgrades_button = self._center_between_buttons(bottom_y, btn_h)
         self.show_loadout_hook = self.upgrades_button.width > 0
+        self._refresh_loadout_hook()
 
         star_px = max(8, self._s(20))
         self.star_icon = pygame.transform.scale(
             get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"),
             (star_px, star_px),
         )
+
+    def _refresh_loadout_hook(self) -> None:
+        """Recalcula o aviso a partir do perfil ATUAL. Roda no `enter()`.
+
+        Calcular só no `__init__` dava texto obsoleto assim que o jogador usava
+        o atalho: equipava o primeiro upgrade, voltava, e a tela continuava
+        dizendo "você jogou sem nenhum equipado" — a frase descrevia a partida
+        que acabou, mas se lê como o estado atual do loadout. Com o botão
+        permanente esse retorno deixa de ser caminho raro e vira o fluxo normal,
+        então o texto precisa acompanhar.
+
+        `StateManager.pop` chama `enter()` na cena de baixo, então voltar da
+        Central de Loadout passa por aqui de graça.
+        """
+        profile = self.app.player_profile
+        self.loadout_hook_key: Optional[str]
+
+        if all(u is None for u in profile.upgrade_loadout):
+            # Quem nunca equipou precisa saber que o sistema existe.
+            self.loadout_hook_key = "game_over.hook_empty"
+        elif profile.can_unlock_slot(profile.unlocked_slots):
+            # `unlocked_slots` é o índice do PRÓXIMO slot (os destravados são
+            # 0..unlocked_slots-1), que é exatamente o que `can_unlock_slot`
+            # espera. Quem já equipou precisa saber que pode ampliar.
+            self.loadout_hook_key = "game_over.hook_slot"
+        else:
+            # Nada a anunciar: o botão fica, sem legenda de convite. A linha
+            # acima dele passa a mostrar o atalho de teclado (ver `render`).
+            self.loadout_hook_key = None
 
     def _center_between_buttons(self, bottom_y: int, btn_h: int) -> pygame.Rect:
         """Encaixa o botão do meio no vão entre os outros dois, com folgas iguais.
@@ -625,7 +647,7 @@ class GameOverScene(Scene):
         # fileira; um deles 20px maior lê como desalinho.
         hook_w = min(self.continue_button.width, available - 2 * min_gap)
         if hook_w <= 0:
-            # Vão insuficiente para um terceiro botão legível: sem convite, em
+            # Vão insuficiente para um terceiro botão legível: sem atalho, em
             # vez de três botões espremidos e ilegíveis.
             return pygame.Rect(0, 0, 0, 0)
 
@@ -648,6 +670,10 @@ class GameOverScene(Scene):
 
     def enter(self):
         pygame.mouse.set_visible(True)
+        # Também roda ao voltar da Central de Loadout (`StateManager.pop`
+        # re-entra na cena de baixo): o que o jogador acabou de equipar ou
+        # comprar tem de se refletir na legenda antes do próximo frame.
+        self._refresh_loadout_hook()
 
     def update(self, dt: float):
         self.game_over_timer += dt
@@ -683,6 +709,15 @@ class GameOverScene(Scene):
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
             self._continue_run()
+        elif (
+            event.type == pygame.KEYDOWN
+            and event.key == pygame.K_u
+            and self.show_loadout_hook
+        ):
+            # O controle já alcança o botão pelo `get_focusable_rects`; sem esta
+            # tecla, o teclado dependeria do mouse justamente no atalho que
+            # existe para ser rápido.
+            self._open_upgrades()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.back_to_menu_button.collidepoint(event.pos):
                 self._return_to_menu()
@@ -713,7 +748,8 @@ class GameOverScene(Scene):
                 self._continue_run()
 
     def get_focusable_rects(self) -> list[pygame.Rect]:
-        """Continuar (direita), Aprimoramentos (centro, quando oferecido) e
+        """Continuar (direita), Aprimoramentos (centro, salvo se o vão não o
+        comportar) e
         Voltar ao Menu (esquerda) — DPad alterna entre eles. Durante a entrada
         de iniciais, nenhum (o widget tem foco).
 
@@ -894,16 +930,23 @@ class GameOverScene(Scene):
                         CUSTOM_PURPLE,
                         sub_alpha,
                     )
-                    # A razão do convite fica colada ao botão (mesmo padrão da
-                    # legenda da tecla R sobre o Continuar), e não no centro da
-                    # tela: é ali que ela responde "por que eu clicaria nisso?".
-                    reason_surf = self.game_over_font_button.render(
-                        t(self.loadout_hook_key), True, (170, 160, 200)
+                    # A linha acima do botão (mesmo padrão da legenda da tecla R
+                    # sobre o Continuar) responde "por que eu clicaria nisso?".
+                    # Quando há convite, é ele que ocupa o espaço — em roxo, a
+                    # cor do próprio botão, para se ler como um par. Sem convite
+                    # a linha não some: vira o atalho de teclado, no cinza neutro
+                    # das legendas de tecla, e a fileira mantém o alinhamento.
+                    if self.loadout_hook_key is not None:
+                        caption, caption_color = t(self.loadout_hook_key), (170, 160, 200)
+                    else:
+                        caption, caption_color = t("game_over.press_u"), (150, 150, 160)
+                    caption_surf = self.game_over_font_button.render(
+                        caption, True, caption_color
                     )
-                    reason_surf.set_alpha(sub_alpha)
+                    caption_surf.set_alpha(sub_alpha)
                     surface.blit(
-                        reason_surf,
-                        reason_surf.get_rect(
+                        caption_surf,
+                        caption_surf.get_rect(
                             center=(
                                 self.upgrades_button.centerx,
                                 self.upgrades_button.top - self._s(16),

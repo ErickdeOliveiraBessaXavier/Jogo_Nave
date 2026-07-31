@@ -16,6 +16,10 @@ class EnemyHitMixin:
     # Defaults
     _explosion_size_killed: int = 35
     _explosion_size_hit: int = 10
+    # Alvo pesado (gatekeeper que o gerador spawna sozinho, com centenas de HP).
+    # Default False para o elenco comum não precisar dizer nada; quem aguenta o
+    # leque inteiro sobrescreve com True. Ver `_shared.heavy_targets`.
+    is_miniboss: bool = False
 
     @property
     def rect(self) -> pygame.Rect:

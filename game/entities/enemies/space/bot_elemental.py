@@ -252,6 +252,10 @@ class ElementalRobot:
     SCALE = 6  # px por "pixel" do mapa
     # Mini-boss: precisa de 25 tiros para ser eliminado.
     MAX_HEALTH = 200
+    # Alvo pesado — a contraparte formal do "mini-boss" da linha acima, para os
+    # upgrades multi-projétil não o derreterem. Ver `_shared.heavy_targets`.
+    # Declarado aqui e não herdado: esta classe não usa `EnemyHitMixin`.
+    is_miniboss: bool = True
     HIT_SCORE = 5000
 
     # Durações dos estados (segundos)
