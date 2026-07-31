@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 import pygame
 
 from ..core import colors
-from ..core.assets import get_font
+from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.config import config as Config
 from ..core.i18n import fmt_num, t
@@ -529,18 +529,21 @@ class GameOverScene(Scene):
         self.playing_scene.screen_shake_intensity = Config.SCREEN_SHAKE_GAME_OVER
 
         # Layout padronizado: menu no canto inferior esquerdo, continuar no
-        # canto inferior direito (mais largo para acomodar o rótulo).
+        # canto inferior direito. Mesma largura nos dois — o Continuar era mais
+        # largo (420) só para caber "CONTINUAR DE ONDE PAROU"; com o rótulo
+        # curto, a largura extra deixaria a fileira torta em vez de alinhada.
         btn_w, btn_h = self._s(280), self._s(40)
-        continue_w = self._s(420)
         margin = self._s(40)
         bottom_y = Config.SCREEN_HEIGHT - self._s(60)
         self.back_to_menu_button = pygame.Rect(margin, bottom_y, btn_w, btn_h)
         self.continue_button = pygame.Rect(
-            Config.SCREEN_WIDTH - margin - continue_w,
+            Config.SCREEN_WIDTH - margin - btn_w,
             bottom_y,
-            continue_w,
+            btn_w,
             btn_h,
         )
+
+        self._init_loadout_hook(btn_h, bottom_y)
 
         self.high_score_qualified = self.app.player_profile.qualifies_for_high_score(
             self.score
@@ -555,6 +558,93 @@ class GameOverScene(Scene):
             )
 
         self.ranking_sound_played = False
+
+    def _init_loadout_hook(self, btn_h: int, bottom_y: int) -> None:
+        """Decide se esta tela convida o jogador à Central de Loadout.
+
+        Este é o momento em que o convite finalmente significa alguma coisa: a
+        pessoa acabou de morrer e agora tem o contexto que faltava no menu
+        principal, onde "Aprimoramentos" é só uma palavra. Antes de jogar não dá
+        para avaliar um upgrade; depois de perder, dá.
+
+        O convite só aparece quando há o que fazer lá — ou o loadout está vazio
+        (nunca equipou nada), ou o saldo já paga o próximo slot. Sem nenhuma das
+        duas, a tela não teria o que oferecer e o botão viraria ruído numa hora
+        em que o jogador quer é recomeçar.
+        """
+        profile = self.app.player_profile
+
+        self.stars_earned = int(
+            getattr(self.playing_scene, "stars_earned_this_run", 0)
+        )
+
+        loadout_empty = all(u is None for u in profile.upgrade_loadout)
+        # `unlocked_slots` é o índice do PRÓXIMO slot (os destravados são
+        # 0..unlocked_slots-1), que é exatamente o que `can_unlock_slot` espera.
+        can_buy_slot = profile.can_unlock_slot(profile.unlocked_slots)
+
+        # Duas situações, duas frases: quem nunca equipou precisa saber que o
+        # sistema existe; quem já equipou precisa saber que pode ampliar.
+        self.loadout_hook_key = (
+            "game_over.hook_empty" if loadout_empty else "game_over.hook_slot"
+        )
+
+        self.upgrades_button = pygame.Rect(0, 0, 0, 0)
+        if loadout_empty or can_buy_slot:
+            self.upgrades_button = self._center_between_buttons(bottom_y, btn_h)
+        # A geometria também decide: sem vão para um terceiro botão legível, não
+        # há convite. `show_loadout_hook` é o gate único que render, input e
+        # navegação consultam — se ele mentisse, o rótulo apareceria sozinho
+        # sobre um botão de largura zero.
+        self.show_loadout_hook = self.upgrades_button.width > 0
+
+        star_px = max(8, self._s(20))
+        self.star_icon = pygame.transform.scale(
+            get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"),
+            (star_px, star_px),
+        )
+
+    def _center_between_buttons(self, bottom_y: int, btn_h: int) -> pygame.Rect:
+        """Encaixa o botão do meio no vão entre os outros dois, com folgas iguais.
+
+        Centralizar na TELA não serve aqui: os botões das pontas têm larguras
+        bem diferentes ("VOLTAR AO MENU" cabe em 280, "CONTINUAR DE ONDE PAROU"
+        precisa de 420), então o eixo da tela não é o eixo do vão — o do meio
+        saía colado no da direita e sobrando espaço à esquerda.
+
+        Medir a partir dos rects vizinhos, em vez de repartir a largura da tela
+        em três, mantém o alinhamento correto se um rótulo mudar de tamanho
+        (tradução mais longa, outra resolução).
+        """
+        gap_left = self.back_to_menu_button.right
+        gap_right = self.continue_button.left
+        available = gap_right - gap_left
+
+        min_gap = self._s(24)
+        # Mesma largura dos outros dois: três botões iguais lêem como uma
+        # fileira; um deles 20px maior lê como desalinho.
+        hook_w = min(self.continue_button.width, available - 2 * min_gap)
+        if hook_w <= 0:
+            # Vão insuficiente para um terceiro botão legível: sem convite, em
+            # vez de três botões espremidos e ilegíveis.
+            return pygame.Rect(0, 0, 0, 0)
+
+        x = gap_left + (available - hook_w) // 2
+        return pygame.Rect(x, bottom_y, hook_w, btn_h)
+
+    def _open_upgrades(self) -> None:
+        """Abre a Central de Loadout POR CIMA do Game Over (`push`).
+
+        Empilhar, e não trocar, é o que preserva a run: o botão "Continuar"
+        desta tela ainda está embaixo esperando, e a `PlayingScene` recriada por
+        ele relê o perfil no `_init_upgrades_from_profile` — então o que o
+        jogador equipar agora já vale na retomada. A cena de loadout volta com
+        `app.go_back()` (§17), que cai exatamente aqui.
+        """
+        from .upgrades_selection import UpgradesSelectionScene
+
+        sound_manager.play_sound("button_click")
+        self.app.go_to(lambda: UpgradesSelectionScene(self.app), push=True)
 
     def enter(self):
         pygame.mouse.set_visible(True)
@@ -596,6 +686,10 @@ class GameOverScene(Scene):
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.back_to_menu_button.collidepoint(event.pos):
                 self._return_to_menu()
+            elif self.show_loadout_hook and self.upgrades_button.collidepoint(
+                event.pos
+            ):
+                self._open_upgrades()
             elif self.continue_button.collidepoint(event.pos):
                 self._continue_run()
         elif event.type == pygame.JOYBUTTONDOWN:
@@ -606,8 +700,11 @@ class GameOverScene(Scene):
             from ..core.gamepad import XboxButton
 
             if event.button == XboxButton.A:
-                if self.back_to_menu_button.collidepoint(pygame.mouse.get_pos()):
+                pos = pygame.mouse.get_pos()
+                if self.back_to_menu_button.collidepoint(pos):
                     self._return_to_menu()
+                elif self.show_loadout_hook and self.upgrades_button.collidepoint(pos):
+                    self._open_upgrades()
                 else:
                     self._continue_run()
             elif event.button == XboxButton.B:
@@ -616,11 +713,20 @@ class GameOverScene(Scene):
                 self._continue_run()
 
     def get_focusable_rects(self) -> list[pygame.Rect]:
-        """Continuar (direita) e Voltar ao Menu (esquerda) — DPad alterna entre
-        eles. Durante a entrada de iniciais, nenhum (o widget tem foco)."""
+        """Continuar (direita), Aprimoramentos (centro, quando oferecido) e
+        Voltar ao Menu (esquerda) — DPad alterna entre eles. Durante a entrada
+        de iniciais, nenhum (o widget tem foco).
+
+        Ordem = ordem de navegação, não posição na tela: Continuar vem primeiro
+        porque é a ação padrão de quem só quer voltar a jogar.
+        """
         if self.entry_widget is not None and not self.entry_submitted:
             return []
-        return [self.continue_button, self.back_to_menu_button]
+        rects = [self.continue_button]
+        if self.show_loadout_hook:
+            rects.append(self.upgrades_button)
+        rects.append(self.back_to_menu_button)
+        return rects
 
     def _continue_run(self) -> None:
         """Continua a run reiniciando a fase onde o jogador morreu (passada como
@@ -764,6 +870,8 @@ class GameOverScene(Scene):
             if self.entry_widget is not None and not self.entry_submitted:
                 self.entry_widget.render(surface, sub_alpha)
             else:
+                self._render_stars_earned(surface, center_x, center_y, sub_alpha)
+
                 hint_surf = self.game_over_font_prompt.render(
                     t("game_over.continue_hint"),
                     True,
@@ -774,6 +882,34 @@ class GameOverScene(Scene):
                     hint_surf,
                     hint_surf.get_rect(center=(center_x, center_y + self._s(40))),
                 )
+
+                if self.show_loadout_hook:
+                    # Roxo, não dourado: dourado é a ação primária ("Continuar")
+                    # e duas primárias lado a lado não teriam hierarquia.
+                    draw_bordered_button(
+                        surface,
+                        self.upgrades_button,
+                        t("game_over.open_upgrades"),
+                        self.game_over_font_button,
+                        CUSTOM_PURPLE,
+                        sub_alpha,
+                    )
+                    # A razão do convite fica colada ao botão (mesmo padrão da
+                    # legenda da tecla R sobre o Continuar), e não no centro da
+                    # tela: é ali que ela responde "por que eu clicaria nisso?".
+                    reason_surf = self.game_over_font_button.render(
+                        t(self.loadout_hook_key), True, (170, 160, 200)
+                    )
+                    reason_surf.set_alpha(sub_alpha)
+                    surface.blit(
+                        reason_surf,
+                        reason_surf.get_rect(
+                            center=(
+                                self.upgrades_button.centerx,
+                                self.upgrades_button.top - self._s(16),
+                            )
+                        ),
+                    )
 
                 # Botão "Voltar ao Menu" (canto inferior esquerdo)
                 draw_bordered_button(
@@ -810,6 +946,44 @@ class GameOverScene(Scene):
                         )
                     ),
                 )
+
+    def _render_stars_earned(
+        self, surface: pygame.Surface, center_x: int, center_y: int, alpha: int
+    ) -> None:
+        """Ícone + quantas estrelas a partida rendeu, entre o score e a dica.
+
+        Só aparece com ganho > 0: "0 estrelas nesta partida" não informa nada
+        que valha a linha. Quem não colheu nenhuma já viu o contador zerado no
+        HUD durante a partida inteira.
+
+        É a primeira vez que o jogo diz em voz alta quanto a run rendeu de
+        moeda — até aqui o número só existia na tela de Estatísticas e na
+        Central de Loadout, as duas que este jogador não abriu.
+        """
+        if self.stars_earned <= 0:
+            return
+
+        text_surf = self.game_over_font_prompt.render(
+            t("game_over.stars_earned", n=self.stars_earned), True, CUSTOM_GOLD
+        )
+        text_surf.set_alpha(alpha)
+
+        gap = self._s(8)
+        total_w = self.star_icon.get_width() + gap + text_surf.get_width()
+        x = center_x - total_w // 2
+        # Acima do meio: o score termina em ~cy-22 e a dica do Continuar começa
+        # em ~cy+31. Centrar em cy-6 reparte a folga entre os dois em vez de
+        # colar esta linha na dica.
+        y = center_y - self._s(6)
+
+        # Alpha aplicado no próprio ícone (é instância privada desta cena, criada
+        # no `__init__`) em vez de numa cópia por frame — §7.
+        self.star_icon.set_alpha(alpha)
+        surface.blit(
+            self.star_icon,
+            (x, y + (text_surf.get_height() - self.star_icon.get_height()) // 2),
+        )
+        surface.blit(text_surf, (x + self.star_icon.get_width() + gap, y))
 
     def exit(self):
         pygame.mouse.set_visible(False)

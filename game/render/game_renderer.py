@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, Optional, TypedDict, cast
 import pygame
 
 from ..core import colors
-from ..core.assets import get_font
+from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.config import config as Config
 from ..core.i18n import t
 from ..core.difficulty import DifficultyPreset
@@ -169,6 +169,15 @@ class GameRenderer:
         self.hud_font_large = get_font(max(8, int(24 * self.ui_scale)))
         self.hud_font_score = get_font(max(8, int(32 * self.ui_scale)))
         self.hud_font_score_small = get_font(max(8, int(26 * self.ui_scale)))
+
+        # Mesmíssimo asset do pickup (`entities/pickups/star.py`) e da Central
+        # de Loadout: é a associação visual que liga "peguei aquilo" a "aquilo
+        # compra slot". Escalado uma vez aqui, não por frame (§7).
+        star_px = max(8, self._s(13))
+        self._star_icon = pygame.transform.scale(
+            get_image(BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"),
+            (star_px, star_px),
+        )
 
     def _s(self, value: float) -> int:
         """Escala um valor de pixel do design base (1280×720) para a resolução
@@ -796,7 +805,18 @@ class GameRenderer:
             if score_w > score_w_limit:
                 score_w = self.hud_font_score_small.size(score_text)[0]
         kills_w = self.hud_font_tiny.size(kills_text)[0]
-        content_w = max(score_w, kills_w)
+
+        # Linha de baixo: "KILLS: n" e o saldo de estrelas lado a lado. Ficam na
+        # MESMA linha (em vez de uma terceira) para a caixa não mudar de altura
+        # — o resto do HUD é posicionado em cima dela.
+        stars_text = str(frame.available_stars)
+        stars_w = self.hud_font_tiny.size(stars_text)[0]
+        star_icon_w = self._star_icon.get_width()
+        star_gap = self._s(4)  # entre o ícone e o número
+        row_gap = self._s(12)  # entre o bloco de kills e o de estrelas
+        bottom_row_w = kills_w + row_gap + star_icon_w + star_gap + stars_w
+
+        content_w = max(score_w, bottom_row_w)
 
         box_padding = self._s(20)
         box_w = content_w + (box_padding * 2)
@@ -843,11 +863,23 @@ class GameRenderer:
             (cx - score_surf.get_width() // 2, cy - score_surf.get_height() // 2),
         )
 
-        # Kills
+        # Kills + saldo de estrelas, centralizados juntos como uma linha só.
+        row_y = rect.top + self._s(60)
+        row_x = rect.centerx - bottom_row_w // 2
+
         kills_surf = self.hud_font_tiny.render(kills_text, True, colors.GRAY)
+        surface.blit(kills_surf, (row_x, row_y))
+
+        star_x = row_x + kills_w + row_gap
+        # O ícone é maior que a fonte tiny: alinha pelo centro vertical do texto
+        # para os dois não parecerem desencontrados.
+        text_h = kills_surf.get_height()
         surface.blit(
-            kills_surf, (rect.centerx - kills_surf.get_width() // 2, rect.top + self._s(60))
+            self._star_icon,
+            (star_x, row_y + (text_h - self._star_icon.get_height()) // 2),
         )
+        stars_surf = self.hud_font_tiny.render(stars_text, True, colors.CUSTOM_GOLD)
+        surface.blit(stars_surf, (star_x + star_icon_w + star_gap, row_y))
 
     def _render_players_status_box(
         self, frame: RenderFrame, surface: pygame.Surface
@@ -1409,12 +1441,104 @@ class GameRenderer:
         )
         return out
 
+    def _render_empty_upgrade_slots(
+        self, frame: RenderFrame, surface: pygame.Surface
+    ) -> None:
+        """Contornos apagados dos slots livres, quando NADA está equipado.
+
+        Antes disto, `_render_upgrades_hud` simplesmente retornava com o loadout
+        vazio e a partida inteira corria sem uma única menção aos aprimoramentos:
+        nem os slots, nem as teclas que os acionam. Quem começou sem equipar nada
+        não tinha, dentro do jogo, como descobrir que o sistema existe — o único
+        ponto de contato era o botão do menu principal.
+
+        O desenho é deliberadamente inerte: mesma geometria e posição da fileira
+        cheia (para ser reconhecido como a mesma peça de HUD quando enfim
+        estiver equipado), porém sem ícone, com borda apagada e o número da
+        tecla em cada slot. Não pisca, não anima e não pede clique — é um convite
+        silencioso, não um tutorial.
+        """
+        n = frame.unlocked_upgrade_slots
+        if n <= 0:
+            return
+
+        font_small = get_font(max(8, int(12 * self.ui_scale)))
+        slot_w, slot_h = self._s(50), self._s(50)
+        gap = self._s(10)
+        pad_x, pad_y = self._s(15), self._s(10)
+
+        container_w = n * slot_w + (n - 1) * gap + (pad_x * 2)
+        container_h = slot_h + (pad_y * 2)
+        container_rect = pygame.Rect(
+            (Config.SCREEN_WIDTH - container_w) // 2,
+            Config.SCREEN_HEIGHT - container_h,
+            container_w,
+            container_h,
+        )
+
+        # Fundo mais discreto que o da fileira cheia (alpha 160): o estado vazio
+        # não deve competir com a leitura do combate.
+        overlay = pygame.Surface((container_w, container_h), pygame.SRCALPHA)
+        pygame.draw.rect(
+            overlay,
+            (0, 0, 0, 90),
+            (0, 0, container_w, container_h),
+            border_top_left_radius=self._s(15),
+            border_top_right_radius=self._s(15),
+        )
+        surface.blit(overlay, container_rect.topleft)
+
+        start_x = container_rect.left + pad_x
+        slot_radius = self._s(8)
+        for display_index in range(n):
+            slot_x = start_x + display_index * (slot_w + gap)
+            slot_y = container_rect.top + pad_y
+
+            slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
+            pygame.draw.rect(
+                slot_surface,
+                (30, 30, 30, 110),
+                (0, 0, slot_w, slot_h),
+                border_radius=slot_radius,
+            )
+            pygame.draw.rect(
+                slot_surface,
+                (*colors.WHITE, 70),
+                (0, 0, slot_w, slot_h),
+                2,
+                border_radius=slot_radius,
+            )
+
+            try:
+                key_label = pygame.key.name(frame.upgrade_keybindings[display_index]).upper()
+            except (IndexError, TypeError):
+                key_label = str(display_index + 1)
+            key_surf = font_small.render(key_label, True, colors.WHITE)
+            key_surf.set_alpha(120)
+            slot_surface.blit(key_surf, (self._s(4), self._s(2)))
+
+            surface.blit(slot_surface, (slot_x, slot_y))
+
+        # Nome do sistema acima da fileira, na MESMA palavra do botão do menu
+        # principal (`menu.upgrades`): é o que transforma "duas caixas vazias"
+        # em "ah, é aquilo do menu".
+        label = font_small.render(t("hud.upgrades_empty"), True, colors.WHITE)
+        label.set_alpha(110)
+        surface.blit(
+            label,
+            (
+                container_rect.centerx - label.get_width() // 2,
+                container_rect.top - self._s(14),
+            ),
+        )
+
     def _render_upgrades_hud(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Exibe os slots de upgrades ativos centralizados na parte inferior."""
         active_slots: list[tuple[int, Any]] = [
             (i, upg) for i, upg in enumerate(frame.upgrade_slots) if upg is not None
         ]
         if not active_slots:
+            self._render_empty_upgrade_slots(frame, surface)
             return
 
         font, font_small = (

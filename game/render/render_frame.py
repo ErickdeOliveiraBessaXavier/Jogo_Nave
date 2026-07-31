@@ -181,3 +181,25 @@ class RenderFrame:
     Um `time.time()` aqui continuaria correndo durante a pausa e faria a
     moldura reaparecer fora de fase ao despausar.
     """
+
+    # ── Descoberta dos aprimoramentos (FTUE) ──────────────────────────────
+    # Dois números do perfil que o HUD precisa para não deixar o sistema de
+    # aprimoramentos invisível na primeira partida. Vêm pelo DTO como cópias
+    # (§1): o renderer não conhece `PlayerProfile`.
+
+    available_stars: int = 0
+    """Saldo de estrelas (coletadas − gastas), o que o jogador pode gastar.
+
+    A estrela é a moeda que compra capacidade de slot (`SLOT_UNLOCK_COSTS`),
+    mas até aqui só era exibida na tela de Estatísticas e na própria Central
+    de Loadout — nunca durante a partida, que é justamente onde ela é colhida.
+    Quem nunca abriu aquelas telas juntava a moeda sem saber que era moeda.
+    """
+
+    unlocked_upgrade_slots: int = 0
+    """Quantos slots o perfil tem destravados (`PlayerProfile.unlocked_slots`).
+
+    Usado só para desenhar os contornos vazios quando nada está equipado; o
+    mesmo número é orçamento de peso na Central de Loadout, mas essa regra não
+    interessa ao HUD.
+    """

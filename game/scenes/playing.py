@@ -233,6 +233,12 @@ class PlayingScene(Scene):
         if self.player_profile.current_session is None:
             self.player_profile.start_session()
 
+        # Marco zero das estrelas desta partida. O total do perfil é cumulativo
+        # e nunca zera; o Game Over precisa do ganho DESTA run ("você juntou N")
+        # e é isso que dá sentido ao convite para gastar. Como a cena é recriada
+        # a cada morte/continue, o marco é por partida sem esforço nenhum.
+        self._stars_at_run_start = self.player_profile.stars_collected
+
     def _init_ship(self) -> None:
         if self.is_side_scroll:
             ship_x = -50.0
@@ -640,6 +646,17 @@ class PlayingScene(Scene):
     @property
     def awaiting_world_transition_panel(self) -> bool:
         return self.transitions.is_world_panel
+
+    @property
+    def stars_earned_this_run(self) -> int:
+        """Estrelas colhidas desde o início desta partida.
+
+        Público de propósito: o Game Over lê isto (não o `stars_collected`
+        cumulativo do perfil) para dizer quanto a run rendeu.
+        """
+        return max(
+            0, self.player_profile.stars_collected - self._stars_at_run_start
+        )
 
     def can_handle_gameplay_actions(self) -> bool:
         """Retorna True quando o jogador pode agir normalmente."""
@@ -2174,6 +2191,10 @@ class PlayingScene(Scene):
             in_atmosphere=self._atmosphere.in_atmosphere,
             atmosphere_progress=self._atmosphere.progress,
             atmosphere_route=self._atmosphere.route,
+            available_stars=getattr(self.player_profile, "available_stars", 0),
+            unlocked_upgrade_slots=getattr(
+                self.player_profile, "unlocked_slots", 0
+            ),
         )
 
     # ===================== Upgrades (helpers) =====================

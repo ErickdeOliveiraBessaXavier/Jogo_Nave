@@ -37,8 +37,15 @@ PT: dict[str, str] = {
     "game_over.score": "PONTUAÇÃO: {score}",
     "game_over.continue_hint": "Continuar reinicia esta fase com a pontuação zerada",
     "game_over.back_to_menu": "VOLTAR AO MENU",
-    "game_over.continue": "CONTINUAR DE ONDE PAROU",
+    # Rótulo curto: o "de onde parou" já é dito pela linha `continue_hint` logo
+    # acima dos botões, e o rótulo longo forçava um botão desproporcional.
+    "game_over.continue": "CONTINUAR",
     "game_over.press_r": "Pressione R",
+    "game_over.stars_earned": "{n} estrelas nesta partida",
+    "game_over.open_upgrades": "APRIMORAMENTOS",
+    # Duas razões possíveis para o convite, ver `_init_loadout_hook`.
+    "game_over.hook_empty": "Você jogou sem nenhum equipado",
+    "game_over.hook_slot": "Dá para destravar um novo slot",
     "game_over.initials_title": "DIGITE SUAS INICIAIS",
     "game_over.rank": "RECORDE: #{n} LUGAR!",
     "game_over.legend_move": "↑ ↓: LETRA    ← →: COLUNA",
@@ -317,6 +324,11 @@ PT: dict[str, str] = {
     "hud.effect.score": "[x1.5] Score x1.5: {sec}s",
     "hud.effect.mini": "[M] Mini Ships: {sec}s",
     "hud.effect.explosive": "[💥] Explosivos: {n}",
+
+    # Rótulo dos slots vazios no rodapé. Repete de propósito a palavra do botão
+    # do menu principal (`menu.upgrades`) — é o que liga as caixas vazias à tela
+    # onde elas se preenchem.
+    "hud.upgrades_empty": "APRIMORAMENTOS",
 
     # ── Parada do tempo ──────────────────────────────────────────────────────
     "hud.time_stop": "TEMPO PARADO",

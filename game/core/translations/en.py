@@ -34,8 +34,12 @@ EN: dict[str, str] = {
     "game_over.score": "SCORE: {score}",
     "game_over.continue_hint": "Continuing restarts this level with your score reset to zero",
     "game_over.back_to_menu": "BACK TO MENU",
-    "game_over.continue": "CONTINUE FROM HERE",
+    "game_over.continue": "CONTINUE",
     "game_over.press_r": "Press R",
+    "game_over.stars_earned": "{n} stars this run",
+    "game_over.open_upgrades": "UPGRADES",
+    "game_over.hook_empty": "You played with none equipped",
+    "game_over.hook_slot": "You can unlock a new slot",
     "game_over.initials_title": "ENTER YOUR INITIALS",
     "game_over.rank": "NEW RECORD: #{n} PLACE!",
     "game_over.legend_move": "↑ ↓: LETTER    ← →: COLUMN",
@@ -314,6 +318,7 @@ EN: dict[str, str] = {
     "hud.effect.score": "[x1.5] Score x1.5: {sec}s",
     "hud.effect.mini": "[M] Mini Ships: {sec}s",
     "hud.effect.explosive": "[💥] Explosives: {n}",
+    "hud.upgrades_empty": "UPGRADES",
 
     # ── Time stop ────────────────────────────────────────────────────────────
     "hud.time_stop": "TIME STOPPED",
