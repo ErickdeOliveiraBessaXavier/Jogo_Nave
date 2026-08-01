@@ -196,6 +196,32 @@ class RenderFrame:
     Quem nunca abriu aquelas telas juntava a moeda sem saber que era moeda.
     """
 
+    touch_mode: bool = False
+    """Modo toque (celular) ligado — ver `UserPreferences.touch_mode`.
+
+    O HUD muda de LAYOUT, não só de estilo: a fileira de upgrades vira coluna na
+    borda direita e um botão de pausa aparece. No desktop a fileira embaixo, no
+    centro, é o lugar mais confortável; no celular é o pior possível, porque é
+    debaixo do polegar que pilota. Ver `hud_layout`.
+    """
+
+    joystick_enabled: bool = False
+    """Joystick virtual ligado — ver `UserPreferences.virtual_joystick`.
+
+    Muda o HUD do modo toque: entra o direcional no canto inferior esquerdo
+    e o botao de girar no direito, e a pausa sobe para a borda esquerda.
+    """
+
+    joystick_active: bool = False
+    """O polegar esta no direcional NESTE frame (desenha aceso)."""
+
+    joystick_offset: tuple[float, float] = (0.0, 0.0)
+    """Deslocamento do knob em px, ja preso ao raio pelo `VirtualJoystick`.
+
+    Vem pronto de proposito: a regra de saturacao mora no sistema (§3, o
+    render nao decide nada), e o renderer so soma ao centro.
+    """
+
     unlocked_upgrade_slots: int = 0
     """Quantos slots o perfil tem destravados (`PlayerProfile.unlocked_slots`).
 

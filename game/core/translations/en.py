@@ -126,8 +126,12 @@ EN: dict[str, str] = {
     "settings.toggle.p1_keyboard": "P1 on keyboard / P2 on gamepad",
     "settings.toggle.mouse": "Mouse Control",
     "settings.toggle.auto_fire": "Auto Fire",
-    "settings.toggle.touch_offset": "Ship above finger (touch)",
+    "settings.toggle.touch_mode": "Touch Mode (mobile)",
+    "settings.toggle.joystick": "On-screen joystick (touch)",
     "settings.toggle.gamepad": "Xbox Controller",
+
+    # ── Web / mobile ─────────────────────────────────────────────────────────
+    "web.rotate_device": "Rotate your device to play",
     "settings.status.disconnected": " (disconnected)",
     "settings.status.two_pads": " (2 controllers — P1 + P2)",
     "settings.status.one_pad": " (1 controller connected)",

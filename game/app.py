@@ -564,6 +564,33 @@ class GameApp:
         scene.handle_event(motion)
         return True
 
+    def _draw_rotate_hint(self) -> None:
+        """Faixa pedindo para girar o aparelho, quando a tela está em retrato.
+
+        Faixa e não tela cheia de propósito: o jogo continua rodando e visível
+        por baixo. Um bloqueio modal aqui seria pior — se a detecção errar (é
+        uma API do navegador que não controlamos, ver `orientation`), um véu
+        opaco tornaria o jogo INJOGÁVEL por causa de um palpite errado, enquanto
+        uma faixa apenas incomoda.
+        """
+        from .core.orientation import is_portrait
+
+        if not is_portrait():
+            return
+
+        from .core.assets import get_font
+        from .core.i18n import t
+
+        w, h = self.screen.get_size()
+        band_h = max(28, h // 8)
+        band = pygame.Surface((w, band_h), pygame.SRCALPHA)
+        band.fill((0, 0, 0, 210))
+        self.screen.blit(band, (0, (h - band_h) // 2))
+
+        font = get_font(max(10, int(w / 36)))
+        text = font.render(t("web.rotate_device"), True, (255, 255, 255))
+        self.screen.blit(text, text.get_rect(center=(w // 2, h // 2)))
+
     def _update_virtual_cursor(self, dt: float, scene: Scene) -> None:
         """Move o cursor virtual pelos sticks analógicos e dispara MOUSEMOTION
         sintéticos para que cenas só-mouse (settings, paused, etc) reajam
@@ -730,6 +757,12 @@ class GameApp:
                     self._pixelize_post.apply(
                         self.screen, visual_quality.pixelization_factor
                     )
+
+                # Aviso de girar o aparelho: DEPOIS da pixelização, porque é
+                # instrução de interface e não conteúdo do jogo — pixelizar o
+                # texto que pede para girar a tela é justamente o que o deixaria
+                # ilegível em quem já está com a tela pequena.
+                self._draw_rotate_hint()
 
                 pygame.display.flip()
 

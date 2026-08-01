@@ -80,7 +80,8 @@ class SettingsView:
             "p1_prefers_keyboard": self.preferences.p1_prefers_keyboard,
             "mouse_control": self.preferences.mouse_control,
             "auto_fire": self.preferences.auto_fire,
-            "touch_offset": self.preferences.touch_offset,
+            "touch_mode": self.preferences.touch_mode,
+            "virtual_joystick": self.preferences.virtual_joystick,
             "gamepad_enabled": self.preferences.gamepad_enabled,
         }
         self.dragging_slider: str | None = None
@@ -205,7 +206,8 @@ class SettingsView:
             "p1_prefers_keyboard",
             "mouse_control",
             "auto_fire",
-            "touch_offset",
+            "touch_mode",
+            "virtual_joystick",
             "gamepad_enabled",
         ]:
             self.layout_rects["toggles"][key] = pygame.Rect(
@@ -389,7 +391,8 @@ class SettingsView:
 
         self.toggles["mouse_control"] = self.preferences.mouse_control
         self.toggles["auto_fire"] = self.preferences.auto_fire
-        self.toggles["touch_offset"] = self.preferences.touch_offset
+        self.toggles["touch_mode"] = self.preferences.touch_mode
+        self.toggles["virtual_joystick"] = self.preferences.virtual_joystick
         self.toggles["gamepad_enabled"] = self.preferences.gamepad_enabled
         self.toggles["p1_prefers_keyboard"] = self.preferences.p1_prefers_keyboard
         self.selected_quality = self.preferences.visual_quality
@@ -592,8 +595,12 @@ class SettingsView:
                     elif key == "auto_fire":
                         self.preferences.auto_fire = self.toggles[key]
                         self._apply_live_control_settings()
-                    elif key == "touch_offset":
-                        self.preferences.touch_offset = self.toggles[key]
+                    elif key == "virtual_joystick":
+                        self.preferences.virtual_joystick = self.toggles[key]
+                        self._apply_live_control_settings()
+                    elif key == "touch_mode":
+                        self.preferences.touch_mode = self.toggles[key]
+                        # Escolha explícita: trava o auto-ligar pelo toque.
                         self._apply_live_control_settings()
                     elif key == "gamepad_enabled":
                         self.preferences.gamepad_enabled = self.toggles[key]
@@ -737,8 +744,12 @@ class SettingsView:
                 elif key == "auto_fire":
                     self.preferences.auto_fire = self.toggles[key]
                     self._apply_live_control_settings()
-                elif key == "touch_offset":
-                    self.preferences.touch_offset = self.toggles[key]
+                elif key == "virtual_joystick":
+                    self.preferences.virtual_joystick = self.toggles[key]
+                    self._apply_live_control_settings()
+                elif key == "touch_mode":
+                    self.preferences.touch_mode = self.toggles[key]
+                    # Escolha explícita: trava o auto-ligar pelo toque.
                     self._apply_live_control_settings()
                 elif key == "gamepad_enabled":
                     self.preferences.gamepad_enabled = self.toggles[key]
@@ -834,7 +845,8 @@ class SettingsView:
         # Sincroniza preferências em memória do app.
         self._app.preferences.mouse_control = self.preferences.mouse_control
         self._app.preferences.auto_fire = self.preferences.auto_fire
-        self._app.preferences.touch_offset = self.preferences.touch_offset
+        self._app.preferences.touch_mode = self.preferences.touch_mode
+        self._app.preferences.virtual_joystick = self.preferences.virtual_joystick
         self._app.preferences.gamepad_enabled = self.preferences.gamepad_enabled
         self._app.preferences.gamepad_choice_made = self.preferences.gamepad_choice_made
         self._app.preferences.p1_prefers_keyboard = self.preferences.p1_prefers_keyboard
@@ -858,7 +870,7 @@ class SettingsView:
             runtime_ship.mouse_control = self.preferences.mouse_control
             runtime_ship.auto_fire = self.preferences.auto_fire
             runtime_ship.auto_fire_timer = 0.0
-            runtime_ship.touch_offset = self.preferences.touch_offset
+            runtime_ship.touch_offset = self.preferences.touch_mode
 
     def render(self, surface: pygame.Surface):
         """Renderiza a view."""
@@ -1225,7 +1237,8 @@ class SettingsView:
             "p1_prefers_keyboard": t("settings.toggle.p1_keyboard"),
             "mouse_control": t("settings.toggle.mouse"),
             "auto_fire": t("settings.toggle.auto_fire"),
-            "touch_offset": t("settings.toggle.touch_offset"),
+            "touch_mode": t("settings.toggle.touch_mode"),
+            "virtual_joystick": t("settings.toggle.joystick"),
             "gamepad_enabled": t("settings.toggle.gamepad"),
         }
         gamepad = getattr(self._app, "gamepad", None) if self._app is not None else None

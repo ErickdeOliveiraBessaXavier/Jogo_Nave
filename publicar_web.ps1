@@ -12,7 +12,8 @@
 # ============================================================
 
 param(
-    [switch]$SoPush   # pular build, so enviar o bundle existente
+    [switch]$SoPush,      # pular build, so enviar o bundle existente
+    [switch]$AceitarMudos # repassar para build_web.ps1 quando o web ainda nao foi reencodado
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,7 +49,17 @@ Write-Host ">> Versao (web, sem bump): $tag" -ForegroundColor Magenta
 # e roda pygbag --build). Se o audio web faltar, build_web.ps1 aborta com dica.
 if (-not $SoPush) {
     Write-Host ">> Build Web (pygbag --build via build_web.ps1)..." -ForegroundColor Cyan
-    & "$PSScriptRoot\build_web.ps1" -Build
+    # HASHTABLE, nao array. Splatting de ARRAY passa os elementos como valores
+    # posicionais: a string "-Build" nao vira o switch -Build, e como
+    # build_web.ps1 so tem parametros nomeados, ela e descartada SEM ERRO. O
+    # efeito era o build parar depois do staging, sem rodar o pygbag e sem uma
+    # linha de aviso — o unico sintoma era o bundle nao existir no passo
+    # seguinte. Com hashtable, a chave e o nome do parametro e o switch liga.
+    $buildArgs = @{ Build = $true }
+    if ($AceitarMudos) {
+        $buildArgs.AceitarMudos = $true
+    }
+    & "$PSScriptRoot\build_web.ps1" @buildArgs
     if ($LASTEXITCODE -ne 0) { Write-Host "Build Web falhou." -ForegroundColor Red; exit 1 }
 }
 

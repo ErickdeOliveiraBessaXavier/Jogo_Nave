@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Optional
 
 import pygame
 
+from ..core.config import config as Config
+
 if TYPE_CHECKING:
     from ..scenes.playing import PlayingScene
     from ..systems.player_slot import PlayerSlot
@@ -35,18 +37,39 @@ class GameplayInputHandler:
         # controle calibra independentemente.
         self._lt_pressed: dict[int, bool] = {}
         self._lt_calibrated: dict[int, bool] = {}
+        # Vira True no primeiro FINGERDOWN. A partir dai, eventos de mouse
+        # marcados com `.touch` (sinteticos, gerados pelo SDL a partir do MESMO
+        # dedo) sao DESCARTADOS: sem isso cada toque seria processado duas vezes
+        # — uma pelo dedo, outra pelo mouse fantasma que o acompanha.
+        #
+        # Fica False para sempre em plataformas sem evento de dedo, e ai o
+        # caminho de mouse continua sendo o unico, exatamente como antes.
+        self._finger_events_seen: bool = False
 
     # ------------------------------------------------------------------
     # Dispatch principal
     # ------------------------------------------------------------------
 
     def handle(self, event: pygame.event.Event) -> None:
+        if event.type in (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP):
+            self._handle_finger(event)
+            return
+        # Mouse sintetizado a partir de toque, num aparelho que TAMBEM entrega
+        # evento de dedo: ja foi tratado acima, sob a identidade certa.
+        if self._finger_events_seen and getattr(event, "touch", False):
+            return
         if event.type == pygame.KEYDOWN:
             self._handle_keydown(event)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self._handle_mousebuttondown(event)
         elif event.type == pygame.MOUSEBUTTONUP:
             self._handle_mousebuttonup(event)
+        elif event.type == pygame.MOUSEMOTION:
+            # Só o joystick consome movimento de ponteiro; o `mouse_control` lê
+            # a posição por polling no `ShipMovement`, não por evento.
+            joystick = self.scene.virtual_joystick
+            if joystick is not None and joystick.active:
+                joystick.drag(event.pos)
         elif event.type == pygame.KEYUP:
             self._handle_keyup(event)
         elif event.type == pygame.JOYBUTTONDOWN:
@@ -63,13 +86,7 @@ class GameplayInputHandler:
     def _handle_keydown(self, event: pygame.event.Event) -> None:
         scene = self.scene
         if event.key == pygame.K_p:
-            from ..scenes.paused import PausedScene
-
-            # Overlay: a partida continua desenhada por baixo, então a pausa
-            # entra com escurecida animada em vez de véu preto.
-            scene.app.open_overlay(
-                lambda: PausedScene(scene.app, previous_scene=scene)
-            )
+            self._open_pause()
         elif event.key == pygame.K_F3:
             scene.show_fps = not scene.show_fps
             logger.info("Debug FPS: %s", "ATIVADO" if scene.show_fps else "DESATIVADO")
@@ -119,8 +136,119 @@ class GameplayInputHandler:
         if scene.can_handle_gameplay_actions() and not scene.ship.is_entering:
             self._handle_upgrade_key(event)
 
+    def _handle_finger(self, event: pygame.event.Event) -> None:
+        """Toque real, com identidade. E o que permite pilotar e agir ao mesmo tempo.
+
+        Coordenadas de `FINGER*` sao NORMALIZADAS (0..1) sobre a superficie,
+        nao pixels: sem a multiplicacao pela resolucao logica todo toque cairia
+        no canto superior esquerdo.
+
+        Cada dedo carrega seu `finger_id`, e e por ele que o direcional sabe
+        qual gesto e seu. Um segundo dedo num botao do HUD nao mexe na nave, e
+        levantar esse segundo dedo nao solta o direcional.
+        """
+        self._finger_events_seen = True
+        finger = getattr(event, "finger_id", None)
+        pos = (
+            float(getattr(event, "x", 0.0)) * Config.SCREEN_WIDTH,
+            float(getattr(event, "y", 0.0)) * Config.SCREEN_HEIGHT,
+        )
+        joystick = self.scene.virtual_joystick
+
+        if event.type == pygame.FINGERMOTION:
+            if joystick is not None:
+                joystick.drag(pos, finger)
+            return
+
+        if event.type == pygame.FINGERUP:
+            if joystick is not None:
+                joystick.release(finger)
+            return
+
+        # FINGERDOWN: o direcional tem a primeira chance (zona maior, e o canto
+        # onde o polegar mora); o que sobrar vai para os alvos do HUD.
+        if self._touch_hud_hit(pos, finger=finger):
+            return
+
+    def _open_pause(self) -> None:
+        """Abre a pausa. Compartilhado pela tecla P e pelo botão do modo toque —
+        duplicar o `open_overlay` era como o botão nasceria sem o estilo DIM
+        (§17), piscando preto sobre a partida.
+        """
+        from ..scenes.paused import PausedScene
+
+        scene = self.scene
+        # Overlay: a partida continua desenhada por baixo, então a pausa entra
+        # com escurecida animada em vez de véu preto.
+        scene.app.open_overlay(lambda: PausedScene(scene.app, previous_scene=scene))
+
+    def _touch_hud_hit(self, pos: tuple[int, int], finger: object = None) -> bool:
+        """Um alvo tocável do HUD consumiu este toque?
+
+        Só existe no modo toque. Devolver True quer dizer duas coisas ao mesmo
+        tempo: a ação foi executada E **a pilotagem tem de ignorar este gesto**.
+
+        A segunda metade é a que não é óbvia. A nave segue a posição do ponteiro
+        continuamente, então sem essa trava encostar num botão puxaria a nave
+        para cima dele — e no celular, onde o mesmo dedo pilota e toca, isso
+        aconteceria em todo uso de upgrade. Por isso a captura vale pelo GESTO
+        inteiro (até o dedo levantar), e não só pelo frame do toque.
+        """
+        from ..render.hud_layout import (
+            joystick_activation_radius,
+            joystick_center,
+            pause_button_rect,
+            rotate_button_rect,
+            upgrade_hud_layout,
+        )
+
+        scene = self.scene
+        if not getattr(scene.app.preferences, "touch_mode", False):
+            return False
+
+        ui_scale = scene.ui_scale
+        joystick = scene.virtual_joystick
+
+        # O direcional é o PRIMEIRO a ver o toque: a zona dele é a maior da tela
+        # e fica no canto onde o polegar mora, então qualquer outro alvo testado
+        # antes roubaria gestos de pilotagem.
+        if joystick is not None and joystick.press(
+            pos,
+            joystick_center(ui_scale),
+            joystick_activation_radius(ui_scale),
+            finger=finger,
+        ):
+            return True
+
+        if joystick is not None and rotate_button_rect(ui_scale).collidepoint(pos):
+            scene.ship.pointer_captured = True
+            if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
+                scene.ship.cycle_facing()
+            return True
+
+        if pause_button_rect(ui_scale, joystick=joystick is not None).collidepoint(pos):
+            scene.ship.pointer_captured = True
+            self._open_pause()
+            return True
+
+        # Mesma lista e mesma ordem que o renderer percorre (`upgrade_slots` é a
+        # fonte única, lida pelos dois lados) — é o que garante que o slot
+        # desenhado num lugar seja o slot acionado ali.
+        ativos = [i for i, upg in enumerate(scene.upgrade_slots) if upg is not None]
+        if not ativos:
+            return False
+        layout = upgrade_hud_layout(len(ativos), ui_scale, touch_mode=True)
+        for display_index, rect in enumerate(layout.slots):
+            if rect.collidepoint(pos):
+                scene.ship.pointer_captured = True
+                scene.activate_upgrade_slot(ativos[display_index])
+                return True
+        return False
+
     def _handle_mousebuttondown(self, event: pygame.event.Event) -> None:
         scene = self.scene
+        if event.button == 1 and self._touch_hud_hit(event.pos):
+            return
         if event.button == 1:
             if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 if (
@@ -147,6 +275,19 @@ class GameplayInputHandler:
 
     def _handle_mousebuttonup(self, event: pygame.event.Event) -> None:
         scene = self.scene
+        # Fim do gesto: a pilotagem volta a seguir o ponteiro. Solto aqui e não
+        # no toque seguinte porque um dedo que arrasta a partir do botão nunca
+        # geraria um segundo MOUSEBUTTONDOWN para destravar — a nave ficaria
+        # congelada até o próximo toque, sem nada na tela explicando.
+        if event.button == 1:
+            joystick = scene.virtual_joystick
+            if joystick is not None and joystick.active:
+                # Solta o direcional: `vector()` zera e a nave para.
+                joystick.release()
+                return
+            if scene.ship.pointer_captured:
+                scene.ship.pointer_captured = False
+                return
         # Caçador/Magneto: soltar botão esquerdo ou direito dispara o charge.
         if (
             event.button in (1, 3)

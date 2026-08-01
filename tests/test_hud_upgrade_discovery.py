@@ -30,6 +30,8 @@ class _StubFrame:
         self.upgrade_select_mode = False
         self.upgrade_select_index = 0
         self.upgrade_denied_timers = {}
+        # Desktop: fileira embaixo no centro (o modo toque vira coluna à direita).
+        self.touch_mode = False
         self.score = score
         self.total_enemies_destroyed = kills
         self.score_pop = 0.0

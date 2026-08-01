@@ -150,6 +150,11 @@ class Ship:
         self.mouse_control = mouse_control
         self.auto_fire = auto_fire
         self.auto_fire_timer = 0.0
+        # Gesto de toque capturado por um botão do HUD: enquanto True, a
+        # pilotagem IGNORA o ponteiro. Sem isto, tocar num slot de upgrade
+        # puxaria a nave para cima do botão — no celular o mesmo dedo pilota e
+        # toca. Escrito pelo `GameplayInputHandler`, zerado no soltar do dedo.
+        self.pointer_captured = False
         # Nave voa acima do ponteiro (dedo). Só tem efeito com `mouse_control`,
         # que é o único caminho que lê a posição do ponteiro — ver
         # `ShipMovement` e `TOUCH_OFFSET_Y`. Escrito pela cena a partir das

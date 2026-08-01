@@ -139,21 +139,101 @@ class TestEscopo:
         )
 
 
+class TestDefaultsDoWeb:
+    """No web os QUATRO controles de celular nascem ligados.
+
+    O build web E o build do celular, e la nenhum deles e opcional: sem
+    ponteiro ou joystick a nave nao anda (teclado nao existe), sem tiro
+    automatico um botao apertado ocuparia o unico ponteiro — o mesmo que
+    pilota —, e sem o modo toque os upgrades e a pausa ficam inalcancaveis.
+
+    Nascer desligado significava abrir Configuracoes ANTES de conseguir jogar.
+    Quem chega por um link nao faz isso: fecha a aba.
+
+    Como preferencia nao persiste no web (`save` e no-op em emscripten), estes
+    defaults sao o que o jogador recebe em TODA sessao.
+    """
+
+    # `mouse_control` NAO entra: no web quem move a nave e o joystick, e ele
+    # nasce desmarcado de proposito (ver `test_mouse_control_sai_do_padrao`).
+    CONTROLES = ("auto_fire", "touch_mode", "virtual_joystick")
+
+    @staticmethod
+    def _prefs(tmp_path: Path, platform: str) -> UserPreferences:
+        # `UserPreferences` le `sys.platform` dentro do `__init__`.
+        with patch("sys.platform", platform):
+            return UserPreferences(tmp_path / f"{platform}.json")
+
+    @pytest.mark.parametrize("campo", CONTROLES)
+    def test_no_web_nascem_ligados(self, tmp_path: Path, campo):
+        assert getattr(self._prefs(tmp_path, "emscripten"), campo) is True
+
+    @pytest.mark.parametrize("campo", CONTROLES)
+    def test_no_desktop_nascem_desligados(self, tmp_path: Path, campo):
+        """Teclado e o controle padrao do desktop — ligar mouse, tiro
+        automatico e joystick de tela por conta propria mudaria o jogo debaixo
+        de quem ja joga."""
+        assert getattr(self._prefs(tmp_path, "win32"), campo) is False
+
+    @pytest.mark.parametrize("campo", CONTROLES)
+    def test_restaurar_padroes_no_web_nao_trava_o_jogador(self, tmp_path: Path, campo):
+        """A armadilha: um reset que desligasse tudo deixaria o jogador de
+        celular sem mover a nave, sem teclado para desfazer e sem persistencia
+        para o proximo boot corrigir — dentro da propria tela de opcoes."""
+        prefs = self._prefs(tmp_path, "emscripten")
+        setattr(prefs, campo, False)
+
+        with patch("sys.platform", "emscripten"):
+            prefs.reset()
+
+        assert getattr(prefs, campo) is True
+
+    def test_mouse_control_sai_do_padrao_do_web(self, tmp_path: Path):
+        """Quem move a nave no celular e o joystick.
+
+        Os dois marcados era redundancia com um anulando o outro: a
+        `PlayingScene` desliga o `mouse_control` enquanto o joystick existe,
+        entao a caixa aparecia marcada descrevendo algo que nao acontecia.
+        """
+        assert self._prefs(tmp_path, "emscripten").mouse_control is False
+
+    def test_mouse_control_continua_disponivel(self, tmp_path: Path):
+        """Sai do PADRAO, nao do jogo: quem desmarcar o joystick marca este e
+        recupera a mira por ponteiro."""
+        prefs = self._prefs(tmp_path, "emscripten")
+
+        prefs.virtual_joystick = False
+        prefs.mouse_control = True
+
+        assert prefs.mouse_control is True
+
+    def test_continuam_ajustaveis_no_web(self, tmp_path: Path):
+        """Sao DEFAULT, nao trava: os toggles seguem la para quem abrir a build
+        web num navegador de PC e preferir mouse e gatilho."""
+        prefs = self._prefs(tmp_path, "emscripten")
+
+        prefs.auto_fire = False
+        prefs.virtual_joystick = False
+
+        assert prefs.auto_fire is False
+        assert prefs.virtual_joystick is False
+
+
 class TestPreferencia:
     def test_sobrevive_ao_round_trip(self, tmp_path: Path):
         prefs = UserPreferences(tmp_path / "prefs.json")
-        assert prefs.touch_offset is False
+        assert prefs.touch_mode is False
 
-        prefs.touch_offset = True
+        prefs.touch_mode = True
         prefs.save()
 
-        assert UserPreferences(tmp_path / "prefs.json").touch_offset is True
+        assert UserPreferences(tmp_path / "prefs.json").touch_mode is True
 
     def test_reset_volta_ao_default(self, tmp_path: Path):
         prefs = UserPreferences(tmp_path / "prefs.json")
-        prefs.touch_offset = True
+        prefs.touch_mode = True
         prefs.reset()
-        assert prefs.touch_offset is False
+        assert prefs.touch_mode is False
 
     def test_a_tela_de_configuracoes_expoe_o_toggle(self):
         """Sem entrada na tela, a preferência existe e ninguém consegue ligar —
@@ -161,9 +241,9 @@ class TestPreferencia:
         from game.core.i18n import t
         from game.scenes.settings import SettingsScene
 
-        assert t("settings.toggle.touch_offset") != "settings.toggle.touch_offset"
+        assert t("settings.toggle.touch_mode") != "settings.toggle.touch_mode"
         # O toggle tem que estar na ORDEM de layout, senão nasce sem rect.
         fonte = Path(SettingsScene.__module__.replace(".", "/") + ".py").read_text(
             encoding="utf-8"
         )
-        assert '"touch_offset",' in fonte
+        assert '"touch_mode",' in fonte

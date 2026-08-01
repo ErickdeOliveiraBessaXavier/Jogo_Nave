@@ -64,6 +64,7 @@ from ..entities.effects.floating_score import score_color
 from ..entities.player.mini_ship import MiniShip
 from ..entities.player.revival_beacon import RevivalBeacon
 from ..entities.player.ship import Ship
+from ..systems.virtual_joystick import VirtualJoystick
 from ..events import game_events as events
 from ..render.game_renderer import GameRenderer
 from ..render.boss_backdrop_dim import BossBackdropDim
@@ -251,12 +252,20 @@ class PlayingScene(Scene):
             target_x = ship_x
             target_y = float(Config.SCREEN_HEIGHT - _TOP_DOWN_SHIP_TARGET_Y_OFFSET)
 
+        # None quando a preferencia esta desligada: o gate do modo inteiro e a
+        # ausencia do objeto, entao nenhum caminho precisa reconsultar a
+        # preferencia depois (input, render e movimento so perguntam "existe?").
+        self.virtual_joystick = (
+            VirtualJoystick() if self.app.preferences.virtual_joystick else None
+        )
+
         ship_obj = Ship(
             ship_x,
             ship_y,
-            mouse_control=self.app.preferences.mouse_control,
+            mouse_control=self.app.preferences.mouse_control
+            and self.virtual_joystick is None,
             auto_fire=self.app.preferences.auto_fire,
-            touch_offset=self.app.preferences.touch_offset,
+            touch_offset=self.app.preferences.touch_mode,
             profile=self.player_profile.get_selected_ship_profile(),
         )
 
@@ -1472,6 +1481,15 @@ class PlayingScene(Scene):
                 gamepad_vec = self.app.input.gamepad_movement_vector_for(
                     self.app.gamepad, slot=slot_idx
                 )
+                # Joystick da tela: mesmo canal do analogico, so para P1 (com um
+                # ponteiro so nao existe direcional para o P2). Nao sobrescreve um
+                # gamepad fisico em uso — quem tem controle nao quer o da tela.
+                if (
+                    self.virtual_joystick is not None
+                    and ship.player_index == 0
+                    and gamepad_vec == (0.0, 0.0)
+                ):
+                    gamepad_vec = self.virtual_joystick.vector()
                 ship.move(
                     held,
                     dt,
@@ -2163,6 +2181,16 @@ class PlayingScene(Scene):
             upgrade_select_index=self.upgrade_selector.index,
             upgrade_slots=self.upgrade_slots,
             upgrade_keybindings=list(keybindings),
+            touch_mode=self.app.preferences.touch_mode,
+            joystick_enabled=self.virtual_joystick is not None,
+            joystick_active=(
+                self.virtual_joystick is not None and self.virtual_joystick.active
+            ),
+            joystick_offset=(
+                self.virtual_joystick.offset()
+                if self.virtual_joystick is not None
+                else (0.0, 0.0)
+            ),
             upgrade_denied_timers=dict(self._upgrade_denied_timers),
             world_transition_cutscene_active=(
                 self.transitions.phase == TransitionPhase.CUTSCENE_EXIT

@@ -25,7 +25,18 @@ from ..core.upgrades import get_upgrade_icon
 if TYPE_CHECKING:
     from ..entities.player.ship import Ship
     from ..systems.entity_manager import EntityManager
-    from .render_frame import RenderFrame
+from .hud_layout import (
+    container_corners,
+    joystick_center,
+    joystick_knob_radius,
+    joystick_radius,
+    panel_radius,
+    pause_button_rect,
+    rotate_button_rect,
+    slot_radius,
+    upgrade_hud_layout,
+)
+from .render_frame import RenderFrame
 
 
 class PowerupUiData(TypedDict):
@@ -753,6 +764,104 @@ class GameRenderer:
         # 6. Combo (Bottom Right)
         self._render_combo_hud(frame.ship, surface)
 
+        # 7. Botão de pausa — SÓ no modo toque. No desktop a tecla P já resolve,
+        # e um botão permanente seria mobília numa tela que precisa de atenção
+        # para o combate. No celular não existe tecla P.
+        if frame.touch_mode:
+            self._render_touch_pause_button(surface, frame.joystick_enabled)
+        if frame.joystick_enabled:
+            self._render_virtual_joystick(frame, surface)
+            self._render_rotate_button(surface)
+
+    def _render_virtual_joystick(
+        self, frame: RenderFrame, surface: pygame.Surface
+    ) -> None:
+        """Disco-base + knob. Translúcido parado, aceso enquanto o polegar está.
+
+        Desenhado com alpha baixo de propósito: ele ocupa um canto da arena a
+        partida inteira, e um direcional opaco esconderia inimigos entrando pela
+        borda. O realce ao tocar é o que confirma "peguei o direcional" sem
+        precisar olhar para ele.
+        """
+        cx, cy = joystick_center(self.ui_scale)
+        r = joystick_radius(self.ui_scale)
+        kr = joystick_knob_radius(self.ui_scale)
+        ativo = frame.joystick_active
+
+        base = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(base, (0, 0, 0, 90 if ativo else 60), (r, r), r)
+        pygame.draw.circle(
+            base, (*colors.WHITE, 130 if ativo else 70), (r, r), r, max(2, self._s(2))
+        )
+        surface.blit(base, (cx - r, cy - r))
+
+        ox, oy = frame.joystick_offset
+        knob = pygame.Surface((kr * 2, kr * 2), pygame.SRCALPHA)
+        pygame.draw.circle(knob, (*colors.WHITE, 170 if ativo else 100), (kr, kr), kr)
+        pygame.draw.circle(
+            knob, (*colors.CYAN, 220 if ativo else 120), (kr, kr), kr, max(2, self._s(2))
+        )
+        surface.blit(knob, (int(cx + ox) - kr, int(cy + oy) - kr))
+
+    def _render_rotate_button(self, surface: pygame.Surface) -> None:
+        """Seta circular — o `Ctrl` do teclado, que no celular não existe.
+
+        Sem o botão, girar a nave fica INALCANÇÁVEL no toque: os outros dois
+        caminhos são tecla e botão do meio do mouse.
+        """
+        rect = rotate_button_rect(self.ui_scale)
+        panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+        radius = panel_radius(self.ui_scale)
+        pygame.draw.rect(panel, (0, 0, 0, 150), panel.get_rect(), border_radius=radius)
+        pygame.draw.rect(
+            panel, (*colors.WHITE, 120), panel.get_rect(), 2, border_radius=radius
+        )
+
+        cx, cy = rect.width // 2, rect.height // 2
+        r = int(min(rect.width, rect.height) * 0.28)
+        # Arco de ~270°: a abertura é o que faz o círculo ler como "girar" em vez
+        # de "recarregar" ou "alvo".
+        arco = pygame.Rect(cx - r, cy - r, r * 2, r * 2)
+        pygame.draw.arc(panel, (*colors.CYAN, 230), arco, -0.4, 4.3, max(2, self._s(3)))
+        ponta = [
+            (cx + r, cy - int(r * 0.55)),
+            (cx + r + int(r * 0.45), cy + int(r * 0.05)),
+            (cx + r - int(r * 0.45), cy + int(r * 0.05)),
+        ]
+        pygame.draw.polygon(panel, (*colors.CYAN, 230), ponta)
+        surface.blit(panel, rect.topleft)
+
+    def _render_touch_pause_button(
+        self, surface: pygame.Surface, joystick: bool = False
+    ) -> None:
+        """Duas barras verticais num quadrado arredondado — o glifo universal.
+
+        Sem texto de propósito: rótulo exigiria tradução, encolheria a fonte
+        para caber, e "pausa" é um dos pouquíssimos ícones que todo mundo lê sem
+        legenda.
+        """
+        rect = pause_button_rect(self.ui_scale, joystick=joystick)
+        panel = pygame.Surface(rect.size, pygame.SRCALPHA)
+        radius = panel_radius(self.ui_scale)
+        pygame.draw.rect(panel, (0, 0, 0, 150), panel.get_rect(), border_radius=radius)
+        pygame.draw.rect(
+            panel, (*colors.WHITE, 120), panel.get_rect(), 2, border_radius=radius
+        )
+
+        bar_w = max(2, self._s(7))
+        bar_h = max(4, self._s(24))
+        gap = max(2, self._s(7))
+        top = (rect.height - bar_h) // 2
+        left = (rect.width - (bar_w * 2 + gap)) // 2
+        for i in range(2):
+            pygame.draw.rect(
+                panel,
+                (*colors.WHITE, 210),
+                (left + i * (bar_w + gap), top, bar_w, bar_h),
+                border_radius=max(1, self._s(2)),
+            )
+        surface.blit(panel, rect.topleft)
+
     def _render_atmosphere_hud(
         self, frame: RenderFrame, surface: pygame.Surface
     ) -> None:
@@ -1326,12 +1435,12 @@ class GameRenderer:
             for i, kind in enumerate(slots):
                 x = cur_x + i * (slot_size + gap)
                 slot_surface = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
-                slot_radius = self._s(8)
+                slot_radius_px = slot_radius(self.ui_scale)
                 pygame.draw.rect(
                     slot_surface,
                     (20, 20, 30, 200),
                     (0, 0, slot_size, slot_size),
-                    border_radius=slot_radius,
+                    border_radius=slot_radius_px,
                 )
 
                 border_color = (
@@ -1342,7 +1451,7 @@ class GameRenderer:
                     border_color,
                     (0, 0, slot_size, slot_size),
                     2,
-                    border_radius=slot_radius,
+                    border_radius=slot_radius_px,
                 )
 
                 key_label = hint_keys[i] if i < len(hint_keys) else str(i + 1)
@@ -1463,18 +1572,9 @@ class GameRenderer:
             return
 
         font_small = get_font(max(8, int(12 * self.ui_scale)))
-        slot_w, slot_h = self._s(50), self._s(50)
-        gap = self._s(10)
-        pad_x, pad_y = self._s(15), self._s(10)
-
-        container_w = n * slot_w + (n - 1) * gap + (pad_x * 2)
-        container_h = slot_h + (pad_y * 2)
-        container_rect = pygame.Rect(
-            (Config.SCREEN_WIDTH - container_w) // 2,
-            Config.SCREEN_HEIGHT - container_h,
-            container_w,
-            container_h,
-        )
+        layout = upgrade_hud_layout(n, self.ui_scale, frame.touch_mode)
+        container_rect = layout.container
+        container_w, container_h = container_rect.width, container_rect.height
 
         # Fundo mais discreto que o da fileira cheia (alpha 160): o estado vazio
         # não deve competir com a leitura do combate.
@@ -1483,30 +1583,28 @@ class GameRenderer:
             overlay,
             (0, 0, 0, 90),
             (0, 0, container_w, container_h),
-            border_top_left_radius=self._s(15),
-            border_top_right_radius=self._s(15),
+            **container_corners(self.ui_scale, floating=frame.touch_mode),
         )
         surface.blit(overlay, container_rect.topleft)
 
-        start_x = container_rect.left + pad_x
-        slot_radius = self._s(8)
-        for display_index in range(n):
-            slot_x = start_x + display_index * (slot_w + gap)
-            slot_y = container_rect.top + pad_y
+        slot_radius_px = slot_radius(self.ui_scale)
+        for display_index, slot_rect in enumerate(layout.slots):
+            slot_x, slot_y = slot_rect.topleft
+            slot_w, slot_h = slot_rect.width, slot_rect.height
 
             slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
             pygame.draw.rect(
                 slot_surface,
                 (30, 30, 30, 110),
                 (0, 0, slot_w, slot_h),
-                border_radius=slot_radius,
+                border_radius=slot_radius_px,
             )
             pygame.draw.rect(
                 slot_surface,
                 (*colors.WHITE, 70),
                 (0, 0, slot_w, slot_h),
                 2,
-                border_radius=slot_radius,
+                border_radius=slot_radius_px,
             )
 
             try:
@@ -1548,21 +1646,9 @@ class GameRenderer:
         # Contador do cooldown: precisa caber "200" (o maior base_cooldown) na
         # largura do slot, daí ser menor que a fonte do ícone.
         font_cd = get_font(max(8, int(16 * self.ui_scale)))
-        slot_w, slot_h = self._s(50), self._s(50)
-        gap = self._s(10)
-        pad_x, pad_y = self._s(15), self._s(10)
-
-        # Calcular dimensões do container
-        n = len(active_slots)
-        container_w = n * slot_w + (n - 1) * gap + (pad_x * 2)
-        container_h = slot_h + (pad_y * 2)
-
-        container_rect = pygame.Rect(
-            (Config.SCREEN_WIDTH - container_w) // 2,
-            Config.SCREEN_HEIGHT - container_h,
-            container_w,
-            container_h,
-        )
+        layout = upgrade_hud_layout(len(active_slots), self.ui_scale, frame.touch_mode)
+        container_rect = layout.container
+        container_w, container_h = container_rect.width, container_rect.height
 
         # Desenhar container (Estilo similar à barra de score)
         overlay = pygame.Surface((container_w, container_h), pygame.SRCALPHA)
@@ -1570,16 +1656,14 @@ class GameRenderer:
             overlay,
             (0, 0, 0, 160),
             (0, 0, container_w, container_h),
-            border_top_left_radius=self._s(15),
-            border_top_right_radius=self._s(15),
+            **container_corners(self.ui_scale, floating=frame.touch_mode),
         )
         surface.blit(overlay, container_rect.topleft)
 
-        start_x = container_rect.left + pad_x
-
         for display_index, (i, upg) in enumerate(active_slots):
-            slot_x = start_x + display_index * (slot_w + gap)
-            slot_y = container_rect.top + pad_y
+            slot_rect = layout.slots[display_index]
+            slot_x, slot_y = slot_rect.topleft
+            slot_w, slot_h = slot_rect.width, slot_rect.height
 
             # Tremor de uso negado: oscilação horizontal que decai até parar.
             # Horizontal e não vertical porque o slot é uma peça de uma fileira
@@ -1596,19 +1680,19 @@ class GameRenderer:
                 )
 
             slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
-            slot_radius = self._s(8)
+            slot_radius_px = slot_radius(self.ui_scale)
             pygame.draw.rect(
                 slot_surface,
                 (30, 30, 30, 180),
                 (0, 0, slot_w, slot_h),
-                border_radius=slot_radius,
+                border_radius=slot_radius_px,
             )
             pygame.draw.rect(
                 slot_surface,
                 (*colors.WHITE, 200),
                 (0, 0, slot_w, slot_h),
                 2,
-                border_radius=slot_radius,
+                border_radius=slot_radius_px,
             )
 
             try:

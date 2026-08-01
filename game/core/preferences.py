@@ -47,16 +47,50 @@ class UserPreferences:
         self.shot_volume: float = VOLUME_CONFIG["shots"]
 
         # Controles
+        #
+        # No WEB os QUATRO nascem LIGADOS, porque o build web É o build do
+        # celular e lá nenhum deles é opcional:
+        #   - `mouse_control`/`virtual_joystick`: sem um dos dois a nave não sai
+        #     do lugar — teclado não existe;
+        #   - `auto_fire`: manter um botão apertado ocuparia o único ponteiro,
+        #     que é o mesmo que pilota;
+        #   - `touch_mode`: alvos tocáveis no HUD (coluna de upgrades, pausa,
+        #     girar). Sem ele, upgrades e pausa ficam inalcançáveis.
+        #
+        # Nascer desligado significava abrir Configurações ANTES de conseguir
+        # jogar — e quem chega por um link não faz isso, fecha a aba.
+        #
+        # Como preferência não persiste no web (`save` é no-op em emscripten,
+        # MEMFS volátil), "padrão" e "sempre ligado" são a mesma coisa na
+        # prática: toda sessão recomeça daqui. Continuam sendo DEFAULT e não
+        # trava — os toggles seguem lá para quem abrir a build web num
+        # navegador de PC e preferir mouse e gatilho.
+        _web = _sys.platform == "emscripten"
+        # `mouse_control` fica DESMARCADO no web: quem move a nave no celular e o
+        # joystick. Os dois marcados era redundancia com um anulando o outro — a
+        # `PlayingScene` desliga o `mouse_control` enquanto o joystick existe,
+        # entao a caixa aparecia marcada descrevendo algo que nao acontecia.
+        #
+        # Continua na tela e continua funcionando: quem desmarcar o joystick
+        # marca este e recupera a mira por ponteiro. O que ele nao e mais e
+        # reserva automatica — desligar o joystick deixa a nave parada ate a
+        # troca ser feita, e isso e explicito em vez de silencioso.
         self.mouse_control: bool = False
-        self.auto_fire: bool = False
-        # Toque (celular): a nave voa ACIMA do ponteiro em vez de embaixo dele.
-        # No mouse o cursor é um pixel e some sob a nave; o dedo é uma mancha de
-        # ~1cm que cobre a nave inteira — o jogador pilota às cegas exatamente o
-        # que precisa ver. Deslocar o alvo devolve a nave para cima do polegar.
-        # Desligado por padrão: no desktop não há o que compensar, e o web roda
-        # nos dois (navegador de PC com mouse e celular com dedo), então quem
-        # decide é o jogador, não o `sys.platform`.
-        self.touch_offset: bool = False
+        self.auto_fire: bool = _web
+        # MODO TOQUE (celular): a nave voa ACIMA do ponteiro (o dedo é uma
+        # mancha de ~1cm e cobre a nave inteira) e o HUD ganha alvos tocáveis,
+        # saindo de baixo do polegar que pilota. É um interruptor só porque
+        # para o jogador é uma decisão só — "estou no celular".
+        self.touch_mode: bool = _web
+        # JOYSTICK VIRTUAL: direcional analógico no canto inferior esquerdo, no
+        # lugar da mira absoluta do `mouse_control`.
+        #
+        # Resolve pela raiz o que o offset do modo toque remenda: com o polegar
+        # ancorado num canto, a nave nunca fica debaixo da mão. Por isso os dois
+        # são mutuamente exclusivos — ligado o joystick, o offset nem chega a
+        # rodar (ele só existe no caminho do `mouse_control`, que o joystick
+        # desliga em `PlayingScene`).
+        self.virtual_joystick: bool = _web
         self.show_controls_modal: bool = True
         # False até o modal de controles fechar pela 1ª vez. Enquanto False, o
         # modal roda em modo "onboarding": esconde o checkbox "não mostrar mais"
@@ -137,7 +171,10 @@ class UserPreferences:
                 # Controles
                 self.mouse_control = data.get("mouse_control", self.mouse_control)
                 self.auto_fire = data.get("auto_fire", self.auto_fire)
-                self.touch_offset = data.get("touch_offset", self.touch_offset)
+                self.touch_mode = data.get("touch_mode", self.touch_mode)
+                self.virtual_joystick = data.get(
+                    "virtual_joystick", self.virtual_joystick
+                )
                 self.show_controls_modal = data.get(
                     "show_controls_modal", self.show_controls_modal
                 )
@@ -179,7 +216,8 @@ class UserPreferences:
                 "shot_volume": self.shot_volume,
                 "mouse_control": self.mouse_control,
                 "auto_fire": self.auto_fire,
-                "touch_offset": self.touch_offset,
+                "touch_mode": self.touch_mode,
+                "virtual_joystick": self.virtual_joystick,
                 "show_controls_modal": self.show_controls_modal,
                 "controls_modal_seen": self.controls_modal_seen,
                 "gamepad_enabled": self.gamepad_enabled,
@@ -206,9 +244,15 @@ class UserPreferences:
         self.music_volume = VOLUME_CONFIG["music"]
         self.sfx_volume = VOLUME_CONFIG["sfx"]
         self.shot_volume = VOLUME_CONFIG["shots"]
+        # Mesmos defaults do `__init__`, e não `False` cru: no web um "restaurar
+        # padrões" que desligasse os dois deixaria o jogador de celular sem
+        # conseguir mover a nave, sem teclado para desfazer e sem persistência
+        # para o próximo boot corrigir — dentro da própria tela de opções.
+        _web = _sys.platform == "emscripten"
         self.mouse_control = False
-        self.auto_fire = False
-        self.touch_offset = False
+        self.auto_fire = _web
+        self.touch_mode = _web
+        self.virtual_joystick = _web
         self.show_controls_modal = True
         self.controls_modal_seen = False
         self.gamepad_enabled = False

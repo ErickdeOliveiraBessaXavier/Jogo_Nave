@@ -159,7 +159,7 @@ class ShipMovement:
             mag = move_vec.length()
             if mag > 1.0:
                 move_vec /= mag
-        elif ship.mouse_control:
+        elif ship.mouse_control and not ship.pointer_captured:
             # Spring-follow: velocidade proporcional à distância ao cursor,
             # escalada por agility_mult do profile. Sem input lag.
             mouse_x, mouse_y = pygame.mouse.get_pos()

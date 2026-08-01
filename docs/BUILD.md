@@ -38,6 +38,13 @@ No **PowerShell**, na pasta do projeto:
 ➜ reempacota o bundle WASM (pygbag) e publica o canal **html5** (jogável no
 navegador) usando a **mesma** versão dos passos anteriores. **Não** incrementa.
 
+Se o áudio web ainda não tiver sido reencodado, use o modo de contingência:
+```powershell
+.\publicar_web.ps1 -AceitarMudos
+```
+Isso publica com os SFX `.mp3` ainda mudos no navegador; o caminho correto é
+gerar o áudio leve antes com `.\reencode_audio_web.ps1`.
+
 > **Pré-requisito (uma vez):** o áudio web precisa existir em `web\assets\audio`.
 > Se faltar, o script aborta — rode antes `.\reencode_audio_web.ps1`.
 

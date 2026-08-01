@@ -43,18 +43,22 @@ $arquivos = Get-ChildItem $Origem -Recurse -File |
 $antes = 0.0; $depois = 0.0; $n = 0
 foreach ($f in $arquivos) {
     $rel = $f.FullName.Substring($srcRoot.Length).TrimStart('\')
-    # Musica (pasta audio) -> .ogg REAL: mixer.music detecta por extensao no web.
-    # SFX (pasta sounds) -> mantem a extensao original (.mp3/.wav): mixer.Sound
-    # detecta o OGG pelo conteudo (build usa --disable-sound-format-error).
-    if ($rel -like 'audio\*') {
-        $outRel = [System.IO.Path]::ChangeExtension($rel, '.ogg')
-    } else {
-        $outRel = $rel
-    }
+    # Tudo vira .ogg de verdade (extensao inclusive). Musica PRECISA disso:
+    # mixer.music detecta o formato pela EXTENSAO no web, e um .mp3 com conteudo
+    # OGG dentro nao toca. Para os SFX tanto faz (mixer.Sound detecta pelo
+    # conteudo), e `discover_sfx` aceita .ogg - a chave e o nome sem extensao,
+    # que nao muda.
+    #
+    # O ramo `else` que preservava a extensao servia ao layout ANTIGO, com SFX em
+    # game\assets\sounds\. Hoje eles vivem em game\assets\audio\sfx\ (ver
+    # AUDIO_SFX_ROOT), entao caem todos no `audio\*` e o outro caminho era codigo
+    # morto - mas com um comentario que descrevia um layout inexistente, que foi
+    # o que sustentou a pasta web\assets\sounds\ obsoleta por tanto tempo.
+    $outRel = [System.IO.Path]::ChangeExtension($rel, '.ogg')
     $out = Join-Path (Join-Path $PSScriptRoot $Destino) $outRel
     New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
 
-    # -f ogg força o container OGG mesmo com a extensão .mp3/.wav.
+    # -f ogg forca o container OGG mesmo com a extensao .mp3/.wav.
     # -ar 44100: libvorbis nao inicia o encoder em sample-rates muito baixos
     #   (ex.: SFX 8-bit a 5512 Hz -> "encoder setup failed"); reamostrar p/ 44100
     #   resolve E casa com o mixer web (sound.py fixa 44100 p/ evitar resample).

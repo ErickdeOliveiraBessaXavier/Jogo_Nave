@@ -134,9 +134,13 @@ PT: dict[str, str] = {
     "settings.toggle.p1_keyboard": "P1 no teclado / P2 no controle",
     "settings.toggle.mouse": "Controle por Mouse",
     "settings.toggle.auto_fire": "Tiro Automático",
-    # Celular: a nave voa acima do dedo em vez de embaixo dele.
-    "settings.toggle.touch_offset": "Nave acima do dedo (toque)",
+    # Celular: nave acima do dedo + HUD tocável (ver UserPreferences.touch_mode).
+    "settings.toggle.touch_mode": "Modo Toque (celular)",
+    "settings.toggle.joystick": "Joystick na tela (toque)",
     "settings.toggle.gamepad": "Controle Xbox",
+
+    # ── Web / celular ────────────────────────────────────────────────────────
+    "web.rotate_device": "Gire o aparelho para jogar",
     "settings.status.disconnected": " (desconectado)",
     "settings.status.two_pads": " (2 controles — P1 + P2)",
     "settings.status.one_pad": " (1 controle conectado)",
