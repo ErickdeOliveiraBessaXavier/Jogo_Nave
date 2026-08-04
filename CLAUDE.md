@@ -290,18 +290,45 @@ deve segui-los; código existente que os viola é candidato a revisão.
   disparo só acontece em fronteira de frame, então o timer não zera exato —
   estoura e fica negativo. Reatribuir o intervalo **descarta essa sobra**, o
   período real vira um número inteiro de frames e o evento rende **menos** que o
-  configurado. Medido: Estilete a 8,5 tiros/s em vez de 9,35; rajada do
-  CyberTank 25% lenta a 30fps. O erro é invisível em teste manual porque é
-  pequeno e sistemático.
+  configurado. Medido: Estilete a 8,5 tiros/s em vez de 9,35 (quando ele ainda
+  era `fire_rate_mult=1.87`; hoje é 1.60); rajada do CyberTank 25% lenta a
+  30fps. O erro é invisível em teste manual porque é pequeno e sistemático.
 - **Armas** usam `FireTimer` (`core/fire_timer.py`): `advance(dt, intervalo)` +
   `while consume(intervalo)`. O `while` (não `if`) emite todos os tiros que
   couberem no passo — é o que evita perder disparos quando o intervalo é menor
   que o `dt`.
 - **Compensação sub-frame:** o `overshoot` do `FireTimer` é há quanto tempo o
-  disparo já era devido; aplicá-lo como deslocamento inicial do projétil
-  (`bullet.x += bullet.vx * overshoot`) torna o espaçamento no ar uniforme.
-  É esse espaçamento que o olho lê como ritmo — ninguém vê o instante da
-  emissão, e sim a fila de projéteis na tela.
+  disparo já era devido; aplicá-lo como deslocamento inicial do projétil torna o
+  espaçamento no ar uniforme. É esse espaçamento que o olho lê como ritmo —
+  ninguém vê o instante da emissão, e sim a fila de projéteis na tela.
+  A conta usa **velocidade relativa** (`emission_offset`, em `core/fire_timer.py`):
+  `(v_projétil − v_emissor) × overshoot`. O emissor também estava em outro lugar
+  quando o tiro era devido; compensar só o projétil corrige o eixo de voo e deixa
+  o eixo do movimento do emissor com o mesmo erro de quantização — o defeito
+  original, apenas girado 90°. Medido no Estilete em strafe: 4,2% de variação de
+  espaçamento a 60fps e 8,4% a 30fps, contra **0,00px** com velocidade relativa.
+  Com emissor parado a fórmula degenera no caso antigo, então não há caso a
+  distinguir.
+- **Um relógio por cadência.** Nunca empilhe um segundo gate periódico sobre o
+  `FireTimer`. **Dois gates independentes não se somam — eles batem:** o evento
+  só ocorre quando as duas janelas coincidem no mesmo frame, e a cadência real
+  vira o batimento entre elas, não a configurada. Medido: o auto-fire mantinha
+  um relógio próprio (janela de 1 frame a cada 0,1s, com o `timer = 0` proibido
+  acima) e cobrava de **todas** as naves — Estilete 8,00/s configurado rendendo
+  5,71/s, Padrão 5,00 → 4,29, Aríete/Caçador 3,75 → 2,86. Pior: só o Estilete
+  ficava **irregular** (vãos alternando 7 e 14 frames, pares colados com vão
+  dobrado), porque a razão entre a cadência dele e a janela era a única do
+  elenco a cair numa alternância 2:1. Nas outras o batimento só cobrava
+  cadência sem quebrar o ritmo — por isso passou anos despercebido e o sintoma
+  parecia ser "da nave". Gatilho (auto-fire, botão segurado, IA) diz **se** quer
+  atirar; o `FireTimer` diz **quando**.
+- **Gastar o timer sem ler o `overshoot` é meio-caminho, e não avisa.** Dá para
+  chamar `consume()` e descartar o valor — foi o que o `fire_berserk` fez por
+  todo o tempo em que existiu, deixando a Estrela Espiral sem compensação
+  nenhuma enquanto o `fire()` ao lado compensava. Varrido por
+  `test_conventions.test_quem_consome_firetimer_compensa_a_emissao`; exceção
+  legítima entra na allowlist do teste com o motivo (hoje: `Wingman` e
+  `MiniShip`, que miram alvo móvel e não formam fila visível de projéteis).
 - **Eventos periódicos simples** de entidade (rajada, pulso de área) usam
   `carry_interval(restante, intervalo)` — mesma matemática, sem o aparato de
   arma.
@@ -438,6 +465,8 @@ muda o som — reaplique aos objetos carregados.**
 - [ ] Classe grande decomposta por composição, fachada preservada
 - [ ] Imports no topo; local só para ciclo real
 - [ ] Cadência por `FireTimer`/`carry_interval`; nenhum `timer = INTERVALO`
+- [ ] Um só relógio por cadência — nenhum gate periódico empilhado sobre o `FireTimer`
+- [ ] Quem chama `consume()` aplica `emission_offset` (velocidade **relativa**)
 - [ ] Persistência com escrita atômica (`.tmp` + `os.replace`), nunca sobre o arquivo real
 - [ ] UI (fontes/caixas/offsets) escalada por `ui_scale`; validada fora de 720p
 - [ ] Navegação por `app.go_to`/`go_back`/`open_overlay`; nenhuma cena desenha fade de troca

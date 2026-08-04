@@ -149,7 +149,6 @@ class Ship:
         # Configurações de controle
         self.mouse_control = mouse_control
         self.auto_fire = auto_fire
-        self.auto_fire_timer = 0.0
         # Gesto de toque capturado por um botão do HUD: enquanto True, a
         # pilotagem IGNORA o ponteiro. Sem isto, tocar num slot de upgrade
         # puxaria a nave para cima do botão — no celular o mesmo dedo pilota e
@@ -895,13 +894,6 @@ class Ship:
         self._powerups.update_orbital_lasers(dt, entity_manager)
         self._update_particles(dt, is_side_scroll)
 
-        # Atualizar timer de tiro automático
-        if self.auto_fire:
-            self.auto_fire_timer += dt
-            # Disparar a cada 0.1 segundos (10 tiros por segundo)
-            if self.auto_fire_timer >= 0.1:
-                self.auto_fire_timer = 0.0
-
     def move(
         self,
         held_actions: set[str],
@@ -911,9 +903,44 @@ class Ship:
     ) -> None:
         self._movement.move(held_actions, dt, is_side_scroll, gamepad_vec)
 
+    @property
+    def emit_velocity(self) -> tuple[float, float]:
+        """Velocidade da nave no último frame, em px/s.
+
+        Contrato público para a compensação sub-frame de disparo (§1): o
+        `ShootingSystem` precisa saber onde a boca ESTAVA quando o tiro era
+        devido, e não pode ler o privado do `ShipMovement` para descobrir.
+        Fachada fina sobre o componente, no padrão da §9.
+        """
+        return self._movement.velocity
+
     def should_auto_fire(self) -> bool:
-        """Retorna True se deve disparar automaticamente neste frame."""
-        return self.auto_fire and self.auto_fire_timer == 0.0
+        """True quando o auto-fire está ligado. Só isso — a cadência é do timer.
+
+        Auto-fire significa "considere o gatilho apertado"; QUANDO o tiro sai é
+        decisão do `FireTimer`, que já compõe perfil da nave, power-ups e
+        debuffs. Antes havia aqui um segundo relógio próprio — acumulava `dt`,
+        abria uma janela de UM frame a cada 0,1s e fazia `timer = 0` no
+        disparo, o padrão que a §14 proíbe.
+
+        Dois gates periódicos independentes não se somam: eles BATEM. O tiro só
+        saía quando as duas janelas coincidiam no mesmo frame, e a cadência
+        resultante era o batimento entre elas, não a configurada. Medido a
+        60fps (a soma flutuante de 1/60 nunca fecha em 0,1, então a janela
+        abria a cada 7 frames e não 6):
+
+            Estilete  8,00/s configurado -> 5,71/s real, alternando 7 e 14
+                      frames entre tiros (pares colados, vão dobrado)
+            Padrão    5,00/s -> 4,29/s      Aríete/Caçador 3,75/s -> 2,86/s
+
+        O Estilete era o único a ficar IRREGULAR: a razão entre 8/s e a janela
+        de ~8,57/s é a única do elenco que cai numa alternância 2:1. Nas outras
+        o batimento só cobrava cadência, sem quebrar o ritmo — por isso passou
+        tanto tempo despercebido, e por isso o sintoma parecia ser "da nave".
+
+        Vale para todo mundo com auto-fire ligado, que é o padrão no celular.
+        """
+        return self.auto_fire
 
     def _muzzle_positions(
         self, sprite_w: float, sprite_h: float, dual: bool

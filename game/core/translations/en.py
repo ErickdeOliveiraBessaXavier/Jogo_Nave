@@ -252,7 +252,7 @@ EN: dict[str, str] = {
     "ship.magneto.name": "Magneto",
     "ship.magneto.desc": "Attracts stars/powerups and wields a devastating charged laser ({charge}).",
     "ship.estilete.name": "Stiletto",
-    "ship.estilete.desc": "Highest fire rate in the roster (9.4 shots/s), but the weakest shot (60% less damage) and 15% slower.",
+    "ship.estilete.desc": "Highest fire rate in the roster (8 shots/s), but the weakest shot (50% less damage) and 15% slower.",
     "ship.ariete.name": "Ram",
     "ship.ariete.desc": "Damage +80% and +1 life. Fast shot that pierces 1 enemy, but 25% lower fire rate and 20% slower ship.",
     "ship.cofre.name": "Vault",

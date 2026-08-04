@@ -237,11 +237,31 @@ class TestContrato:
 
     def test_a_compensacao_sub_frame_continua_no_eixo_do_voo(self):
         """§14: o `overshoot` desloca a bala ao longo da velocidade. Não pode ter
-        virado deslocamento transversal com a mudança de ancoragem."""
+        virado deslocamento transversal com a mudança de ancoragem.
+
+        Com a NAVE PARADA — que é o caso que este teste sempre cobriu. A
+        compensação passou a usar velocidade relativa, então com a nave em
+        movimento o deslocamento lateral é esperado e correto; ver o caso
+        irmão abaixo e `tests/test_subframe_emission.py`.
+        """
         from game.systems.shooting_system import ShootingSystem
 
         b = Bullet(100.0, 200.0, ship_id="padrao", direction=(0.0, -1.0))
         x0, y0 = b.x, b.y
-        ShootingSystem._apply_subframe_catchup(b, 0.01)
-        assert b.x == pytest.approx(x0), "deslocou de lado"
+        ShootingSystem._apply_subframe_catchup(b, 0.01, (0.0, 0.0))
+        assert b.x == pytest.approx(x0), "deslocou de lado com a nave parada"
         assert b.y < y0, "não adiantou no eixo do voo"
+
+    def test_nave_em_movimento_desloca_de_lado_de_proposito(self):
+        """O complemento do teste acima: andando de lado, a bala NASCE atrás.
+
+        A bala é emitida onde a boca estava quando o tiro era devido, e não
+        onde ela está agora — é isso que mantém o rastro equidistante durante
+        o strafe.
+        """
+        from game.systems.shooting_system import ShootingSystem
+
+        b = Bullet(100.0, 200.0, ship_id="padrao", direction=(0.0, -1.0))
+        x0 = b.x
+        ShootingSystem._apply_subframe_catchup(b, 0.01, (275.0, 0.0))
+        assert b.x == pytest.approx(x0 - 2.75), "não compensou o eixo da nave"

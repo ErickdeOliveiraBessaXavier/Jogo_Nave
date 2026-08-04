@@ -9,7 +9,7 @@ Versionado junto com o repositório.
 - [entities-folder-structure](entities-folder-structure.md) — game/entities/ organizado por responsabilidade (player/projectiles/effects/bosses/pickups/_shared) + inimigos por tema (enemies/space|city|mountain); onde colocar arquivo novo e regra dos pontos relativos.
 - [scene-decomposition-pattern](scene-decomposition-pattern.md) — extrair fluxos da PlayingScene em sistemas próprios (RevivalSystem/UpgradeSelector); regra do grep-completo ao migrar estado (input handler lê estado cru e quebra com testes verdes).
 - [playing-scene-extraction-roadmap](playing-scene-extraction-roadmap.md) — revisão jul/2026: testes de pipeline feitos, cutscene extraída; etapas B/atmosfera, C/P2, D/colisões (última) pendentes + achados da revisão.
-- [fire-timer-cadence-architecture](fire-timer-cadence-architecture.md) — cadência de disparo por FireTimer/carry_interval; `timer = INTERVALO` é proibido (descarta a sobra do frame). Lista o que NÃO migrar.
+- [fire-timer-cadence-architecture](fire-timer-cadence-architecture.md) — cadência de disparo por FireTimer/carry_interval; `timer = INTERVALO` é proibido (descarta a sobra do frame); UM relógio por cadência (dois gates batem); compensação sub-frame por velocidade RELATIVA. Lista o que NÃO migrar.
 - [targeting-via-target-point](targeting-via-target-point.md) — mira/seleção de inimigo usa target_point + is_targetable (systems/targeting.py), nunca x+w/2; x+w/2 quebra no boss Serpente (bug recorrente).
 - [enemy-health-multiplier-propagation](enemy-health-multiplier-propagation.md) — entidades emergentes recebem health_multiplier via construtor, como aggressiveness_multiplier; multiplicador que não chega na entidade é no-op.
 - [music-transitions-main-thread](music-transitions-main-thread.md) — crossfade de música roda na thread principal; pygame não é thread-safe (worker thread = access violation).
@@ -19,7 +19,7 @@ Versionado junto com o repositório.
 
 ## Balanceamento e progressão
 
-- [ship-balance-model](ship-balance-model.md) — balancear naves por abates/s por tier de HP (não DPS bruto); HP de inimigo não escala por nível; não buffar dano de nave lenta.
+- [ship-balance-model](ship-balance-model.md) — balancear naves por abates/s por tier de HP (não DPS bruto); HP de inimigo não escala por nível; não buffar dano de nave lenta; dano por tiro é inteiro, então cadência e poder andam grudados.
 - [ship-impact-identity](ship-impact-identity.md) — estilo de impacto por nave só em hits NÃO-letais; giro de matiz do tiro do P2 é 0.08, não 0.5.
 - [level-progression-onscreen-visibility](level-progression-onscreen-visibility.md) — avanço de fase só conta hostis VISÍVEIS na tela (teste estrito), não _is_enemy_off_screen.
 - [mine-explosion-respected-before-advance](mine-explosion-respected-before-advance.md) — explosões de mina ativas seguram o avanço até a animação/dano terminar.

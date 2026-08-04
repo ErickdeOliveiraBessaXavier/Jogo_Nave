@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
 from ..core.config import config as Config
-from ..core.fire_timer import FireTimer
+from ..core.fire_timer import FireTimer, emission_offset
 from ..core.sound import sound_manager
 from ..core.upgrades_config import (
     CRITICAL_CORE_CHANCE,
@@ -142,6 +142,12 @@ class ShootingSystem:
         # depois, que era o motivo do fallback manual que existia aqui.
         if not timer.consume(_BERSERK_INTERVAL):
             return
+        # Este `overshoot` era CONSUMIDO E DESCARTADO: o timer era gasto e o
+        # valor nunca lido, então a Estrela Espiral saía sem compensação alguma
+        # — nos dois eixos, e não só no da nave. Era o pior caso do projeto, e
+        # justo na arma que mais enche a tela de projéteis.
+        overshoot = timer.overshoot
+        emit_velocity = ship.emit_velocity
 
         # Rotação global constante (Estilo Stone Golem)
         self._berserk_rotation += dt * 360  # Uma volta completa por segundo
@@ -179,7 +185,7 @@ class ShootingSystem:
 
             critical = random.random() < crit_chance
             # Usando BulletPool via EntityManager.spawn_bullet
-            self._em.spawn_bullet(
+            bullet = self._em.spawn_bullet(
                 cx,
                 cy,
                 damage=(
@@ -196,6 +202,7 @@ class ShootingSystem:
                 cryo=ship.has_cryo_shot,
                 corrosive=ship.has_corrosive_ammo,
             )
+            self._apply_subframe_catchup(bullet, overshoot, emit_velocity)
 
         # Efeito sonoro
         sound_manager.play_shot()
@@ -258,6 +265,9 @@ class ShootingSystem:
         # tiro único — é o que faz Giant Shot valer para as cinco balas sem uma
         # linha de código sobre leque aqui.
         size_mult = ship.bullet_size_multiplier
+        # Lida uma vez para a salva inteira: todas as balas do mesmo disparo
+        # saíram no mesmo instante, então compartilham a mesma correção.
+        emit_velocity = ship.emit_velocity
         fired_explosive = False
 
         for spec in bullet_specs:
@@ -311,7 +321,7 @@ class ShootingSystem:
                 cryo=spec.cryo,
                 corrosive=spec.corrosive,
             )
-            self._apply_subframe_catchup(bullet, overshoot)
+            self._apply_subframe_catchup(bullet, overshoot, emit_velocity)
             fired_explosive = fired_explosive or spec.explosive
 
         # Carga explosiva é gasta por DISPARO, não por bala. O upgrade entrega N
@@ -357,7 +367,9 @@ class ShootingSystem:
         return 0.0
 
     @staticmethod
-    def _apply_subframe_catchup(bullet: Any, overshoot: float) -> None:
+    def _apply_subframe_catchup(
+        bullet: Any, overshoot: float, emitter_velocity: tuple[float, float]
+    ) -> None:
         """Adianta a bala pelo tempo que o disparo atrasou.
 
         Sem isto, todas as balas nascem exatamente na boca da nave e o
@@ -365,14 +377,19 @@ class ShootingSystem:
         cadência de 6.4 frames, os vãos alternam entre 6 e 7 frames de distância
         e a rajada parece engasgar.
 
-        Deslocando cada bala por `overshoot × velocidade`, o espaçamento no ar
-        fica uniforme — que é o que o olho lê como ritmo, já que ninguém vê o
-        instante da emissão, e sim a fila de projéteis subindo a tela.
+        A conta é `emission_offset` — velocidade RELATIVA, não a da bala
+        sozinha. Compensar só a bala corrige o eixo de voo e deixa o eixo do
+        movimento da nave com o mesmo erro de quantização, o que aparecia como
+        rastro desigual ao andar de lado (o caso normal de jogo, não um canto).
+        Ver o racional e os números em `core/fire_timer.py`.
         """
         if overshoot <= 0.0 or bullet is None:
             return
-        bullet.x += bullet.vx * overshoot
-        bullet.y += bullet.vy * overshoot
+        dx, dy = emission_offset(
+            bullet.vx, bullet.vy, emitter_velocity[0], emitter_velocity[1], overshoot
+        )
+        bullet.x += dx
+        bullet.y += dy
 
     def _fire_magneto_charge(
         self,

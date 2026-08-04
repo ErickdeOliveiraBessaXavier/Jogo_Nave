@@ -47,6 +47,15 @@ class ShipMovement:
         # Deque: popleft O(1) para descartar entradas vencidas, evitando
         # rebuild da lista por frame.
         self._mouse_history: deque[tuple[float, float, float]] = deque()
+        # Velocidade do frame anterior, em px/s. Medida (não calculada a partir
+        # do input) — ver `move`.
+        self._vx: float = 0.0
+        self._vy: float = 0.0
+
+    @property
+    def velocity(self) -> tuple[float, float]:
+        """Velocidade do último `move`, em px/s. Exposta pela `Ship`."""
+        return (self._vx, self._vy)
 
     def try_dash(self, current_move_vec: pygame.math.Vector2) -> bool:
         """Ativa o dash do Fantasma se o cooldown permitir."""
@@ -120,6 +129,39 @@ class ShipMovement:
         dt: float,
         is_side_scroll: bool = False,
         gamepad_vec: tuple[float, float] = (0.0, 0.0),
+    ) -> None:
+        """Move a nave e registra a velocidade resultante do frame.
+
+        A medição é uma casca em volta de `_move_impl`, e não uma linha no fim
+        dele, por dois motivos:
+
+        1. `_move_impl` tem `return` antecipado no dash e na paralisia, e vai
+           ganhar outros. Um cálculo no fim do corpo seria pulado justamente
+           pelos ramos de movimento mais rápido; aqui todo caminho de saída
+           passa por este ponto.
+        2. A velocidade é OBSERVADA (`Δposição / dt`), não derivada do input.
+           Só assim ela responde por todos os ramos de uma vez (dash, stun,
+           spring do mouse, gamepad, teclado, vento, controles invertidos) e —
+           principalmente — pelo clamp de `_keep_in_bounds`: encostada na borda
+           da tela a nave não anda, e a velocidade real é zero mesmo com o input
+           pedindo movimento. Derivada do input, a compensação sub-frame
+           empurraria a bala para fora da nave exatamente ali.
+        """
+        ship = self.ship
+        prev_x, prev_y = ship.x, ship.y
+        self._move_impl(held_actions, dt, is_side_scroll, gamepad_vec)
+        if dt > 0.0:
+            self._vx = (ship.x - prev_x) / dt
+            self._vy = (ship.y - prev_y) / dt
+        else:
+            self._vx = self._vy = 0.0
+
+    def _move_impl(
+        self,
+        held_actions: set[str],
+        dt: float,
+        is_side_scroll: bool,
+        gamepad_vec: tuple[float, float],
     ) -> None:
         ship = self.ship
 

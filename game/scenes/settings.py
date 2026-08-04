@@ -869,7 +869,6 @@ class SettingsView:
         if runtime_ship is not None:
             runtime_ship.mouse_control = self.preferences.mouse_control
             runtime_ship.auto_fire = self.preferences.auto_fire
-            runtime_ship.auto_fire_timer = 0.0
             runtime_ship.touch_offset = self.preferences.touch_mode
 
     def render(self, surface: pygame.Surface):

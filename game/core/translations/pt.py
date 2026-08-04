@@ -261,7 +261,7 @@ PT: dict[str, str] = {
     "ship.magneto.name": "Magneto",
     "ship.magneto.desc": "Atrai estrelas/powerups e possui um laser carregado ({charge}) devastador.",
     "ship.estilete.name": "Estilete",
-    "ship.estilete.desc": "A maior cadência do elenco (9,4 tiros/s), mas o tiro mais fraco (60% menos dano) e 15% mais lento.",
+    "ship.estilete.desc": "A maior cadência do elenco (8 tiros/s), mas o tiro mais fraco (50% menos dano) e 15% mais lento.",
     "ship.ariete.name": "Aríete",
     "ship.ariete.desc": "Dano +80% e +1 vida. O tiro é rápido e atravessa 1 inimigo, mas a cadência é 25% menor e a nave é 20% mais lenta.",
     "ship.cofre.name": "Cofre",

@@ -128,18 +128,36 @@ SHIP_REGISTRY: tuple[ShipProfile, ...] = (
         id="estilete",
         display_name="Estilete",
         description=(
-            "A maior cadência do elenco (9,4 tiros/s), mas o tiro mais fraco "
-            "(60% menos dano) e 15% mais lento."
+            "A maior cadência do elenco (8 tiros/s), mas o tiro mais fraco "
+            "(50% menos dano) e 15% mais lento."
         ),
         sprite_filename="ship_estilete.png",
         unlock_cost=40,
         bullet_size=(14, 2),  # agulha: o tiro mais fino e comprido do elenco
         # A nave ágil: toda a identidade está na cadência, e nenhuma no impacto.
-        # Com 5 de dano (2.00/0.50) ela varria a massa E acompanhava o alvo
-        # médio — não tinha ponto fraco. Em 4 de dano cada tier de HP custa
-        # ~25% mais tiros, e o output cai para 37 DPS, o menor do elenco.
-        fire_rate_mult=1.87,
-        damage_mult=0.40,
+        # O par cadência/dano é UM ajuste só. Veio de 1.87/0.40 (9,35 tiros/s a
+        # 4 de dano): o objetivo era acalmar o RITMO, que a 9,35/s era barulhento
+        # demais para o que a nave entregava — ela era a penúltima do elenco.
+        #
+        # O dano por tiro é INTEIRO (`_round_damage`), e é isso que amarra o
+        # ajuste: 0.40→0.50 leva o tiro de 4 para 5, exatamente +25%, e não
+        # existe meio-termo. Logo a cadência é o único dial fino daqui em diante,
+        # e toda mudança nela move o índice composto junto — não dá para descer
+        # a cadência de graça neste patamar de dano.
+        #
+        # 1.60 é o ponto escolhido: 8,0 tiros/s, índice 0.91. Sobe de 0.82 (era
+        # o penúltimo) para entre o Reverberador (0.87) e Fantasma/Engenheiro
+        # (0.97), ainda abaixo da Padrão. Buff assumido, não efeito colateral.
+        #
+        # 5 de dano já foi problema em 2.00/0.50 — mas ali eram 10 tiros/s e
+        # 50 DPS, e a nave varria a massa E acompanhava o alvo médio. Aqui são
+        # 40 DPS: o que quebrava era a combinação, não o 5 em si.
+        #
+        # Distinção preservada: 8,00 tiros/s contra 5,00/s do segundo mais
+        # rápido (+60%), e o tiro de 5 segue o mais fraco por larga margem (o
+        # próximo é 9). Ver `memory/ship-balance-model.md` para a métrica.
+        fire_rate_mult=1.60,
+        damage_mult=0.50,
         # Projétil lento é o custo real da cadência: obriga a lutar mais perto,
         # onde a agilidade máxima dela é gasta em sobreviver, não em farmar.
         bullet_speed_mult=0.85,

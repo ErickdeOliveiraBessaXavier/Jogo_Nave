@@ -64,6 +64,45 @@ def carry_interval(remaining: float, interval: float) -> float:
     return max(remaining, -interval) + interval
 
 
+def emission_offset(
+    proj_vx: float,
+    proj_vy: float,
+    emitter_vx: float,
+    emitter_vy: float,
+    overshoot: float,
+) -> tuple[float, float]:
+    """Deslocamento inicial de um projétil emitido com `overshoot` de atraso.
+
+    A compensação sub-frame precisa acontecer no referencial da BOCA, não no do
+    mundo. O disparo era devido há `overshoot` segundos; nesse instante o
+    projétil ainda não existia (deve à frente o que andaria) e o emissor estava
+    atrás de onde está agora. Compensar só o primeiro corrige o eixo de voo e
+    deixa o eixo do movimento do emissor quantizado por frame — que é o defeito
+    original, apenas girado 90°.
+
+    Por isso a fórmula usa a velocidade RELATIVA: com o emissor parado ela
+    degenera em `v_projétil × overshoot` (o comportamento antigo), e com o
+    emissor em movimento ela corrige os dois eixos de uma vez. Um conceito só,
+    não duas correções.
+
+    Medido no Estilete (a nave onde os três fatores se somam: maior cadência,
+    projétil mais lento e maior velocidade de nave), com strafe lateral:
+    espaçamento alternando 4,2% a 60fps e 8,4% a 30fps, contra 0,00px de
+    variação em qualquer frame rate com a velocidade relativa.
+
+    Floats puros de propósito: sem pygame e sem tipos do jogo, para que nave,
+    Berserk, Wingman, MiniShip e armas futuras compartilhem a mesma matemática
+    sem depender do `ShootingSystem` (§1) e para o teste rodar sem instanciar
+    nada (§16).
+    """
+    if overshoot <= 0.0:
+        return (0.0, 0.0)
+    return (
+        (proj_vx - emitter_vx) * overshoot,
+        (proj_vy - emitter_vy) * overshoot,
+    )
+
+
 class FireTimer:
     """Acumulador de tempo de disparo. Veja o módulo para o racional."""
 

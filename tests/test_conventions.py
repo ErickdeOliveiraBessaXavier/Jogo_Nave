@@ -264,3 +264,49 @@ def test_entidade_com_posicao_derivada_declara_position_locked():
         "posição derivada sem `position_locked = True` — quem mover essa "
         "entidade vai estourar AttributeError:\n" + "\n".join(faltando)
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §14 — quem gasta um FireTimer compensa a emissão sub-frame
+# ─────────────────────────────────────────────────────────────────────────────
+# Emissores que consomem cadência SEM compensar, com o motivo. Tirar da lista
+# exige compensar — nunca o contrário.
+_EMISSAO_SEM_COMPENSACAO: dict[str, str] = {
+    # Escoltas/mini-naves miram um alvo móvel e disparam em direções variadas:
+    # não formam a fila de projéteis cujo espaçamento o olho lê como ritmo, e
+    # compensar exigiria rastrear a velocidade própria de cada uma. Adiado
+    # deliberadamente, não esquecido.
+    "entities/player/wingman.py": "projétil mira alvo móvel, sem fila visível",
+    "entities/player/mini_ship.py": "idem wingman",
+}
+
+
+def test_quem_consome_firetimer_compensa_a_emissao():
+    """`timer.consume(...)` sem `emission_offset` = projétil no lugar errado.
+
+    O `overshoot` é a metade fácil de esquecer do contrato do `FireTimer`: dá
+    para gastar o intervalo e nunca ler o valor, e nada avisa. Foi exatamente
+    o que aconteceu com o `fire_berserk` — consumia o timer e descartava o
+    `overshoot`, deixando a Estrela Espiral sem compensação nenhuma enquanto o
+    `fire()` ao lado compensava.
+
+    A varredura é por MÓDULO, não por chamada: quem consome cadência precisa
+    mencionar a compensação em algum ponto do arquivo.
+    """
+    consumidores = []
+    for f in _py_files("systems", "entities"):
+        texto = f.read_text(encoding="utf-8")
+        if ".consume(" not in texto:
+            continue
+        rel = f.relative_to(_ROOT).as_posix().removeprefix("game/")
+        if rel in _EMISSAO_SEM_COMPENSACAO:
+            continue
+        if "emission_offset" in texto or "_apply_subframe_catchup" in texto:
+            continue
+        consumidores.append(rel)
+
+    assert not consumidores, (
+        "§14: consome FireTimer mas não compensa a emissão sub-frame "
+        "(use `emission_offset`, ou registre o motivo em "
+        "_EMISSAO_SEM_COMPENSACAO):\n" + "\n".join(consumidores)
+    )
