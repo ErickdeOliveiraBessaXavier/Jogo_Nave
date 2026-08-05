@@ -103,6 +103,62 @@ class ShootingSystem:
         timer = self._timers.get(ship)
         return timer is None or timer.is_ready(self._interval_for(ship))
 
+    def ability_busy(self, ship: Ship) -> bool:
+        """O efeito da habilidade especial desta nave ainda está em curso?
+
+        Vale para as duas naves com `has_charge_shot`: o laser do Magneto
+        (`cacador_lasers`) e os teleguiados do Caçador (`homing_bullets`). As
+        duas listas só são alimentadas pelo charge shot, então varrer ambas sem
+        perguntar QUAL é a nave evita uma cascata por `ship.profile.id` (§5) —
+        um Magneto nunca é dono de um teleguiado, e vice-versa.
+
+        Filtrar por dono (`owner_ship`/`source_ship`) e não pelo tamanho da
+        lista é o que mantém o coop funcionando: dois Caçadores atiram ao mesmo
+        tempo, cada um travado só pelos próprios projéteis.
+
+        O laser conta como em uso enquanto `state == "alive"` — o estado
+        "dying" é só a poeira de partículas, já sem colisão, e travar a
+        habilidade nele pareceria atraso sem causa visível. É o mesmo critério
+        que solta o canal de áudio no `update`.
+        """
+        for laser in self._em.cacador_lasers:
+            if (
+                getattr(laser, "owner_ship", None) is ship
+                and not laser.dead
+                and getattr(laser, "state", "") == "alive"
+            ):
+                return True
+        return any(
+            getattr(b, "source_ship", None) is ship and not b.dead
+            for b in self._em.homing_bullets
+        )
+
+    def try_start_charge(self, ship: Ship) -> bool:
+        """Começa a carregar a habilidade, ou recusa com feedback se ela está em uso.
+
+        Ponto único de entrada do input para o charge shot. O gate fica aqui, e
+        não no `Ship.start_charge`, porque só este sistema enxerga os projéteis
+        vivos — a nave não conhece o `EntityManager`.
+
+        Recusar no INÍCIO da carga (e não no disparo) é deliberado: barrar só na
+        hora de soltar faria o jogador segurar 0,8s para não receber nada, que é
+        pior do que a reutilização que se quer impedir.
+        """
+        if self.ability_busy(ship):
+            self._deny_ability(ship)
+            return False
+        return ship.start_charge()
+
+    def _deny_ability(self, ship: Ship) -> None:
+        """Arma o feedback (tremor/pisca na nave + blip de recusa)."""
+        ship.deny_ability()
+        self._bus.emit(
+            events.AbilityDenied(
+                ship_type=ship.profile.id,
+                position=(ship.x, ship.y),
+            )
+        )
+
     def reset(self) -> None:
         """Zera todos os timers entre fases. O canal de áudio é liberado em update()."""
         self._timers.clear()
@@ -227,6 +283,13 @@ class ShootingSystem:
         is_charge_shot = ship.profile.has_charge_shot and charge_factor > 1.0
         if is_charge_shot:
             ship_id = getattr(ship.profile, "id", "")
+            # Rede de segurança do gate de reutilização: quem impede de verdade
+            # é o `try_start_charge` (a carga nem começa). Aqui só se cobre o
+            # caso de a carga ter começado antes do efeito anterior terminar —
+            # sem isto, um segundo laser/burst nasceria por cima do primeiro.
+            if ship_id in ("magneto", "cacador") and self.ability_busy(ship):
+                self._deny_ability(ship)
+                return
             # `apply_spread=False`: o charge shot não abre no leque do Spread
             # Shot. Cada spec vira um projétil especial aqui — 5 lasers do
             # Magneto ou 5x5 teleguiados do Caçador —, e esses já SÃO o
@@ -439,15 +502,10 @@ class ShootingSystem:
     ) -> None:
         """Dispara 5 tiros teleguiados com targets round-robin.
 
-        No-op se a NAVE deste Caçador já tem teleguiados em tela — evita
-        acúmulo do mesmo jogador, mas permite que P1 e P2 (ambos Caçador)
-        atirem simultaneamente em coop.
+        O gate de "um burst por Caçador na tela" subiu para `ability_busy`, que
+        vale também para o laser do Magneto e agora recusa a carga ANTES de o
+        jogador segurar o botão — aqui a chamada já chega liberada.
         """
-        if any(
-            getattr(b, "source_ship", None) is ship and not b.dead
-            for b in self._em.homing_bullets
-        ):
-            return
         self._bus.emit(
             events.PlayerShot(
                 ship_type="cacador",

@@ -334,6 +334,11 @@ PT: dict[str, str] = {
     "hud.effect.mini": "[M] Mini Ships: {sec}s",
     "hud.effect.explosive": "[💥] Explosivos: {n}",
 
+    # Recusa da habilidade especial: aparece sobre a nave quando o jogador
+    # aciona o charge shot com o efeito anterior ainda em curso. Curto porque
+    # divide a linha com a ação — quem lê está no meio de uma esquiva.
+    "hud.ability_in_use": "HABILIDADE EM USO",
+
     # Rótulo dos slots vazios no rodapé. Repete de propósito a palavra do botão
     # do menu principal (`menu.upgrades`) — é o que liga as caixas vazias à tela
     # onde elas se preenchem.

@@ -324,6 +324,7 @@ EN: dict[str, str] = {
     "hud.effect.score": "[x1.5] Score x1.5: {sec}s",
     "hud.effect.mini": "[M] Mini Ships: {sec}s",
     "hud.effect.explosive": "[💥] Explosives: {n}",
+    "hud.ability_in_use": "ABILITY IN USE",
     "hud.upgrades_empty": "UPGRADES",
 
     # ── Time stop ────────────────────────────────────────────────────────────

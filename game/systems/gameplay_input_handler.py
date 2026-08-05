@@ -128,7 +128,10 @@ class GameplayInputHandler:
             if not scene.ship.is_entering and scene.can_handle_gameplay_actions():
                 if scene.ship.profile.has_charge_shot and (event.mod & pygame.KMOD_ALT):
                     # Só ativa charge com Space + Alt pressionados juntos.
-                    scene.ship.start_charge()
+                    # `try_start_charge` (e não `start_charge`) porque a
+                    # habilidade fica indisponível enquanto o efeito anterior
+                    # roda — a recusa sai com som e tremor, não em silêncio.
+                    scene.shooting.try_start_charge(scene.ship)
 
         if __debug__:
             scene.process_cheat_input(event)
@@ -257,7 +260,7 @@ class GameplayInputHandler:
                     and pygame.key.get_mods() & pygame.KMOD_ALT
                 ):
                     # Botão esquerdo + Alt: inicia charge (espelho do Space+Alt).
-                    scene.ship.start_charge()
+                    scene.shooting.try_start_charge(scene.ship)
                 elif not scene.ship.auto_fire and scene.shooting.is_ready(scene.ship):
                     scene.shooting.fire(scene.ship, scene.player_damage_multiplier)
         elif event.button == 2:
@@ -271,7 +274,7 @@ class GameplayInputHandler:
                 and scene.ship.profile.has_charge_shot
                 and not scene.ship.charge_shot_active
             ):
-                scene.ship.start_charge()
+                scene.shooting.try_start_charge(scene.ship)
 
     def _handle_mousebuttonup(self, event: pygame.event.Event) -> None:
         scene = self.scene
@@ -453,7 +456,7 @@ class GameplayInputHandler:
         # Charge shot precisa de hold/release.
         if profile.has_charge_shot:
             if pressed and not ship.charge_shot_active:
-                ship.start_charge()
+                scene.shooting.try_start_charge(ship)
             elif not pressed and ship.charge_shot_active:
                 if ship.charge_shot_progress >= 1.0:
                     scene.shooting.fire(ship, scene.player_damage_multiplier)

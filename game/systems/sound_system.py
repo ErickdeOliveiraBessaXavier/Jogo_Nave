@@ -30,6 +30,7 @@ class SoundSystem:
     def _register_handlers(self) -> None:
         """Inscreve os métodos de tratamento de eventos no EventBus."""
         self._bus.on(events.PlayerShot, self._on_player_shot)
+        self._bus.on(events.AbilityDenied, self._on_ability_denied)
         self._bus.on(events.EnemyDestroyed, self._on_enemy_destroyed)
         self._bus.on(events.BossDefeated, self._on_boss_defeated)
         self._bus.on(events.GameOver, self._on_game_over)
@@ -45,6 +46,15 @@ class SoundSystem:
             # Canal gerenciado diretamente em playing.py (precisa de return_channel).
             return
         sound_manager.play_shot()
+
+    def _on_ability_denied(self, _event: events.AbilityDenied) -> None:
+        """Blip curto de recusa — o mesmo do upgrade em cooldown.
+
+        Reaproveitar é intencional: as duas situações são a MESMA para o
+        jogador ("apertei e o poder não saiu"), e um som novo para cada uma só
+        adicionaria vocabulário a decorar.
+        """
+        sound_manager.play_upgrade_denied()
 
     def _on_enemy_destroyed(self, event: events.EnemyDestroyed) -> None:
         """Toca um som de explosão para inimigos."""
@@ -134,6 +144,7 @@ class SoundSystem:
         o sistema for destruído.
         """
         self._bus.off(events.PlayerShot, self._on_player_shot)
+        self._bus.off(events.AbilityDenied, self._on_ability_denied)
         self._bus.off(events.EnemyDestroyed, self._on_enemy_destroyed)
         self._bus.off(events.BossDefeated, self._on_boss_defeated)
         self._bus.off(events.GameOver, self._on_game_over)

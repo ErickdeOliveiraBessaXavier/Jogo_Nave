@@ -322,6 +322,9 @@ class Ship:
         # Caçador: charge shot.
         self.charge_shot_active: bool = False
         self.charge_shot_timer: float = 0.0  # tempo acumulado de carga
+        # Tempo restante do feedback de "habilidade ainda em uso". Escrito por
+        # `deny_ability`, escoado no `update`, lido só pelo renderer (§3).
+        self.ability_denied_timer: float = 0.0
         self.berserk_timer: float = 0.0  # tempo restante do modo Berserk
 
         # Cache do tamanho do sprite renderizado — invalidado em set_rotation.
@@ -373,6 +376,15 @@ class Ship:
         self.charge_shot_timer = 0.0
         sound_manager.play_boss_laser_charging()
         return True
+
+    def deny_ability(self) -> None:
+        """Arma o feedback visual de habilidade recusada (efeito anterior ativo).
+
+        Só o timer: o som sai do `AbilityDenied` no `SoundSystem` (§2) e o
+        desenho é do `ShipRenderer`. Quem decide a recusa é o `ShootingSystem`,
+        único que enxerga os projéteis ainda vivos.
+        """
+        self.ability_denied_timer = float(Config.ABILITY_DENIED_FEEDBACK_TIME)
 
     def cancel_charge(self) -> None:
         """Cancela o charge sem disparar, caso solte o botão antes de completar."""
@@ -884,6 +896,8 @@ class Ship:
         self.berserk_timer = max(0.0, self.berserk_timer - dt)
         self._powerups.update_repulsion_shield(dt, entity_manager)
         self._movement.update_dash(dt)
+
+        self.ability_denied_timer = max(0.0, self.ability_denied_timer - dt)
 
         # Avança charge do Caçador (cap em charge_shot_max_time).
         if self.charge_shot_active:

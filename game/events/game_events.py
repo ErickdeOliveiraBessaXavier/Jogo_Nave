@@ -29,6 +29,20 @@ class PlayerShot(Event):
 
 
 @dataclass
+class AbilityDenied(Event):
+    """A habilidade especial foi acionada enquanto o efeito anterior seguia ativo.
+
+    Emitido no instante da tentativa recusada — o jogador APERTOU e nada saiu, e
+    sem uma reação ele lê isso como comando ignorado. O `SoundSystem` responde
+    com o blip de recusa; o tremor/pisca fica no `ShipRenderer`, via
+    `Ship.ability_denied_timer`.
+    """
+
+    ship_type: str
+    position: tuple[float, float]
+
+
+@dataclass
 class EnemyDestroyed(Event):
     """Um inimigo foi destruído."""
 

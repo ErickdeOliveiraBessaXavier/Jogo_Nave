@@ -455,6 +455,12 @@ class VisualEffectConfig:
     # pela cena (arma o timer) e pelo renderer (decai a amplitude).
     UPGRADE_DENIED_SHAKE_TIME: float = 0.28
     UPGRADE_DENIED_SHAKE_AMPLITUDE: int = 5  # px de pico, no design 1280x720
+    # Recusa da habilidade especial (laser do Magneto / teleguiados do Caçador
+    # ainda em efeito). Mais longo que o tremor de slot porque carrega TEXTO —
+    # 0.28s some antes de dar para ler, e a mensagem é justamente o que separa
+    # "o comando não foi reconhecido" de "a habilidade ainda está em uso".
+    ABILITY_DENIED_FEEDBACK_TIME: float = 0.65
+    ABILITY_DENIED_SHAKE_AMPLITUDE: int = 4  # px de pico, no design 1280x720
     SCREEN_SHAKE_NORMAL: int = 10
     SCREEN_SHAKE_GAME_OVER: int = 15
     SCREEN_SHAKE_BOSS_DEATH: int = 25

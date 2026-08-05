@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from ...core.assets import get_font
 from ...core.blink import SHIP_INVULN_BLINK
+from ...core.config import config as Config
+from ...core.i18n import t
 
 if TYPE_CHECKING:
     from .ship import Ship
@@ -35,6 +38,16 @@ _CHAIN_SPARK_COLORS: tuple[tuple[int, int, int], ...] = (
     (255, 255, 255),
 )
 
+# Vermelho da recusa de habilidade. Quente e claro, não o vermelho puro: o anel
+# fica sobre explosões e o fundo escuro do espaço, onde (255, 0, 0) some — o
+# mesmo motivo do `CRITICAL_COLOR` do score flutuante.
+_ABILITY_DENIED_COLOR: tuple[int, int, int] = (255, 80, 80)
+
+# Ciclos por segundo da piscada da recusa. Frequência FIXA (e não a rampa do
+# `BlinkProfile`, que acelera no fim para avisar que algo vai acabar): aqui não
+# há nada acabando, é um "não" e pronto. ~3 flashes na duração do feedback.
+_ABILITY_DENIED_BLINK_HZ: float = 5.0
+
 
 class ShipRenderer:
     """Renderiza a `Ship` e seus efeitos visuais.
@@ -46,6 +59,13 @@ class ShipRenderer:
 
     def __init__(self, ship: "Ship") -> None:
         self.ship = ship
+        # §12: não é uma `Scene`, então declara o próprio fator de escala. Só o
+        # texto da recusa usa — a nave e os anéis medem pelo sprite.
+        self.ui_scale: float = Config.SCREEN_WIDTH / 1280.0
+
+    def _s(self, value: float) -> int:
+        """Pixel do design 1280×720 convertido para a resolução lógica atual."""
+        return int(value * self.ui_scale)
 
     def draw(self, surface: pygame.Surface) -> None:
         ship = self.ship
@@ -62,6 +82,12 @@ class ShipRenderer:
         # Indicador de carga do Caçador: anel de progresso ao redor da nave.
         if ship.charge_shot_active:
             self._draw_charge_indicator(surface)
+
+        # Recusa da habilidade (efeito anterior ainda em curso). Desenhado no
+        # MESMO lugar do anel de carga: é o indicador da habilidade que precisa
+        # responder, senão o jogador procura a resposta na HUD e não acha.
+        if ship.ability_denied_timer > 0.0:
+            self._draw_ability_denied(surface)
 
         # Piscada dos i-frames: lenta no começo, acelerando perto do fim para
         # avisar que a proteção está acabando sem o jogador olhar a HUD. A
@@ -268,6 +294,69 @@ class ShipRenderer:
         if progress >= 1.0:
             pulse = int(2 + 2 * abs(math.sin(ship.draw_time * 8)))
             pygame.draw.circle(surface, (255, 255, 255), (cx, cy), radius + 2, pulse)
+
+    def _draw_ability_denied(self, surface: pygame.Surface) -> None:
+        """Anel vermelho piscando + tremor + rótulo "HABILIDADE EM USO".
+
+        Três canais para a mesma informação, de propósito: no meio do combate o
+        som se perde na mixagem e o texto compete com a tela cheia de projéteis,
+        mas o anel vermelho onde ANTES aparecia o anel de carga é lido na visão
+        periférica — a mensagem chega por qualquer um dos três.
+
+        Puro em relação ao estado (§3): tudo sai de `ability_denied_timer`, que
+        só o `update` escreve. O tremor usa a mesma fórmula do slot de upgrade
+        negado (seno amortecido pelo tempo restante), então as duas recusas do
+        jogo se movem igual.
+        """
+        ship = self.ship
+        left = ship.ability_denied_timer
+        total = float(Config.ABILITY_DENIED_FEEDBACK_TIME)
+        if left <= 0.0 or total <= 0.0:
+            return
+        decay = min(1.0, left / total)
+
+        # Some só no finalzinho — cortar seco pareceria glitch, mas um fade
+        # longo faria a negativa "arrastar" e brigar com o próximo tiro.
+        alpha = 255 if decay > 0.35 else int(255 * decay / 0.35)
+
+        shake = int(
+            math.sin(left * 55.0)
+            * self._s(Config.ABILITY_DENIED_SHAKE_AMPLITUDE)
+            * decay
+        )
+
+        cx = int(ship.x + ship.w / 2) + shake
+        cy = int(ship.y + ship.h / 2)
+        # Mesmo raio do anel de carga: é o indicador da habilidade respondendo,
+        # não um efeito novo.
+        radius = max(ship.w, ship.h) // 2 + 10
+
+        # Só o ANEL pisca. O texto fica firme: piscar as duas coisas junto
+        # deixaria a mensagem legível em metade dos frames, e é justamente ela
+        # que diz POR QUE o comando não saiu. A fase é contada a partir do tempo
+        # RESTANTE — função pura do timer, sem acumulador nesta classe (§3).
+        if int(left * _ABILITY_DENIED_BLINK_HZ * 2.0) % 2 == 0:
+            ring = pygame.Surface((radius * 2 + 8, radius * 2 + 8), pygame.SRCALPHA)
+            pygame.draw.circle(
+                ring,
+                (*_ABILITY_DENIED_COLOR, alpha),
+                (radius + 4, radius + 4),
+                radius,
+                2,
+            )
+            surface.blit(ring, (cx - radius - 4, cy - radius - 4))
+
+        font = get_font(max(8, self._s(10)))
+        label = font.render(t("hud.ability_in_use"), True, _ABILITY_DENIED_COLOR)
+        label.set_alpha(alpha)
+        rect = label.get_rect(center=(cx, cy - radius - self._s(10)))
+        # A nave chega a encostar nas bordas, e o rótulo é bem mais largo que
+        # ela: sem o clamp a mensagem sai da tela justo quando o jogador está
+        # encurralado, que é quando ele mais aperta o botão.
+        margin = self._s(4)
+        rect.left = max(margin, min(rect.left, Config.SCREEN_WIDTH - rect.width - margin))
+        rect.top = max(margin, rect.top)
+        surface.blit(label, rect)
 
     def _draw_orbital_lasers(self, surface: pygame.Surface) -> None:
         ship = self.ship
