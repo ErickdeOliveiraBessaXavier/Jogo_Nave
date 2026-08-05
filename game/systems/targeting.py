@@ -54,6 +54,38 @@ def is_targetable(enemy: Any) -> bool:
     return True
 
 
+def is_on_screen(entity: Any, screen_w: float, screen_h: float) -> bool:
+    """True se o rect da entidade intersecta a área visível (teste ESTRITO).
+
+    Estrito quer dizer: um inimigo parado acima do topo (``y = -100``, formação
+    ainda entrando) NÃO conta, nem um que já saiu por qualquer borda. É o oposto
+    do ``_is_enemy_off_screen`` do `EntityManager`, que por regra de gameplay
+    mantém "vivo" quem está prestes a entrar.
+
+    Vive aqui, junto de `is_targetable`, porque toda seleção de alvo precisa da
+    MESMA noção de visível: perseguir quem está saindo de cena gasta o projétil
+    num alvo que o jogador já não vê. Duas definições de "na tela" divergem com
+    o tempo — o `EntityManager.is_on_screen` delega para cá.
+    """
+    ew = getattr(entity, "w", getattr(getattr(entity, "rect", None), "width", 50))
+    eh = getattr(entity, "h", getattr(getattr(entity, "rect", None), "height", 50))
+    x = getattr(entity, "x", 0.0)
+    y = getattr(entity, "y", 0.0)
+    return x + ew > 0 and x < screen_w and y + eh > 0 and y < screen_h
+
+
+def is_huntable(enemy: Any, screen_w: float, screen_h: float) -> bool:
+    """Alvo legítimo para um projétil teleguiado: pode tomar dano E está visível.
+
+    A visibilidade importa tanto quanto a vulnerabilidade. Um inimigo que está
+    deixando a tela continua alvejável por um instante, e um teleguiado travado
+    nele vira escolta: sai junto pela borda e morre fora do campo de visão, sem
+    acertar nada. Do lado do jogador isso lê como o tiro ter ignorado os
+    inimigos que ainda estavam ali.
+    """
+    return is_targetable(enemy) and is_on_screen(enemy, screen_w, screen_h)
+
+
 def enemy_center(enemy: Any) -> Optional[tuple[float, float]]:
     """Como ``target_point``, mas só para alvos que podem receber dano agora.
 

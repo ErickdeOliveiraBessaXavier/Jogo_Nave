@@ -25,6 +25,7 @@ from ..core.upgrades_config import (
     HOMING_DAMAGE_MULTIPLIER,
 )
 from ..events import game_events as events
+from ..systems.targeting import is_huntable
 
 if TYPE_CHECKING:
     from ..core.events import EventBus
@@ -518,10 +519,17 @@ class ShootingSystem:
         spread = math.radians(90)
         divisor = max(1, count - 1)
 
+        # Só hostis VISÍVEIS entram no round-robin. Distribuir um dos 5 projéteis
+        # para um inimigo que já está saindo pela borda (ou para uma formação
+        # ainda acima do topo) gasta o tiro numa escolta até fora da tela — o
+        # projétil segue um alvo que o jogador não vê mais e morre sem acertar.
+        # O mesmo teste guarda a re-aquisição de alvo em `HomingBullet.update`.
+        sw = float(getattr(Config, "SCREEN_WIDTH", 1600))
+        sh = float(getattr(Config, "SCREEN_HEIGHT", 900))
         live_enemies: list[Any] = [
-            e for e in self._em.enemies if not getattr(e, "dead", False)
+            e for e in self._em.enemies if is_huntable(e, sw, sh)
         ]
-        if self._em.boss and not getattr(self._em.boss, "dead", False):
+        if self._em.boss and is_huntable(self._em.boss, sw, sh):
             live_enemies.append(self._em.boss)
 
         for x, y, direction, *_ in bullet_specs:

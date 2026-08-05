@@ -113,7 +113,7 @@ from .collision_protocols import Removable
 from .entity_context import EnemyUpdateContext
 from .fusion_governor import FusionGovernor
 from .hit_result import MeteorSpec
-from .targeting import enemy_center, is_targetable
+from .targeting import enemy_center, is_on_screen, is_targetable
 
 if TYPE_CHECKING:
     from ..entities.player.ship import Ship
@@ -1508,6 +1508,18 @@ class EntityManager:
 
         for b in self.homing_bullets:
             b.update(dt, self._cached_all_enemies)
+            # Sobrecarga do teleguiado do Caçador: o projétil que esgotou o
+            # tempo de vida sem acertar nada estoura em área em vez de sumir.
+            # Ele descreve o estouro, quem tem o poder de spawnar materializa
+            # (§1) — mesmo contrato do `residue_bursts` da CityMine.
+            blast = b.take_pending_blast()
+            if blast is not None:
+                self.spawn_explosive_effect(**blast)
+                self.spawn_explosion(
+                    blast["x"], blast["y"], size=int(blast["radius"] // 2)
+                )
+                if self.sound_manager:
+                    self.sound_manager.play_explosion_asteroid()
 
         for b in self.mini_ship_bullets:
             b.update(dt)
@@ -2306,13 +2318,12 @@ class EntityManager:
         ainda paradas acima do topo (``y = -100`` durante a entrada), ou qualquer
         hostil já fora da área por qualquer borda, NÃO seguram o avanço quando a
         tela está visualmente vazia.
+
+        A conta vive em `targeting.is_on_screen`: a seleção de alvo dos
+        teleguiados precisa exatamente do mesmo teste, e a mesma regra escrita
+        em dois lugares diverge.
         """
-        sw, sh = self._screen_size
-        ew = getattr(entity, "w", getattr(getattr(entity, "rect", None), "width", 50))
-        eh = getattr(entity, "h", getattr(getattr(entity, "rect", None), "height", 50))
-        x = getattr(entity, "x", 0.0)
-        y = getattr(entity, "y", 0.0)
-        return x + ew > 0 and x < sw and y + eh > 0 and y < sh
+        return is_on_screen(entity, *self._screen_size)
 
     @staticmethod
     def _filter_dead_inplace(
