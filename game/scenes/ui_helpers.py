@@ -45,14 +45,26 @@ def get_fade_scratch(
 
 
 class UIParticle:
-    """Simples sistema de partículas para UI."""
+    """Simples sistema de partículas para UI.
 
-    def __init__(self, x: float, y: float, color: tuple[int, int, int]):
+    ``speed_scale`` encolhe o espalhamento sem mudar o resto: uma explosão de
+    confete (o caso original, escala 1.0) quer alcance; um RASTRO seguindo um
+    objeto em movimento quer o oposto — partícula rápida se descola do trajeto e
+    o efeito vira poeira solta pela tela em vez de esteira.
+    """
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        color: tuple[int, int, int],
+        speed_scale: float = 1.0,
+    ):
         self.x = x
         self.y = y
         self.color = color
         angle = random.uniform(0, math.pi * 2)
-        speed = random.uniform(20, 80)
+        speed = random.uniform(20, 80) * speed_scale
         self.vx = math.cos(angle) * speed
         self.vy = math.sin(angle) * speed
         self.life = 1.0

@@ -15,6 +15,26 @@ class UpgradeCategory(Enum):
     OFFENSIVE = auto()
 
 
+class UpgradeRole(Enum):
+    """Papel do upgrade na partida — o eixo pelo qual o jogador PROCURA.
+
+    Existe ao lado de `UpgradeCategory`, não no lugar dela: a categoria é
+    grossa demais para servir de filtro (11 dos 23 upgrades são OFFENSIVE), e a
+    pergunta que o jogador faz na tela não é "isto é ofensivo?" e sim "quero
+    matar mais rápido, segurar o enxame, sobreviver ou dar suporte?".
+
+    Quatro papéis, não os seis do rascunho inicial: "Utilidade" ficaria com um
+    único membro (o Dash) e "Defesa" com dois, e aba vazia é pior que aba
+    ausente. Se o elenco crescer a ponto de justificar o desmembramento, o
+    lugar de mexer é aqui — a tela lê a lista de papéis, não a fixa.
+    """
+
+    DAMAGE = auto()  # Mata mais rápido: dano direto, projétil, crítico, DoT.
+    CROWD = auto()  # Controle de grupo: lentidão, sucção, área que segura.
+    DEFENSE = auto()  # Não morrer: escudo, bloqueio, esquiva.
+    SUPPORT = auto()  # Cura e aliados autônomos que jogam com você.
+
+
 class UpgradeType(Enum):
     SHIELD_BURST = auto()
     HEAL = auto()
@@ -75,8 +95,13 @@ class UpgradeMeta:
     base_duration: float
     base_charges: Optional[int]  # None = ilimitado por fase
     slot_weight: int = (
-        1  # Peso em slots (1-5): quanto mais forte o upgrade, mais pesado
+        1  # Tier de poder (1-3), exibido na tela. NÃO limita mais o que cabe.
     )
+    # Papel — a aba em que o upgrade aparece na tela de aprimoramentos.
+    # Default `None` de propósito: quem esquecer de classificar um upgrade novo
+    # é pego pelo `test_todo_upgrade_tem_papel`, em vez de cair calado num papel
+    # arbitrário (foi assim que Canhão e Link passaram anos com a mesma letra).
+    role: Optional[UpgradeRole] = None
 
 
 class ActiveUpgrade:
@@ -770,6 +795,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         0,
         None,
         2,
+        UpgradeRole.DEFENSE,
     ),
     UpgradeType.HEAL: UpgradeMeta(
         UpgradeType.HEAL,
@@ -781,6 +807,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         0,
         None,
         1,
+        UpgradeRole.SUPPORT,
     ),
     UpgradeType.EMP: UpgradeMeta(
         UpgradeType.EMP,
@@ -792,6 +819,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         10,
         None,
         2,
+        UpgradeRole.CROWD,
     ),
     UpgradeType.HOMING_SHOT: UpgradeMeta(
         UpgradeType.HOMING_SHOT,
@@ -803,6 +831,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         12,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.LASER_SHOT: UpgradeMeta(
         UpgradeType.LASER_SHOT,
@@ -814,6 +843,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         0,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.EXPLOSIVE_SHOT: UpgradeMeta(
         UpgradeType.EXPLOSIVE_SHOT,
@@ -825,6 +855,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         0,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.GIANT_SHOT: UpgradeMeta(
         UpgradeType.GIANT_SHOT,
@@ -836,6 +867,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         12,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.BLINK_DASH: UpgradeMeta(
         UpgradeType.BLINK_DASH,
@@ -847,6 +879,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         0.4,
         None,
         1,
+        UpgradeRole.DEFENSE,
     ),
     UpgradeType.GRAVITY_BOMB: UpgradeMeta(
         UpgradeType.GRAVITY_BOMB,
@@ -858,6 +891,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         15,
         None,
         2,
+        UpgradeRole.CROWD,
     ),
     UpgradeType.CHAIN_LIGHTNING: UpgradeMeta(
         UpgradeType.CHAIN_LIGHTNING,
@@ -869,6 +903,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         10,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.ORBITAL_SHIELD: UpgradeMeta(
         UpgradeType.ORBITAL_SHIELD,
@@ -880,6 +915,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         12,
         None,
         2,
+        UpgradeRole.DEFENSE,
     ),
     UpgradeType.PLASMA_BEAM: UpgradeMeta(
         UpgradeType.PLASMA_BEAM,
@@ -891,6 +927,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         5,
         None,
         3,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.WINGMAN: UpgradeMeta(
         UpgradeType.WINGMAN,
@@ -902,6 +939,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         30,
         None,
         2,
+        UpgradeRole.SUPPORT,
     ),
     UpgradeType.BERSERK: UpgradeMeta(
         UpgradeType.BERSERK,
@@ -913,6 +951,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         8,
         None,
         3,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.BLACK_HOLE: UpgradeMeta(
         UpgradeType.BLACK_HOLE,
@@ -924,6 +963,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         8,
         None,
         3,
+        UpgradeRole.CROWD,
     ),
     UpgradeType.AIR_STRIKE: UpgradeMeta(
         UpgradeType.AIR_STRIKE,
@@ -935,6 +975,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         0,
         None,
         3,
+        UpgradeRole.DAMAGE,
     ),
     UpgradeType.CANNON_TOWER: UpgradeMeta(
         UpgradeType.CANNON_TOWER,
@@ -946,6 +987,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         0,
         None,
         3,
+        UpgradeRole.SUPPORT,
     ),
     UpgradeType.COOP_LINK: UpgradeMeta(
         UpgradeType.COOP_LINK,
@@ -957,6 +999,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         15,
         None,
         2,
+        UpgradeRole.SUPPORT,
     ),
     # UTILITY, não OFFENSIVE: o dano da área é pressão de fundo (menos que uma
     # bala na vida inteira da zona). O valor é o controle — segurar o grupo no
@@ -971,6 +1014,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         12,
         None,
         2,
+        UpgradeRole.CROWD,
     ),
     # OFFENSIVE e não UTILITY: o valor é dano puro, sem nenhum efeito de
     # controle. Cooldown/duração/peso na mesma faixa dos outros modificadores de
@@ -985,6 +1029,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         12,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
     # UTILITY como a Implosão: o valor é controle, não dano. A diferença entre
     # os dois é o EIXO — a Implosão é área e não pede pontaria; o Cryo é alvo
@@ -999,6 +1044,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         12,
         None,
         2,
+        UpgradeRole.CROWD,
     ),
     # OFFENSIVE: o valor é dano em área e limpeza de tela, não controle.
     UpgradeType.SHOCKWAVE: UpgradeMeta(
@@ -1011,6 +1057,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         12,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
     # OFFENSIVE, não UTILITY: o ácido não freia nem atrapalha ninguém — é dano
     # ao longo do tempo. Duração maior (16s) que os irmãos porque o dano dele
@@ -1026,6 +1073,7 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         16,
         None,
         2,
+        UpgradeRole.DAMAGE,
     ),
 }
 

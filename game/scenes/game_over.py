@@ -560,7 +560,7 @@ class GameOverScene(Scene):
         self.ranking_sound_played = False
 
     def _init_loadout_hook(self, btn_h: int, bottom_y: int) -> None:
-        """Monta o atalho permanente para a Central de Loadout.
+        """Monta o atalho permanente para a tela de Aprimoramentos.
 
         O botão é fixo, e o **aviso** sobre ele é que é contextual. São duas
         coisas diferentes que antes andavam juntas:
@@ -608,7 +608,7 @@ class GameOverScene(Scene):
         então o texto precisa acompanhar.
 
         `StateManager.pop` chama `enter()` na cena de baixo, então voltar da
-        Central de Loadout passa por aqui de graça.
+        tela de Aprimoramentos passa por aqui de graça.
         """
         profile = self.app.player_profile
         self.loadout_hook_key: Optional[str]
@@ -655,7 +655,7 @@ class GameOverScene(Scene):
         return pygame.Rect(x, bottom_y, hook_w, btn_h)
 
     def _open_upgrades(self) -> None:
-        """Abre a Central de Loadout POR CIMA do Game Over (`push`).
+        """Abre a tela de Aprimoramentos POR CIMA do Game Over (`push`).
 
         Empilhar, e não trocar, é o que preserva a run: o botão "Continuar"
         desta tela ainda está embaixo esperando, e a `PlayingScene` recriada por
@@ -670,7 +670,7 @@ class GameOverScene(Scene):
 
     def enter(self):
         pygame.mouse.set_visible(True)
-        # Também roda ao voltar da Central de Loadout (`StateManager.pop`
+        # Também roda ao voltar da tela de Aprimoramentos (`StateManager.pop`
         # re-entra na cena de baixo): o que o jogador acabou de equipar ou
         # comprar tem de se refletir na legenda antes do próximo frame.
         self._refresh_loadout_hook()
@@ -1001,7 +1001,7 @@ class GameOverScene(Scene):
 
         É a primeira vez que o jogo diz em voz alta quanto a run rendeu de
         moeda — até aqui o número só existia na tela de Estatísticas e na
-        Central de Loadout, as duas que este jogador não abriu.
+        tela de Aprimoramentos, as duas que este jogador não abriu.
         """
         if self.stars_earned <= 0:
             return

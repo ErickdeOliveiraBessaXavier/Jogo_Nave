@@ -190,10 +190,11 @@ class RenderFrame:
     available_stars: int = 0
     """Saldo de estrelas (coletadas − gastas), o que o jogador pode gastar.
 
-    A estrela é a moeda que compra capacidade de slot (`SLOT_UNLOCK_COSTS`),
-    mas até aqui só era exibida na tela de Estatísticas e na própria Central
-    de Loadout — nunca durante a partida, que é justamente onde ela é colhida.
-    Quem nunca abriu aquelas telas juntava a moeda sem saber que era moeda.
+    A estrela é a moeda que compra slot de upgrade (`SLOT_UNLOCK_COSTS`) e
+    nave, mas até aqui só era exibida na tela de Estatísticas e na própria tela
+    de Aprimoramentos — nunca durante a partida, que é justamente onde ela é
+    colhida. Quem nunca abriu aquelas telas juntava a moeda sem saber que era
+    moeda.
     """
 
     touch_mode: bool = False
@@ -225,7 +226,7 @@ class RenderFrame:
     unlocked_upgrade_slots: int = 0
     """Quantos slots o perfil tem destravados (`PlayerProfile.unlocked_slots`).
 
-    Usado só para desenhar os contornos vazios quando nada está equipado; o
-    mesmo número é orçamento de peso na Central de Loadout, mas essa regra não
-    interessa ao HUD.
+    Usado só para desenhar os contornos vazios quando nada está equipado. São
+    no máximo `UPGRADE_SLOT_COUNT` (3), um upgrade por slot — o orçamento de
+    peso que existia junto com este número foi removido.
     """

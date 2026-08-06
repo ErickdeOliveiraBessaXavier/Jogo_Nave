@@ -23,6 +23,7 @@ from .upgrades_config import (
     DEFAULT_UNLOCKED,
     INITIAL_UNLOCKED_SLOTS,
     UPGRADE_SLOT_COUNT,
+    migrate_slot_model,
 )
 
 logger = logging.getLogger(__name__)
@@ -824,48 +825,19 @@ class PlayerProfile:
                 score,
             )
 
-    def get_total_equipped_weight(self) -> int:
-        """Retorna o peso total de todos os upgrades equipados."""
-        from .upgrades import UPGRADES_META
-
-        total_weight = 0
-        for upgrade_type in self.upgrade_loadout:
-            if upgrade_type is not None:
-                meta = UPGRADES_META.get(upgrade_type)
-                if meta:
-                    total_weight += meta.slot_weight
-        return total_weight
-
     def can_equip_upgrade(self, upgrade_type: UpgradeType, slot_index: int) -> bool:
-        """
-        Verifica se pode equipar um upgrade considerando o peso total.
+        """Um upgrade cabe em qualquer slot destravado — um por slot.
 
-        Returns:
-            bool: True se pode equipar, False caso contrário
+        O orçamento de PESO saiu do modelo (ver `upgrades_config`): a única
+        pergunta que sobra é se o slot existe e está destravado. O método
+        continua existindo porque é o contrato que a tela de aprimoramentos
+        consulta antes de equipar.
         """
         from .upgrades import UPGRADES_META
 
-        # Verificar se o slot está desbloqueado
-        if slot_index >= self.unlocked_slots:
+        if not 0 <= slot_index < self.unlocked_slots:
             return False
-
-        # Obter peso do novo upgrade
-        meta = UPGRADES_META.get(upgrade_type)
-        if not meta:
-            return False
-
-        new_weight = meta.slot_weight
-
-        # Calcular peso atual sem o item do slot de destino
-        current_weight = 0
-        for i, equipped_type in enumerate(self.upgrade_loadout):
-            if i != slot_index and equipped_type is not None:
-                equipped_meta = UPGRADES_META.get(equipped_type)
-                if equipped_meta:
-                    current_weight += equipped_meta.slot_weight
-
-        # Verificar se o peso total não excede o limite
-        return (current_weight + new_weight) <= self.unlocked_slots
+        return upgrade_type in UPGRADES_META
 
     def equip_upgrade(self, upgrade_type: Optional[UpgradeType], slot_index: int):
         """Equipa ou desequipa um aprimoramento em um slot específico."""
@@ -1238,10 +1210,28 @@ class PlayerProfile:
         parsed["mouse_control"] = data.get("mouse_control", False)
         parsed["auto_fire"] = data.get("auto_fire", False)
 
-        # Star collection system
+        # Star collection system.
+        #
+        # `migrate_slot_model` converte perfis do modelo antigo (8 slots + peso)
+        # para o de 3 slots, devolvendo as estrelas dos slots que deixaram de
+        # existir. Roda sempre: é idempotente para perfis já migrados. O loadout
+        # em si já é truncado a `UPGRADE_SLOT_COUNT` mais abaixo, na leitura.
         parsed["stars_collected"] = data.get("stars_collected", 0)
-        parsed["stars_spent"] = data.get("stars_spent", 0)
-        parsed["unlocked_slots"] = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
+        slots_salvos = data.get("unlocked_slots", INITIAL_UNLOCKED_SLOTS)
+        slots_migrados, gasto_migrado = migrate_slot_model(
+            int(slots_salvos), int(data.get("stars_spent", 0))
+        )
+        if slots_migrados != slots_salvos:
+            logger.info(
+                "Perfil migrado para o modelo de %s slots: %s → %s (estrelas "
+                "devolvidas: %s)",
+                UPGRADE_SLOT_COUNT,
+                slots_salvos,
+                slots_migrados,
+                int(data.get("stars_spent", 0)) - gasto_migrado,
+            )
+        parsed["stars_spent"] = gasto_migrado
+        parsed["unlocked_slots"] = slots_migrados
 
         # Naves
         unlocked_ships_raw = data.get("unlocked_ships")

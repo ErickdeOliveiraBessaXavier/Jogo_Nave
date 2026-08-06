@@ -23,21 +23,57 @@ DEFAULT_KEYBINDINGS: List[int] = [
     pygame.K_EQUALS,
 ]
 
-# Quantidade de slots de aprimoramentos ativos
-UPGRADE_SLOT_COUNT: int = 8
+# Quantidade de slots de aprimoramentos ativos.
+#
+# TRÊS, e um upgrade por slot. O modelo anterior tinha 8 slots E um orçamento de
+# PESO (cada upgrade pesava 1–3, capacidade = slots destravados) — dois sistemas
+# ensinando a mesma coisa, e o jogador com 2 slots destravados que só conseguia
+# equipar UM upgrade de peso 2 não tinha como saber por quê. O peso saiu do
+# cálculo de equipar; `UpgradeMeta.slot_weight` sobrevive como **tier de poder**,
+# exibido na tela de aprimoramentos e sem efeito nenhum sobre o que cabe.
+UPGRADE_SLOT_COUNT: int = 3
 
-# Sistema de desbloqueio de slots com estrelas
-INITIAL_UNLOCKED_SLOTS = 2  # Slots inicialmente desbloqueados
+# Sistema de desbloqueio de slots com estrelas.
+#
+# Um slot grátis e os outros dois comprados. Os custos ficam abaixo do preço da
+# nave mais barata (25★) de propósito: ampliar o loadout é a primeira compra
+# possível, não uma que compete com o hangar inteiro.
+INITIAL_UNLOCKED_SLOTS = 1  # Slots inicialmente desbloqueados
 SLOT_UNLOCK_COSTS = [
     0,  # Slot 1 - gratuito
-    0,  # Slot 2 - gratuito
-    3,  # Slot 3 - custa 3 estrelas
-    5,  # Slot 4 - custa 5 estrelas
-    10,  # Slot 5 - custa 10 estrelas
-    20,  # Slot 6 - custa 20 estrelas
-    35,  # Slot 7 - custa 35 estrelas
-    50,  # Slot 8 - custa 50 estrelas
+    10,  # Slot 2 - custa 10 estrelas
+    30,  # Slot 3 - custa 30 estrelas
 ]
+
+# Tabela de custos do modelo ANTIGO (8 slots). Só existe para a migração de
+# perfis salvos antes da mudança — ver `migrate_slot_model`. Não usar em regra
+# nova.
+_LEGACY_SLOT_UNLOCK_COSTS = [0, 0, 3, 5, 10, 20, 35, 50]
+
+
+def migrate_slot_model(unlocked_slots: int, stars_spent: int) -> tuple[int, int]:
+    """Converte `(unlocked_slots, stars_spent)` do modelo de 8 slots para o de 3.
+
+    Devolve os valores já no modelo novo. Duas regras:
+
+    - **Nada é tirado sem devolver.** Quem tinha mais de 3 slots destravados
+      perde os excedentes, então as estrelas pagas por eles voltam para o saldo
+      (abatidas de ``stars_spent``). Quem pagou 123★ pelos 8 slots recebe 83★ de
+      volta — os 40★ que os 3 novos custariam ficam pagos.
+    - **Slot conquistado continua conquistado.** Quem já tinha 2 ou 3 slots pelo
+      modelo antigo (onde os dois primeiros eram grátis) fica com eles sem pagar
+      a diferença. Cobrar retroativamente tiraria um slot que o jogador já usava.
+
+    Idempotente: depois de rodar, ``unlocked_slots <= 3`` e o crédito legado
+    (≤3★) nunca supera o custo novo (40★), então uma segunda passada devolve 0.
+    """
+    novos_slots = max(1, min(UPGRADE_SLOT_COUNT, unlocked_slots))
+    pago_no_modelo_antigo = sum(_LEGACY_SLOT_UNLOCK_COSTS[:unlocked_slots])
+    custo_no_modelo_novo = sum(SLOT_UNLOCK_COSTS[:novos_slots])
+    reembolso = max(0, pago_no_modelo_antigo - custo_no_modelo_novo)
+    # Nunca reembolsa mais do que foi gasto no total (perfil editado à mão).
+    reembolso = min(reembolso, max(0, stars_spent))
+    return novos_slots, stars_spent - reembolso
 # Quais upgrades vêm desbloqueados por padrão (MVP)
 DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.SHIELD_BURST,

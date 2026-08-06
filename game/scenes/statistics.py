@@ -17,6 +17,7 @@ from ..core.meta_progression import (
 from ..core.meta_progression_service import ProfileStatsFormatter
 from ..core.paths import get_profile_path
 from ..core.state import Scene
+from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from .ui_helpers import (
     wrap_text,
     draw_bordered_button,
@@ -460,7 +461,10 @@ class StatisticsView:
             (t("stats.stars_collected"), f"{self.profile.stars_collected}"),
             (t("stats.stars_spent"), f"{self.profile.stars_spent}"),
             (t("stats.stars_available"), f"{self.profile.available_stars}"),
-            (t("stats.slots_unlocked"), f"{self.profile.unlocked_slots}/9"),
+            (
+                t("stats.slots_unlocked"),
+                f"{self.profile.unlocked_slots}/{UPGRADE_SLOT_COUNT}",
+            ),
         ]
 
         # Configuração de Layout

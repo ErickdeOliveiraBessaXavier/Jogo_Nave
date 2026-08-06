@@ -201,12 +201,22 @@ EN: dict[str, str] = {
     # ── P2 ship select (co-op) ───────────────────────────────────────────────
     "p2.title": "PLAYER 2 — SHIP",
 
-    # ── Loadout Central (upgrades) ───────────────────────────────────────────
-    "upgrades.title": "Loadout Central",
-    "upgrades.arsenal": "Arsenal ({weight}/{cap})",
-    "upgrades.stock": "Stock",
-    "upgrades.hangar": "Hangar",
-    "upgrades.attributes": "Attributes",
+    # ── Upgrades screen ──────────────────────────────────────────────────────
+    # Same word as the menu button (`menu.upgrades`) and the empty HUD row
+    # (`hud.upgrades_empty`) — whoever clicked "Upgrades" must land on a screen
+    # called "Upgrades".
+    "upgrades.title": "Upgrades",
+    "upgrades.tab.all": "ALL",
+    "upgrades.tab.damage": "DAMAGE",
+    "upgrades.tab.crowd": "CONTROL",
+    "upgrades.tab.defense": "DEFENSE",
+    "upgrades.tab.support": "SUPPORT",
+    "upgrades.slots_header": "SLOTS  {n}/{total}",
+    "upgrades.card.equipped": "EQUIPPED",
+    "upgrades.card.cooldown": "Cooldown {cd}s",
+    "upgrades.ship.in_use": "IN USE",
+    "upgrades.ship.select": "SELECT",
+    "upgrades.ship.locked": "LOCKED",
     "upgrades.abilities_header": "ABILITIES",
     "upgrades.stars": "{n} Stars",
     "upgrades.stat.damage": "Damage",
@@ -217,9 +227,10 @@ EN: dict[str, str] = {
     "upgrades.bar.firerate": "FIRE RATE",
     "upgrades.bar.agility": "AGILITY",
     "upgrades.msg.locked": "Locked",
-    "upgrades.msg.no_space": "No space",
+    "upgrades.msg.no_space": "No free slot",
     "upgrades.msg.acquired": "{name} Acquired!",
     "upgrades.msg.insufficient": "Insufficient Funds",
+    "upgrades.msg.slot_unlocked": "Slot unlocked!",
     "upgrades.ability.dash": "{keys}: dash i-frames ({cd}s cd)",
     "upgrades.ability.charge": "{keys}: up to {mult}× damage ({time}s)",
     "upgrades.ability.powerup": "{keys}: uses {n} powerup slots",
@@ -233,10 +244,8 @@ EN: dict[str, str] = {
     "upgrades.ability.fast_shot": "Projectile +{pct}% faster",
     "upgrades.ability.slow_shot": "Projectile {pct}% slower",
     "upgrades.key.charge_kb": "ALT+Space",
-    "upgrades.tip.cooldown_weight": "Cooldown {cd}s    Weight {weight}",
     "upgrades.tip.duration": "Duration {d}s",
     "upgrades.tip.charges": "Charges {n}",
-    "upgrades.tip.no_weight": "No capacity — free a slot",
 
     # ── Recommendations (statistics — service-generated) ─────────────────────
     "stats.rec.novice_shield": "💡 Tip: Collect shield power-ups to survive longer",
