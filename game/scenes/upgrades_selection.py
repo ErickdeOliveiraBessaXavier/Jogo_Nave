@@ -6,9 +6,10 @@
   nome, estado (em uso / selecionar / custo), descrição, três barras de atributo
   comparando com a nave equipada e, no rodapé do painel, os **três slots** de
   upgrade.
-- **Direita — os aprimoramentos.** Uma lista paginada de cards de largura
-  cheia, cada um com medalhão, nome, descrição e stats. A descrição virou
-  conteúdo permanente do card: o tooltip antigo era invisível no controle.
+- **Direita — os aprimoramentos.** Grid rolável de cards em duas colunas, com
+  abas por papel. Cada card traz medalhão, nome, descrição e stats: a descrição
+  virou conteúdo permanente do card porque o tooltip antigo era invisível no
+  controle.
 
 O que saiu, e por quê:
 
@@ -16,20 +17,28 @@ O que saiu, e por quê:
   destravados), dois sistemas dizendo a mesma coisa. Agora é um upgrade por
   slot; ``slot_weight`` sobrevive só como *tier de poder* desenhado no card.
 - **Drag & drop.** O mouse arrastava e o controle tinha um caminho próprio
-  (`_gamepad_stock_action`) que reimplementava as regras do drop. Um gesto só —
-  clique/``A`` alterna equipar/desequipar — vale para os dois inputs e cabe
-  numa função (`_activate`).
+  que reimplementava as regras do drop. Um gesto só — clique/``A`` alterna
+  equipar/desequipar — vale para os dois inputs e cabe numa função
+  (`_activate`).
 - **Grade do Hangar.** As 9 naves viraram carrossel; comprar continua aqui.
 - **Tooltip.** Substituído pela descrição no card.
 
-O voo do medalhão entre card e slot (`UpgradeFlight`) é **puramente cosmético**:
-o perfil é alterado no instante do clique, então sair da tela no meio da
-animação não deixa estado pendurado. O slot só desenha o ícone quando o voo
-chega, para o upgrade não aparecer nos dois lugares ao mesmo tempo.
+**O que esta cena NÃO faz** (extraído, §9 — a cena orquestra, os módulos
+decidem):
+
+- `systems/loadout_controller.py` — as regras de equipar/comprar. Devolve um
+  `LoadoutResult` tipado; a cena só traduz isso em som, mensagem e animação.
+- `scenes/upgrades_layout.py` — toda a geometria (painéis, slots, grid,
+  rolagem) e as medidas internas do card.
+- `scenes/upgrade_flight.py` — o voo do medalhão entre card e slot.
+
+O voo é **puramente cosmético**: o perfil é alterado no instante do clique,
+então sair da tela no meio da animação não deixa estado pendurado. O slot só
+desenha o ícone quando o voo chega, para o upgrade não aparecer nos dois
+lugares ao mesmo tempo.
 """
 
 import math
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pygame
@@ -57,7 +66,25 @@ from ..core.upgrades import (
     upgrade_desc,
 )
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
-from .ui_helpers import UIParticle, draw_bordered_button, wrap_text
+from ..systems.loadout_controller import (
+    LoadoutAction,
+    LoadoutController,
+    LoadoutResult,
+)
+from .ui_helpers import draw_bordered_button, wrap_text
+from .upgrade_flight import FlightTrack
+from .upgrades_layout import (
+    GRID_COLS,
+    UILayout,
+    build_layout,
+    card_art_rect,
+    card_footer_height,
+    card_medallion_radius,
+    max_scroll,
+    place_cards,
+    scroll_to_reveal,
+    slot_medallion_radius,
+)
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -101,12 +128,6 @@ _TABS: Tuple[Tuple[str, Optional[UpgradeRole]], ...] = (
 )
 
 
-def _ease_in_out_cubic(t_norm: float) -> float:
-    """Aceleração e freada suaves — a curva do voo do medalhão."""
-    if t_norm < 0.5:
-        return 4.0 * t_norm * t_norm * t_norm
-    return 1.0 - ((-2.0 * t_norm + 2.0) ** 3) / 2.0
-
 
 class FloatingMessage:
     """Mensagem flutuante para feedback visual."""
@@ -139,180 +160,7 @@ class FloatingMessage:
         return self.lifetime <= 0
 
 
-class UpgradeFlight:
-    """Voo do medalhão de um upgrade entre o card da lista e um slot.
 
-    Cosmético: quem equipa é o clique, não a chegada. A animação existe para o
-    olho acompanhar de ONDE para ONDE o upgrade foi — sem ela a lista e o slot
-    mudam no mesmo frame e o jogador não vê a relação entre os dois.
-
-    Trajetória em bézier quadrática com o ponto de controle deslocado
-    perpendicularmente ao trajeto: o arco distingue o voo de um simples
-    deslize e dá espaço para o rastro de partículas respirar. No fim, quem
-    chega a um slot faz o *snap* (pop de escala + anel), e quem volta para uma
-    página que não está visível apenas se apaga.
-    """
-
-    DURATION = 0.38
-    SNAP_DURATION = 0.18
-    _EMIT_INTERVAL = 0.02
-
-    def __init__(
-        self,
-        meta: UpgradeMeta,
-        start: pygame.Rect,
-        end: pygame.Rect,
-        start_radius: int,
-        end_radius: int,
-        *,
-        slot_index: Optional[int],
-        fade_out: bool = False,
-    ) -> None:
-        self.meta = meta
-        self.slot_index = slot_index
-        self.fade_out = fade_out
-        self.color = _category_color(meta)
-
-        self.x0, self.y0 = float(start.centerx), float(start.centery)
-        self.x1, self.y1 = float(end.centerx), float(end.centery)
-        self.start_radius = float(start_radius)
-        self.end_radius = float(end_radius)
-
-        # Ponto de controle: meio do trajeto empurrado para o lado perpendicular
-        # (sempre para CIMA na tela, que é a direção livre do layout).
-        mx, my = (self.x0 + self.x1) * 0.5, (self.y0 + self.y1) * 0.5
-        dx, dy = self.x1 - self.x0, self.y1 - self.y0
-        dist = math.hypot(dx, dy) or 1.0
-        arc = dist * 0.22
-        self.cx = mx + (-dy / dist) * arc * (1.0 if dy >= 0 else -1.0)
-        self.cy = my + (dx / dist) * arc * (1.0 if dy >= 0 else -1.0)
-        if self.cy > my:  # garante o arco pela metade de cima
-            self.cy = my - abs(self.cy - my)
-
-        self.t = 0.0
-        self.snap_t = 0.0
-        self.particles: List[UIParticle] = []
-        self._emit_acc = 0.0
-
-    # -- estado ------------------------------------------------------------
-
-    @property
-    def arrived(self) -> bool:
-        """Já encostou no destino (o slot pode desenhar o ícone)."""
-        return self.t >= 1.0
-
-    @property
-    def snap_finished(self) -> bool:
-        return self.arrived and self.snap_t >= self.SNAP_DURATION
-
-    @property
-    def medallion_visible(self) -> bool:
-        """Depois do snap quem desenha o medalhão é o SLOT, não o voo.
-
-        Sem isto o voo continuaria desenhando um medalhão idêntico por cima do
-        slot durante todo o rastro que ainda está se apagando — invisível, mas
-        um desenho a mais por frame e um estado a mais para raciocinar."""
-        return not self.snap_finished
-
-    @property
-    def done(self) -> bool:
-        return self.snap_finished and not self.particles
-
-    def position(self) -> Tuple[float, float]:
-        p = _ease_in_out_cubic(min(1.0, self.t))
-        inv = 1.0 - p
-        x = inv * inv * self.x0 + 2 * inv * p * self.cx + p * p * self.x1
-        y = inv * inv * self.y0 + 2 * inv * p * self.cy + p * p * self.y1
-        return x, y
-
-    def radius(self) -> float:
-        p = _ease_in_out_cubic(min(1.0, self.t))
-        base = self.start_radius + (self.end_radius - self.start_radius) * p
-        if not self.arrived or self.fade_out:
-            return base
-        # Snap: estica 25% e volta — o "encaixou" que o olho lê como impacto.
-        pop = math.sin(math.pi * min(1.0, self.snap_t / self.SNAP_DURATION))
-        return base * (1.0 + 0.25 * pop)
-
-    def alpha(self) -> int:
-        if self.fade_out and self.arrived:
-            fade = 1.0 - min(1.0, self.snap_t / self.SNAP_DURATION)
-            return max(0, int(255 * fade))
-        return 255
-
-    # -- ciclo de vida -----------------------------------------------------
-
-    def update(self, dt: float) -> None:
-        if self.t < 1.0:
-            self.t = min(1.0, self.t + dt / self.DURATION)
-            self._emit_trail(dt)
-        else:
-            self.snap_t += dt
-
-        # Rebuild O(n) de uma lista comprovadamente curta (§6): ~40 partículas
-        # no pico de um voo, fora de hot path de combate.
-        for p in self.particles:
-            p.update(dt)
-        self.particles = [p for p in self.particles if p.life > 0]
-
-    def _emit_trail(self, dt: float) -> None:
-        """Rastro: duas fagulhas por intervalo, com carry do resto (§14)."""
-        self._emit_acc += dt
-        while self._emit_acc >= self._EMIT_INTERVAL:
-            self._emit_acc -= self._EMIT_INTERVAL
-            x, y = self.position()
-            for _ in range(2):
-                # Espalhamento curto: o rastro tem que ler como esteira do
-                # medalhão, não como poeira solta pela tela.
-                self.particles.append(UIParticle(x, y, self.color, 0.35))
-
-    def draw_particles(self, surface: pygame.Surface) -> None:
-        for p in self.particles:
-            p.draw(surface)
-
-    def draw_ring(self, surface: pygame.Surface) -> None:
-        """Anel de chegada: expande e some durante o snap."""
-        if not self.arrived or self.fade_out:
-            return
-        prog = min(1.0, self.snap_t / self.SNAP_DURATION)
-        if prog >= 1.0:
-            return
-        radius = int(self.end_radius * (1.0 + 1.1 * prog))
-        alpha = int(200 * (1.0 - prog))
-        x, y = self.position()
-        pygame.draw.circle(surface, (*self.color, alpha), (int(x), int(y)), radius, 3)
-
-
-@dataclass
-class UILayout:
-    """Geometria da tela. Recalculada em `_calculate_layout` / ao paginar."""
-
-    left_panel: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    right_panel: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-
-    # Esquerda — nave
-    ship_preview: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    ship_prev: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    ship_next: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    info_top: int = 0
-    slots: List[pygame.Rect] = field(default_factory=lambda: [])
-    slots_header_y: int = 0
-
-    # Direita — grid de cards
-    tabs: List[pygame.Rect] = field(default_factory=lambda: [])
-    # Janela recortada onde o grid vive. O que sai dela é cortado no render e
-    # ignorado no clique — é o que torna a rolagem possível sem os cards
-    # invadirem cabeçalho e abas.
-    viewport: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    scrollbar: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    # TODOS os cards da aba atual, já com a rolagem aplicada (não só os
-    # visíveis): o foco do controle precisa alcançar o que está fora da janela
-    # para poder rolar até lá.
-    cards: List[pygame.Rect] = field(default_factory=lambda: [])
-    visible_upgrades: List[UpgradeMeta] = field(default_factory=lambda: [])
-
-    back_button: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    stars_pos: Tuple[int, int] = (0, 0)
 
 
 class UpgradesSelectionScene(Scene):
@@ -361,14 +209,15 @@ class UpgradesSelectionScene(Scene):
         # divergência: as mudanças (loadout/nave) seriam salvas no JSON mas
         # ficariam invisíveis para PlayingScene, que consome ``app.player_profile``.
         self.player_profile = self.app.player_profile
-        self._ensure_slots()
 
-        # Lista da direita: categoria primeiro, nome depois. Agrupar por
-        # categoria põe cores iguais lado a lado e a página inteira lê como um
+        # Grid da direita: categoria primeiro, nome depois. Agrupar por
+        # categoria põe cores iguais lado a lado e a aba inteira lê como um
         # bloco, em vez de um mosaico alfabético.
         self.all_upgrades = sorted(
             list_all_upgrades_meta(), key=lambda u: (u.category.value, u.name.lower())
         )
+        # Dono das regras (§9): a cena não mexe no perfil por conta própria.
+        self.loadout = LoadoutController(self.player_profile, self.all_upgrades)
         self.all_ships: List[ShipProfile] = list(all_ship_profiles())
         self.ship_index = self._index_of_selected_ship()
 
@@ -381,8 +230,10 @@ class UpgradesSelectionScene(Scene):
         self.scroll_target = 0.0
         self.max_scroll = 0.0
 
-        # Voos em andamento (equipar/desequipar). Lista curta por natureza.
-        self.flights: List[UpgradeFlight] = []
+        # Voos em andamento (equipar/desequipar). O gate de animações é passado
+        # como callable: a qualidade visual pode mudar em Settings com a tela
+        # aberta, e uma cópia do valor ficaria velha.
+        self.flights = FlightTrack(self._animations_on)
 
         self.hovered_upgrade: Optional[UpgradeMeta] = None
         self.hovered_slot_idx: Optional[int] = None
@@ -413,13 +264,6 @@ class UpgradesSelectionScene(Scene):
     # Setup
     # ------------------------------------------------------------------
 
-    def _ensure_slots(self) -> None:
-        loadout = self.player_profile.upgrade_loadout
-        while len(loadout) < UPGRADE_SLOT_COUNT:
-            loadout.append(None)
-        if len(loadout) > UPGRADE_SLOT_COUNT:
-            self.player_profile.upgrade_loadout = loadout[:UPGRADE_SLOT_COUNT]
-
     def _index_of_selected_ship(self) -> int:
         for i, ship in enumerate(self.all_ships):
             if ship.id == self.player_profile.selected_ship:
@@ -432,148 +276,26 @@ class UpgradesSelectionScene(Scene):
         return self.all_ships[self.ship_index]
 
     def _calculate_layout(self) -> None:
-        sw, sh = self.app.screen.get_size()
-        self.layout = UILayout()
-
-        panel_top = self._s(74)
-        panel_bottom = sh - self._s(62)
-        panel_h = panel_bottom - panel_top
-        total_w = sw - self.MARGIN * 2 - self.GAP
-        # 40/60: o grid de duas colunas precisa da largura maior (dois cards
-        # legíveis lado a lado), e a nave compra destaque na ALTURA — preview
-        # grande e centralizado — em vez de na largura. Trocar para 44/56 daria
-        # cards estreitos demais para o nome e a descrição conviverem.
-        left_w = int(total_w * 0.40)
-        right_w = total_w - left_w
-
-        self.layout.left_panel = pygame.Rect(self.MARGIN, panel_top, left_w, panel_h)
-        self.layout.right_panel = pygame.Rect(
-            self.MARGIN + left_w + self.GAP, panel_top, right_w, panel_h
+        """Reconstrói a geometria e recoloca os cards da aba atual."""
+        self.layout = build_layout(
+            self.app.screen.get_size(),
+            self._s,
+            slot_count=UPGRADE_SLOT_COUNT,
+            tab_count=len(_TABS),
         )
-
-        self._layout_left()
-        self._layout_right()
-
-        btn_w, btn_h = self._s(150), self._s(38)
-        self.layout.back_button = pygame.Rect(
-            self.MARGIN, sh - self._s(52), btn_w, btn_h
-        )
-        self.layout.stars_pos = (sw - self.MARGIN - self._s(150), self._s(30))
-
-    def _layout_left(self) -> None:
-        panel = self.layout.left_panel
-        pad = self._s(16)
-        inner = panel.inflate(-pad * 2, -pad * 2)
-
-        # Slots ancorados no RODAPÉ do painel: o bloco de texto acima cresce e
-        # encolhe conforme a nave, e os slots não podem dançar junto — eles são
-        # o alvo do voo e precisam de posição estável.
-        slot_gap = self._s(12)
-        slot_size = min(
-            self._s(84),
-            (inner.width - slot_gap * (UPGRADE_SLOT_COUNT - 1)) // UPGRADE_SLOT_COUNT,
-        )
-        slots_w = slot_size * UPGRADE_SLOT_COUNT + slot_gap * (UPGRADE_SLOT_COUNT - 1)
-        slots_x = inner.centerx - slots_w // 2
-        slots_y = inner.bottom - slot_size
-        self.layout.slots = [
-            pygame.Rect(slots_x + i * (slot_size + slot_gap), slots_y, slot_size, slot_size)
-            for i in range(UPGRADE_SLOT_COUNT)
-        ]
-        self.layout.slots_header_y = slots_y - self._s(22)
-
-        # A nave é o protagonista da tela: o preview toma o que a coluna
-        # permitir, limitado por 42% da altura do painel para o bloco de texto
-        # + slots ainda caber embaixo (o texto tem guarda de espaço própria e
-        # encolhe sozinho; o preview, não).
-        preview_s = min(
-            self._s(250),
-            inner.width - self.CHEVRON_W * 2 - self._s(16),
-            int(inner.height * 0.42),
-        )
-        self.layout.ship_preview = pygame.Rect(
-            inner.centerx - preview_s // 2, inner.y, preview_s, preview_s
-        )
-        ch_h = self._s(56)
-        cy = self.layout.ship_preview.centery - ch_h // 2
-        self.layout.ship_prev = pygame.Rect(inner.x, cy, self.CHEVRON_W, ch_h)
-        self.layout.ship_next = pygame.Rect(
-            inner.right - self.CHEVRON_W, cy, self.CHEVRON_W, ch_h
-        )
-        self.layout.info_top = self.layout.ship_preview.bottom + self._s(8)
-
-    def _layout_right(self) -> None:
-        panel = self.layout.right_panel
-        pad = self._s(14)
-        inner = panel.inflate(-pad * 2, -pad * 2)
-
-        # Abas: largura uniforme repartindo a linha inteira. Uniforme e não por
-        # conteúdo porque a fileira é um seletor — aba que muda de tamanho com o
-        # idioma faz o alvo do clique dançar entre traduções.
-        tab_h = self._s(28)
-        tab_y = inner.y
-        tab_gap = self._s(6)
-        tab_w = (inner.width - tab_gap * (len(_TABS) - 1)) // len(_TABS)
-        self.layout.tabs = [
-            pygame.Rect(inner.x + i * (tab_w + tab_gap), tab_y, tab_w, tab_h)
-            for i in range(len(_TABS))
-        ]
-
-        top = tab_y + tab_h + self._s(10)
-        self.layout.viewport = pygame.Rect(
-            inner.x, top, inner.width, inner.bottom - top
-        )
-        self.SCROLLBAR_W = self._s(5)
-        self.layout.scrollbar = pygame.Rect(
-            self.layout.viewport.right - self.SCROLLBAR_W,
-            self.layout.viewport.y,
-            self.SCROLLBAR_W,
-            self.layout.viewport.height,
-        )
-
-        # 2 colunas × 4 linhas VISÍVEIS. As duas contas saem da janela, não de
-        # constantes: a altura do card é o que faz caber exatamente 4 linhas em
-        # qualquer resolução, e é isso que mantém o grid idêntico em 576p e 1080p.
-        self.GRID_COLS = 2
-        self.GRID_ROWS = 4
-        self.card_gap = self._s(10)
-        grid_w = self.layout.viewport.width - self.SCROLLBAR_W - self._s(6)
-        self.card_w = (grid_w - self.card_gap * (self.GRID_COLS - 1)) // self.GRID_COLS
-        self.card_h = (
-            self.layout.viewport.height - self.card_gap * (self.GRID_ROWS - 1)
-        ) // self.GRID_ROWS
         self._rebuild_grid()
 
     def _filtered_upgrades(self) -> List[UpgradeMeta]:
-        """Upgrades da aba ativa, na ordem alfabética dentro do papel."""
-        role = _TABS[self.active_tab][1]
-        if role is None:
-            return list(self.all_upgrades)
-        return [u for u in self.all_upgrades if u.role is role]
+        """Upgrades da aba ativa (a ordenação é a do construtor)."""
+        return self.loadout.upgrades_for_role(_TABS[self.active_tab][1])
 
     def _rebuild_grid(self) -> None:
-        """Recalcula os rects do grid com a rolagem atual aplicada."""
-        items = self._filtered_upgrades()
-        self.layout.visible_upgrades = items
-
-        vp = self.layout.viewport
-        rows = max(1, math.ceil(len(items) / self.GRID_COLS)) if items else 0
-        content_h = rows * self.card_h + max(0, rows - 1) * self.card_gap
-        self.max_scroll = max(0.0, float(content_h - vp.height))
+        """Recoloca os cards com a rolagem atual e reprende a rolagem ao fim."""
+        itens = self._filtered_upgrades()
+        self.max_scroll = max_scroll(self.layout, len(itens))
         self.scroll_target = max(0.0, min(self.scroll_target, self.max_scroll))
         self.scroll_y = max(0.0, min(self.scroll_y, self.max_scroll))
-
-        step_x = self.card_w + self.card_gap
-        step_y = self.card_h + self.card_gap
-        self.layout.cards = [
-            pygame.Rect(
-                vp.x + (i % self.GRID_COLS) * step_x,
-                vp.y + (i // self.GRID_COLS) * step_y - int(self.scroll_y),
-                self.card_w,
-                self.card_h,
-            )
-            for i in range(len(items))
-        ]
+        place_cards(self.layout, itens, self.scroll_y)
 
     # ------------------------------------------------------------------
     # Navegação por FOCO
@@ -826,7 +548,11 @@ class UpgradesSelectionScene(Scene):
         """Rola o grid. ``page`` avança uma janela inteira em vez de uma linha."""
         if self.max_scroll <= 0.0:
             return
-        step = self.layout.viewport.height if page else (self.card_h + self.card_gap)
+        step = (
+            self.layout.viewport.height
+            if page
+            else (self.layout.card_h + self.layout.card_gap)
+        )
         self.scroll_target = max(
             0.0, min(self.max_scroll, self.scroll_target + direction * step)
         )
@@ -842,15 +568,9 @@ class UpgradesSelectionScene(Scene):
         idx = self.focus[1]
         if idx >= len(self.layout.cards):
             return
-        row = idx // self.GRID_COLS
-        top = row * (self.card_h + self.card_gap)
-        bottom = top + self.card_h
-        vp_h = self.layout.viewport.height
-        if top < self.scroll_target:
-            self.scroll_target = float(top)
-        elif bottom > self.scroll_target + vp_h:
-            self.scroll_target = float(bottom - vp_h)
-        self.scroll_target = max(0.0, min(self.max_scroll, self.scroll_target))
+        self.scroll_target = scroll_to_reveal(
+            self.layout, idx, self.scroll_target, self.max_scroll
+        )
 
     def _cycle_ship(self, delta: int) -> None:
         self.ship_index = (self.ship_index + delta) % len(self.all_ships)
@@ -861,107 +581,116 @@ class UpgradesSelectionScene(Scene):
     # ------------------------------------------------------------------
 
     def _ship_action(self) -> None:
-        """Seleciona a nave do carrossel, ou compra se estiver bloqueada."""
-        profile, ship = self.player_profile, self.shown_ship
-        if profile.is_ship_unlocked(ship.id):
-            if profile.selected_ship != ship.id:
-                profile.select_ship(ship.id)
-                sound_manager.play_sound("button_click")
-            return
-        if profile.can_unlock_ship(ship.id) and profile.unlock_ship(ship.id):
-            profile.select_ship(ship.id)
-            sound_manager.play_upgrade_activate()
-            self._message(
-                self.layout.ship_preview,
-                t("upgrades.msg.acquired", name=ship_display_name(ship)),
-                colors.GREEN,
-            )
-            return
-        self._deny_ship()
+        """Nave do carrossel: seleciona, compra, ou recusa por saldo."""
+        ship = self.shown_ship
+        self._apply(
+            self.loadout.press_ship(ship),
+            self.layout.ship_preview,
+            ship_name=ship_display_name(ship),
+        )
 
     def _slot_action(self, idx: int) -> None:
         """Slot: destrava (bloqueado) ou devolve o upgrade à lista (equipado)."""
-        profile = self.player_profile
-        if idx >= profile.unlocked_slots:
-            if profile.can_unlock_slot(idx) and profile.unlock_slot(idx):
-                sound_manager.play_upgrade_activate()
-                self._message(
-                    self.layout.slots[idx],
-                    t("upgrades.msg.slot_unlocked"),
-                    colors.GREEN,
-                )
-            else:
-                self._deny_slot(idx, t("upgrades.msg.insufficient"))
-            return
-
-        equipped = profile.upgrade_loadout[idx]
-        if equipped is None:
-            return
-        meta = self._meta_of(equipped)
-        profile.equip_upgrade(None, idx)
-        sound_manager.play_sound("button_click")
-        if meta is not None:
-            self._launch_unequip_flight(meta, idx)
+        ancora = self.layout.slots[idx] if idx < len(self.layout.slots) else None
+        self._apply(self.loadout.press_slot(idx), ancora)
 
     def _upgrade_action(self, card_idx: int) -> None:
         """Card: equipa no primeiro slot livre, ou desequipa se já equipado."""
-        profile = self.player_profile
         meta = self.layout.visible_upgrades[card_idx]
-        card_rect = self.layout.cards[card_idx]
+        self._apply(self.loadout.toggle_upgrade(meta), self.layout.cards[card_idx])
 
-        if meta.type not in profile.unlocked_upgrades:
-            sound_manager.play_upgrade_denied()
-            self._message(card_rect, t("upgrades.msg.locked"), colors.RED)
+    # ------------------------------------------------------------------
+    # Feedback — a tradução de `LoadoutResult` em som, mensagem e animação
+    # ------------------------------------------------------------------
+
+    # Mensagem flutuante por ação. Ausente = ação silenciosa (equipar já é
+    # anunciado pelo voo do medalhão; pedir a nave que já está em uso não é
+    # evento nenhum).
+    _MENSAGEM = {
+        LoadoutAction.SLOT_UNLOCKED: ("upgrades.msg.slot_unlocked", colors.GREEN),
+        LoadoutAction.SHIP_PURCHASED: ("upgrades.msg.acquired", colors.GREEN),
+        LoadoutAction.DENIED_UPGRADE_LOCKED: ("upgrades.msg.locked", colors.RED),
+        LoadoutAction.DENIED_NO_FREE_SLOT: ("upgrades.msg.no_space", colors.RED),
+        LoadoutAction.DENIED_SLOT_COST: ("upgrades.msg.insufficient", colors.RED),
+        LoadoutAction.DENIED_SHIP_COST: ("upgrades.msg.insufficient", colors.RED),
+    }
+
+    def _apply(
+        self,
+        result: LoadoutResult,
+        anchor: Optional[pygame.Rect],
+        *,
+        ship_name: str = "",
+    ) -> None:
+        """Único ponto que converte uma decisão do controlador em tela e som.
+
+        Concentrar aqui é o que impede o feedback de divergir entre caminhos:
+        antes, cada ação tocava o próprio som e montava a própria mensagem, e
+        equipar pelo card e pelo slot já soavam diferente por descuido.
+        """
+        acao = result.action
+        if acao is LoadoutAction.NOTHING:
             return
 
-        equipped_slot = profile.get_equipped_slot(meta.type)
-        if equipped_slot is not None:
-            profile.equip_upgrade(None, equipped_slot)
+        # Som: conquista, recusa, ou o clique neutro das demais.
+        if acao in (LoadoutAction.SLOT_UNLOCKED, LoadoutAction.SHIP_PURCHASED, LoadoutAction.EQUIPPED):
+            sound_manager.play_upgrade_activate()
+        elif result.denied:
+            sound_manager.play_upgrade_denied()
+        else:
             sound_manager.play_sound("button_click")
-            self._launch_unequip_flight(meta, equipped_slot)
-            return
 
-        target = self._first_free_slot(meta)
-        if target is None:
-            sound_manager.play_upgrade_denied()
-            self._deny_slot(
-                max(0, profile.unlocked_slots - 1), t("upgrades.msg.no_space")
+        # Recusa treme o alvo — é o que diz ONDE o pedido esbarrou.
+        if acao is LoadoutAction.DENIED_SHIP_COST:
+            self.shaking_ship, self.shake_timer = True, self.SHAKE_DURATION
+        elif result.denied and result.slot_index is not None:
+            self.shaking_slot = result.slot_index
+            self.shake_timer = self.SHAKE_DURATION
+            anchor = self.layout.slots[result.slot_index]
+
+        entrada = self._MENSAGEM.get(acao)
+        if entrada is not None and anchor is not None:
+            chave, cor = entrada
+            self._message(anchor, t(chave, name=ship_name), cor)
+
+        self._animate(result, anchor)
+
+    def _animate(self, result: LoadoutResult, anchor: Optional[pygame.Rect]) -> None:
+        """Lança o voo do medalhão quando o loadout mudou de fato."""
+        meta, slot = result.meta, result.slot_index
+        if meta is None or slot is None or slot >= len(self.layout.slots):
+            return
+        slot_rect = self.layout.slots[slot]
+        cor = _category_color(meta)
+        if result.action is LoadoutAction.EQUIPPED and anchor is not None:
+            self.flights.launch_to_slot(
+                meta,
+                cor,
+                anchor,
+                slot_rect,
+                card_medallion_radius(anchor, self._s),
+                slot_medallion_radius(slot_rect),
+                slot,
             )
-            return
-
-        profile.equip_upgrade(meta.type, target)
-        sound_manager.play_upgrade_activate()
-        self._launch_equip_flight(meta, card_rect, target)
-
-    def _first_free_slot(self, meta: UpgradeMeta) -> Optional[int]:
-        profile = self.player_profile
-        for i in range(profile.unlocked_slots):
-            if profile.upgrade_loadout[i] is None and profile.can_equip_upgrade(
-                meta.type, i
-            ):
-                return i
-        return None
-
-    def _meta_of(self, upgrade_type) -> Optional[UpgradeMeta]:
-        return next((u for u in self.all_upgrades if u.type == upgrade_type), None)
+        elif result.action is LoadoutAction.UNEQUIPPED:
+            destino = self._visible_card_rect(meta)
+            painel = self.layout.right_panel
+            self.flights.launch_to_card(
+                meta,
+                cor,
+                slot_rect,
+                destino,
+                slot_medallion_radius(slot_rect),
+                card_medallion_radius(destino, self._s) if destino else 0,
+                slot,
+                pygame.Rect(painel.centerx, painel.centery, 1, 1),
+            )
 
     def _message(
         self, anchor: pygame.Rect, text: str, color: Tuple[int, int, int]
     ) -> None:
         self.floating_messages.append(
             FloatingMessage(anchor.centerx, anchor.top, text, color)
-        )
-
-    def _deny_slot(self, idx: int, message: str) -> None:
-        self.shaking_slot, self.shake_timer = idx, self.SHAKE_DURATION
-        if 0 <= idx < len(self.layout.slots):
-            self._message(self.layout.slots[idx], message, colors.RED)
-
-    def _deny_ship(self) -> None:
-        self.shaking_ship, self.shake_timer = True, self.SHAKE_DURATION
-        sound_manager.play_upgrade_denied()
-        self._message(
-            self.layout.ship_preview, t("upgrades.msg.insufficient"), colors.RED
         )
 
     # ------------------------------------------------------------------
@@ -972,66 +701,6 @@ class UpgradesSelectionScene(Scene):
         from ..core.visual_quality import visual_quality
 
         return bool(visual_quality.ui_animations)
-
-    def _slot_medallion_radius(self, rect: pygame.Rect) -> int:
-        return int(rect.width * 0.32)
-
-    def _card_medallion_radius(self, rect: pygame.Rect) -> int:
-        """Mesma conta do medalhão desenhado na tarja de arte do card.
-
-        Tem de ser a mesma: é o raio inicial do voo, e um valor diferente faz o
-        medalhão dar um pulo de tamanho no primeiro frame da animação."""
-        art_w = min(self._s(72), rect.width // 3)
-        return min(int(art_w * 0.42), int(rect.height * 0.30))
-
-    def _drop_flights_for_slot(self, slot_index: int) -> None:
-        """Descarta voos que iam para este slot — o conteúdo mudou no meio."""
-        self.flights = [f for f in self.flights if f.slot_index != slot_index]
-
-    def _launch_equip_flight(
-        self, meta: UpgradeMeta, card_rect: pygame.Rect, slot_index: int
-    ) -> None:
-        self._drop_flights_for_slot(slot_index)
-        if not self._animations_on():
-            return
-        slot_rect = self.layout.slots[slot_index]
-        self.flights.append(
-            UpgradeFlight(
-                meta,
-                card_rect,
-                slot_rect,
-                self._card_medallion_radius(card_rect),
-                self._slot_medallion_radius(slot_rect),
-                slot_index=slot_index,
-            )
-        )
-
-    def _launch_unequip_flight(self, meta: UpgradeMeta, slot_index: int) -> None:
-        """Voo de volta do slot para o card. Se o card não está na página
-        visível, o medalhão viaja até a borda da lista e se apaga — melhor que
-        mirar num rect que o jogador não está vendo."""
-        self._drop_flights_for_slot(slot_index)
-        if not self._animations_on():
-            return
-        slot_rect = self.layout.slots[slot_index]
-        card_rect = self._visible_card_rect(meta)
-        fade_out = card_rect is None
-        if card_rect is None:
-            panel = self.layout.right_panel
-            card_rect = pygame.Rect(panel.centerx, panel.centery, 1, 1)
-        self.flights.append(
-            UpgradeFlight(
-                meta,
-                slot_rect,
-                card_rect,
-                self._slot_medallion_radius(slot_rect),
-                self._card_medallion_radius(card_rect)
-                if not fade_out
-                else self._slot_medallion_radius(slot_rect),
-                slot_index=None,
-                fade_out=fade_out,
-            )
-        )
 
     def _visible_card_rect(self, meta: UpgradeMeta) -> Optional[pygame.Rect]:
         """Rect do card DENTRO da janela do grid, ou None.
@@ -1044,12 +713,6 @@ class UpgradesSelectionScene(Scene):
             rect = self.layout.cards[i]
             return rect if self.layout.viewport.contains(rect) else None
         return None
-
-    def _slot_is_pending(self, slot_index: int) -> bool:
-        """Há um voo a caminho deste slot que ainda não chegou."""
-        return any(
-            f.slot_index == slot_index and not f.arrived for f in self.flights
-        )
 
     # ------------------------------------------------------------------
     # Ciclo da cena
