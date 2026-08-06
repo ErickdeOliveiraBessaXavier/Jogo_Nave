@@ -74,11 +74,8 @@ from ..systems.loadout_controller import (
 from .ui_helpers import draw_bordered_button, wrap_text
 from .upgrade_flight import FlightTrack
 from .upgrades_layout import (
-    GRID_COLS,
     UILayout,
     build_layout,
-    card_art_rect,
-    card_footer_height,
     card_medallion_radius,
     max_scroll,
     place_cards,
@@ -128,7 +125,6 @@ _TABS: Tuple[Tuple[str, Optional[UpgradeRole]], ...] = (
 )
 
 
-
 class FloatingMessage:
     """Mensagem flutuante para feedback visual."""
 
@@ -158,9 +154,6 @@ class FloatingMessage:
 
     def is_dead(self) -> bool:
         return self.lifetime <= 0
-
-
-
 
 
 class UpgradesSelectionScene(Scene):
@@ -203,7 +196,9 @@ class UpgradesSelectionScene(Scene):
             BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"
         )
         star_px = self._s(18)
-        self.star_icon_small = pygame.transform.scale(self.star_icon, (star_px, star_px))
+        self.star_icon_small = pygame.transform.scale(
+            self.star_icon, (star_px, star_px)
+        )
 
         # Reusa a instância oficial do app. Criar uma nova aqui causaria
         # divergência: as mudanças (loadout/nave) seriam salvas no JSON mas
@@ -384,9 +379,7 @@ class UpgradesSelectionScene(Scene):
                 continue
             if dy != 0 and vy * dy <= 0:
                 continue
-            primary, lateral = (
-                (abs(vx), abs(vy)) if dx != 0 else (abs(vy), abs(vx))
-            )
+            primary, lateral = (abs(vx), abs(vy)) if dx != 0 else (abs(vy), abs(vx))
             score = primary + lateral * 2.0
             if score < best_score:
                 best_score, best_desc = score, desc
@@ -423,7 +416,7 @@ class UpgradesSelectionScene(Scene):
                 mag = sx * sx + sy * sy
                 if mag > best_mag:
                     best_mag, bx, by = mag, sx, sy
-        if best_mag < self.NAV_STICK_THRESHOLD ** 2:
+        if best_mag < self.NAV_STICK_THRESHOLD**2:
             self._nav_stick_dir = (0, 0)
             self._nav_repeat_timer = 0.0
             return
@@ -455,9 +448,7 @@ class UpgradesSelectionScene(Scene):
                 self._cycle_tab(-1 if event.key == pygame.K_LEFT else 1)
                 return
             if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
-                self._scroll_by(
-                    -1 if event.key == pygame.K_PAGEUP else 1, page=True
-                )
+                self._scroll_by(-1 if event.key == pygame.K_PAGEUP else 1, page=True)
                 return
 
         # D-pad move o FOCO discreto (hat: y +1 = cima). Fonte única com o
@@ -633,7 +624,11 @@ class UpgradesSelectionScene(Scene):
             return
 
         # Som: conquista, recusa, ou o clique neutro das demais.
-        if acao in (LoadoutAction.SLOT_UNLOCKED, LoadoutAction.SHIP_PURCHASED, LoadoutAction.EQUIPPED):
+        if acao in (
+            LoadoutAction.SLOT_UNLOCKED,
+            LoadoutAction.SHIP_PURCHASED,
+            LoadoutAction.EQUIPPED,
+        ):
             sound_manager.play_upgrade_activate()
         elif result.denied:
             sound_manager.play_upgrade_denied()
@@ -743,9 +738,7 @@ class UpgradesSelectionScene(Scene):
             m.update(dt)
         self.floating_messages = [m for m in self.floating_messages if not m.is_dead()]
 
-        for f in self.flights:
-            f.update(dt)
-        self.flights = [f for f in self.flights if not f.done]
+        self.flights.update(dt)
 
         if self.shake_timer > 0.0:
             self.shake_timer = max(0.0, self.shake_timer - dt)
@@ -807,7 +800,9 @@ class UpgradesSelectionScene(Scene):
     # ------------------------------------------------------------------
 
     def _draw_panel(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
-        pygame.draw.rect(surface, (20, 20, 25, 180), rect, border_radius=self.RADIUS * 2)
+        pygame.draw.rect(
+            surface, (20, 20, 25, 180), rect, border_radius=self.RADIUS * 2
+        )
         pygame.draw.rect(
             surface, (255, 255, 255, 30), rect, 1, border_radius=self.RADIUS * 2
         )
@@ -832,7 +827,12 @@ class UpgradesSelectionScene(Scene):
         pygame.draw.circle(surface, (*color, alpha), center, radius)
         pygame.draw.circle(
             surface,
-            (min(255, color[0] + 45), min(255, color[1] + 45), min(255, color[2] + 45), alpha),
+            (
+                min(255, color[0] + 45),
+                min(255, color[1] + 45),
+                min(255, color[2] + 45),
+                alpha,
+            ),
             center,
             radius,
             max(1, self._s(2)),
@@ -864,12 +864,17 @@ class UpgradesSelectionScene(Scene):
         color = (int(80 + 70 * pulse), int(190 + 50 * pulse), 255)
         if inside:
             pygame.draw.rect(
-                surface, color, rect.inflate(-self._s(3), -self._s(3)), 3,
+                surface,
+                color,
+                rect.inflate(-self._s(3), -self._s(3)),
+                3,
                 border_radius=self.RADIUS,
             )
             return
         ring = rect.inflate(self._s(8), self._s(8))
-        pygame.draw.rect(surface, color, ring, 3, border_radius=self.RADIUS + self._s(3))
+        pygame.draw.rect(
+            surface, color, ring, 3, border_radius=self.RADIUS + self._s(3)
+        )
 
     def _draw_pill(
         self,
@@ -985,9 +990,7 @@ class UpgradesSelectionScene(Scene):
             self._draw_ship_stat_bars(surface)
         finally:
             surface.set_clip(previous_clip)
-        self._draw_chevron_pair(
-            surface, self.layout.ship_prev, self.layout.ship_next
-        )
+        self._draw_chevron_pair(surface, self.layout.ship_prev, self.layout.ship_next)
 
     def _draw_ship_preview(self, surface: pygame.Surface) -> None:
         ship = self.shown_ship
@@ -1272,7 +1275,9 @@ class UpgradesSelectionScene(Scene):
         text = self.tiny_font.render(label, True, (180, 180, 180))
         surface.blit(text, (x, y))
         by, bh = y + self._s(12), self._s(6)
-        pygame.draw.rect(surface, (40, 40, 40), (x, by, w, bh), border_radius=self._s(3))
+        pygame.draw.rect(
+            surface, (40, 40, 40), (x, by, w, bh), border_radius=self._s(3)
+        )
 
         def norm(v: float) -> float:
             return max(0.1, min(1.0, float((v - 0.5) / 1.5)))
@@ -1294,7 +1299,11 @@ class UpgradesSelectionScene(Scene):
     def _draw_slots(self, surface: pygame.Surface) -> None:
         profile = self.player_profile
         header = self.header_font.render(
-            t("upgrades.slots_header", n=profile.unlocked_slots, total=UPGRADE_SLOT_COUNT),
+            t(
+                "upgrades.slots_header",
+                n=profile.unlocked_slots,
+                total=UPGRADE_SLOT_COUNT,
+            ),
             True,
             colors.WHITE,
         )
@@ -1336,8 +1345,8 @@ class UpgradesSelectionScene(Scene):
 
             if locked:
                 self._draw_locked_slot(surface, draw_rect, profile.get_slot_cost(i))
-            elif equipped is not None and not self._slot_is_pending(i):
-                meta = self._meta_of(equipped)
+            elif equipped is not None and not self.flights.is_slot_pending(i):
+                meta = self.loadout.meta_for(equipped)
                 if meta is not None:
                     self._draw_equipped_slot(surface, draw_rect, meta)
             else:
@@ -1365,12 +1374,14 @@ class UpgradesSelectionScene(Scene):
         pygame.draw.line(surface, (90, 90, 100), (cx - arm, cy), (cx + arm, cy), 2)
         pygame.draw.line(surface, (90, 90, 100), (cx, cy - arm), (cx, cy + arm), 2)
         key = self.tiny_font.render(self._slot_key_label(idx), True, (120, 120, 130))
-        surface.blit(key, key.get_rect(midbottom=(rect.centerx, rect.bottom - self._s(6))))
+        surface.blit(
+            key, key.get_rect(midbottom=(rect.centerx, rect.bottom - self._s(6)))
+        )
 
     def _draw_equipped_slot(
         self, surface: pygame.Surface, rect: pygame.Rect, meta: UpgradeMeta
     ) -> None:
-        radius = self._slot_medallion_radius(rect)
+        radius = slot_medallion_radius(rect)
         self._draw_medallion(
             surface, (rect.centerx, rect.centery - self._s(6)), radius, meta
         )
@@ -1382,9 +1393,7 @@ class UpgradesSelectionScene(Scene):
     def _slot_key_label(self, idx: int) -> str:
         """Tecla do slot no jogo — a mesma que o HUD mostra na fileira vazia."""
         try:
-            return pygame.key.name(
-                self.player_profile.upgrade_keybindings[idx]
-            ).upper()
+            return pygame.key.name(self.player_profile.upgrade_keybindings[idx]).upper()
         except (IndexError, TypeError, pygame.error):
             return str(idx + 1)
 
@@ -1443,9 +1452,7 @@ class UpgradesSelectionScene(Scene):
         if self.max_scroll <= 0.0:
             return
         track = self.layout.scrollbar
-        pygame.draw.rect(
-            surface, (40, 40, 50), track, border_radius=track.width // 2
-        )
+        pygame.draw.rect(surface, (40, 40, 50), track, border_radius=track.width // 2)
         vp_h = self.layout.viewport.height
         proporcao = vp_h / (vp_h + self.max_scroll)
         alt = max(self._s(24), int(track.height * proporcao))
@@ -1464,7 +1471,9 @@ class UpgradesSelectionScene(Scene):
         profile = self.player_profile
         unlocked = meta.type in profile.unlocked_upgrades
         equipped = profile.get_equipped_slot(meta.type) is not None
-        focused = self.hovered_upgrade is not None and self.hovered_upgrade.type == meta.type
+        focused = (
+            self.hovered_upgrade is not None and self.hovered_upgrade.type == meta.type
+        )
 
         cor = _category_color(meta)
         radius = self.RADIUS
@@ -1659,10 +1668,12 @@ class UpgradesSelectionScene(Scene):
         número (1 vs 1000) e com o idioma, e um x fixo cortava o texto na borda.
         """
         label = self.item_font.render(
-            t("upgrades.stars", n=self.player_profile.available_stars), True, CUSTOM_GOLD
+            t("upgrades.stars", n=self.player_profile.available_stars),
+            True,
+            CUSTOM_GOLD,
         )
         right = self.layout.right_panel.right
-        y = self.layout.stars_pos[1]
+        y = self.layout.stars_y
         surface.blit(label, (right - label.get_width(), y + self._s(2)))
         icon = self.star_icon_small
         surface.blit(
@@ -1684,19 +1695,12 @@ class UpgradesSelectionScene(Scene):
             self._draw_focus_ring(surface, self.layout.back_button)
 
     def _draw_flights(self, surface: pygame.Surface) -> None:
-        for flight in self.flights:
-            flight.draw_particles(surface)
-            flight.draw_ring(surface)
-            if not flight.medallion_visible:
-                continue
-            x, y = flight.position()
-            self._draw_medallion(
-                surface,
-                (int(x), int(y)),
-                int(flight.radius()),
-                flight.meta,
-                alpha=flight.alpha(),
-            )
+        self.flights.draw(
+            surface,
+            lambda surf, pos, radius, meta, alpha: self._draw_medallion(
+                surf, pos, radius, meta, alpha=alpha
+            ),
+        )
 
     def _draw_floating_messages(self, surface: pygame.Surface) -> None:
         for m in self.floating_messages:
