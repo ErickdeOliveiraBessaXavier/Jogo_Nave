@@ -39,6 +39,13 @@ Scale = Callable[[float], int]
 # da largura) para o grid ser idêntico em 576p, 720p e 1080p (§12).
 GRID_COLS = 8
 
+# Altura de UMA linha da descrição, em px do design base. Mora aqui porque três
+# lugares precisam concordar sobre ela: a altura reservada do card
+# (`detail_card_height`), o avanço entre linhas no render e o alvo de clique das
+# setas (`detail_arrow_rects`). Cópias soltas divergem no primeiro ajuste de
+# fonte, e o sintoma é seta que não responde onde está desenhada.
+DETAIL_LINE_H = 15
+
 
 @dataclass
 class UILayout:
@@ -230,7 +237,7 @@ def detail_card_height(s: Scale, lines: int) -> int:
 
     Fonte única da conta: o layout reserva por ela e o render desenha por ela.
     """
-    return s(16) + s(20) + s(14) + s(10) + lines * s(15) + s(18) + s(12)
+    return s(16) + s(20) + s(14) + s(10) + lines * s(DETAIL_LINE_H) + s(18) + s(12)
 
 
 def content_height(layout: UILayout, item_count: int) -> int:
@@ -330,6 +337,36 @@ def detail_showcase_rect(card: pygame.Rect, s: Scale) -> pygame.Rect:
 def detail_gutter_x(card: pygame.Rect, s: Scale) -> int:
     """Eixo da calha à direita do texto: setas e barra de posição moram aqui."""
     return card.right - s(14) - s(6)
+
+
+def detail_arrow_rects(
+    card: pygame.Rect, s: Scale, lines: int
+) -> Tuple[pygame.Rect, pygame.Rect]:
+    """Alvos das setas de rolagem da descrição — (cima, baixo), na calha.
+
+    Dono único da posição das setas: o render desenha no `center` destes rects e
+    o clique testa os rects. Antes a posição era calculada só no render, e por
+    isso o mouse não tinha onde acertar — a seta era desenho, não botão.
+
+    São bem maiores que o triângulo desenhado (10×4 px no design base) de
+    propósito: alvo de mouse de 4px de altura é impossível de acertar, e a seta
+    ainda bobeia 2px na animação de "tem mais texto". A LARGURA, porém, para na
+    calha — o alvo não avança sobre a coluna de texto, para o clique de rolar
+    não pegar onde o jogador está lendo. Sobra a altura, que é de graça.
+
+    Retorna os DOIS sempre. Qual está ativo depende da rolagem atual, que é
+    estado da cena — geometria não sabe disso.
+    """
+    texto = detail_text_rect(card, s)
+    x = detail_gutter_x(card, s)
+    topo_y = texto.y + s(2)
+    base_y = texto.y + lines * s(DETAIL_LINE_H) - s(4)
+    meia = max(s(5), min(x - texto.right, card.right - x))
+    w, h = meia * 2, s(22)
+    return (
+        pygame.Rect(x - meia, topo_y - h // 2, w, h),
+        pygame.Rect(x - meia, base_y - h // 2, w, h),
+    )
 
 
 def detail_text_rect(card: pygame.Rect, s: Scale) -> pygame.Rect:

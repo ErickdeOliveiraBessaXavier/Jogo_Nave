@@ -97,6 +97,14 @@ class UserPreferences:
         # (para o novato não matar a própria descoberta por reflexo) e destaca os
         # ajustes de controle. Uma vez True, o modal volta ao comportamento normal.
         self.controls_modal_seen: bool = False
+        # True quando o jogador JÁ DEFINIU como quer jogar — mexeu num ajuste de
+        # controle, aqui ou em Configurações. Enquanto False, o modal pré-jogo
+        # mostra os atalhos de método de controle e tiro automático; depois ele
+        # some com eles e fica só nas instruções de voo. Não é o mesmo que
+        # `controls_modal_seen` ("já viu o modal"): dá para ver o modal dez vezes
+        # sem nunca escolher nada, e é justamente quem não escolheu que ainda
+        # precisa do atalho na cara.
+        self.controls_configured: bool = False
         self.gamepad_enabled: bool = False
         # True depois que o usuário marca/desmarca o checkbox do controle na
         # tela de opções. Enquanto False, o jogo pode LIGAR o gamepad sozinho
@@ -113,6 +121,42 @@ class UserPreferences:
         self.p2_coop_enabled: bool = True
 
         self.load()
+        # Perfis salvos antes da exclusão mútua podem trazer os dois ligados.
+        if self.gamepad_enabled:
+            self.mouse_control = False
+
+    # ------------------------------------------------------------------
+    # Exclusão mútua controle × mouse
+    # ------------------------------------------------------------------
+
+    @property
+    def mouse_control_locked(self) -> bool:
+        """True quando o toggle do mouse não pode ser ligado.
+
+        Lido pela UI para desenhar a opção esmaecida e recusar o clique, em vez
+        de deixar o jogador marcar algo que o `set_gamepad_enabled` desmarca em
+        seguida — caixa que se desmarca sozinha lê como bug.
+        """
+        return self.gamepad_enabled
+
+    def set_gamepad_enabled(self, enabled: bool) -> None:
+        """Liga/desliga o Modo Controle Xbox — e **desliga o mouse** ao ligar.
+
+        Ponto único desta regra: todo caminho que mexe em `gamepad_enabled`
+        (Configurações, modal de controles, auto-ligar do hot-plug) passa por
+        aqui, senão a exclusão vale só na tela onde foi escrita.
+
+        **Por que a regra existe:** os dois são fontes de MOVIMENTO da nave, e o
+        `mouse_control` é absoluto — a nave persegue o ponteiro. Com os dois
+        ligados, o analógico só ganha enquanto está inclinado (ver
+        `ShipMovement._move_impl`): ao soltar o stick, a nave volta sozinha para
+        debaixo de um cursor parado no meio da tela. O jogador de controle vê a
+        nave "escapar" sem ter tocado em nada, e não há nada na tela que explique
+        o porquê.
+        """
+        self.gamepad_enabled = enabled
+        if enabled:
+            self.mouse_control = False
 
     def load(self):
         """Carrega preferências do disco."""
@@ -181,6 +225,9 @@ class UserPreferences:
                 self.controls_modal_seen = data.get(
                     "controls_modal_seen", self.controls_modal_seen
                 )
+                self.controls_configured = data.get(
+                    "controls_configured", self.controls_configured
+                )
                 self.gamepad_enabled = data.get("gamepad_enabled", self.gamepad_enabled)
                 self.gamepad_choice_made = data.get(
                     "gamepad_choice_made", self.gamepad_choice_made
@@ -220,6 +267,7 @@ class UserPreferences:
                 "virtual_joystick": self.virtual_joystick,
                 "show_controls_modal": self.show_controls_modal,
                 "controls_modal_seen": self.controls_modal_seen,
+                "controls_configured": self.controls_configured,
                 "gamepad_enabled": self.gamepad_enabled,
                 "gamepad_choice_made": self.gamepad_choice_made,
                 "p1_prefers_keyboard": self.p1_prefers_keyboard,
@@ -255,6 +303,7 @@ class UserPreferences:
         self.virtual_joystick = _web
         self.show_controls_modal = True
         self.controls_modal_seen = False
+        self.controls_configured = False
         self.gamepad_enabled = False
         self.gamepad_choice_made = False
         self.p1_prefers_keyboard = False

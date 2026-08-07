@@ -26,6 +26,7 @@ from game.scenes.upgrades_layout import (
     cell_icon_rect,
     cell_medallion_radius,
     content_height,
+    detail_arrow_rects,
     detail_card_height,
     detail_gutter_x,
     detail_showcase_rect,
@@ -241,6 +242,30 @@ def test_vitrine_e_texto_dividem_o_card_sem_se_cruzar(size):
     assert texto.right <= detail_gutter_x(card, s) - s(4)
     assert texto.width > 0
     assert card.height == detail_card_height(s, LINHAS_DETALHE)
+
+
+@pytest.mark.parametrize("size", RESOLUCOES)
+def test_setas_de_rolagem_sao_alvo_clicavel_dentro_da_calha(size):
+    """A seta é BOTÃO, não enfeite — e o alvo tem de ser acertável com o mouse.
+
+    Enquanto a posição da seta só existia dentro do render, o clique não tinha
+    onde bater e só o controle rolava o texto. O alvo mora na calha (não rouba
+    clique do texto), cabe no card e é grande o bastante para a mão humana — o
+    triângulo desenhado tem 4px de altura no design base.
+    """
+    s = escala(size[0])
+    layout = montar(size)
+    card = layout.detail_card
+    cima, baixo = detail_arrow_rects(card, s, LINHAS_DETALHE)
+    texto = detail_text_rect(card, s)
+
+    for alvo in (cima, baixo):
+        assert card.contains(alvo), "a seta clicável saiu do card"
+        assert not alvo.colliderect(texto), "o alvo da seta invadiu a coluna de texto"
+        assert alvo.width >= s(16) and alvo.height >= s(12), "alvo pequeno demais"
+    assert cima.centery < baixo.centery, "a seta de subir tem de ficar em cima"
+    assert cima.centerx == baixo.centerx == detail_gutter_x(card, s)
+    assert not cima.colliderect(baixo), "as duas setas se sobrepõem"
 
 
 def test_existe_upgrade_que_rola_de_verdade():

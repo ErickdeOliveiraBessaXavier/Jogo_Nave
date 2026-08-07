@@ -347,9 +347,35 @@ class GameApp:
             return
         if not self.gamepad.connected or self.preferences.gamepad_enabled:
             return
-        self.preferences.gamepad_enabled = True
+        # Pelo setter: ligar o controle desliga o `mouse_control` (a nave não
+        # pode ter duas fontes de movimento). Vale também aqui, no auto-ligar —
+        # atribuir o campo direto deixaria o hot-plug fora da regra.
+        self.preferences.set_gamepad_enabled(True)
+        self.input.mouse_control = self.preferences.mouse_control
         self.preferences.save()
         logger.info("Controle detectado — gamepad ativado automaticamente.")
+
+    @property
+    def cursor_navigation_mode(self) -> str:
+        """``cursor`` (mouse manda) ou ``focus`` (DPad/teclado/analógico mandam).
+
+        Leitura pública: as cenas precisam saber se podem deixar o hover do
+        mouse mexer na seleção, e liam o `_cursor_navigation_mode` privado —
+        acesso a privado entre objetos que o §1 proíbe.
+        """
+        return self._cursor_navigation_mode
+
+    def set_cursor_mode(self, mode: str) -> None:
+        """API pública do modo de navegação (ver `_set_cursor_mode`).
+
+        Cenas com navegação por foco próprio (`owns_gamepad_navigation`) chamam
+        `set_cursor_mode("focus")` quando o controle move o foco: sem isso o
+        modo continua em ``cursor`` — o app só troca sozinho no D-pad e no
+        LB/RB, e o analógico dessas cenas não passa por evento nenhum — e o
+        hover do mouse, parado onde o jogador o deixou, rouba de volta a
+        seleção a cada frame.
+        """
+        self._set_cursor_mode(mode)
 
     def _set_cursor_mode(self, mode: str) -> None:
         """Alterna entre ``cursor`` (mouse/stick) e ``focus`` (DPad/teclado).

@@ -79,7 +79,15 @@ class UpgradeSelector:
 
     @staticmethod
     def _is_ready(upg: Optional["ActiveUpgrade"]) -> bool:
-        return upg is not None and upg.cooldown_left <= 0.0
+        """Disponibilidade REAL — a mesma que a ativação consulta.
+
+        Era `cooldown_left <= 0.0`, e isso mentia na janela mais importante: o
+        cooldown só parte quando o efeito TERMINA, então o upgrade recém-usado
+        passava a duração inteira contando como pronto. O cursor então parava
+        nele — justo o único que não responde — em vez de pular para o próximo
+        disponível, que é o serviço que a seleção rápida presta.
+        """
+        return upg is not None and upg.is_ready
 
     def _order(self) -> List[int]:
         """Índices dos slots ocupados: prontos primeiro, em cooldown depois."""

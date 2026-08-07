@@ -372,9 +372,11 @@ class GameplayInputHandler:
             elif button == XboxButton.B:
                 scene.cancel_upgrade_select()
             elif button == XboxButton.LB:
-                scene.navigate_upgrade_select(+1)
-            elif button == XboxButton.RB:
+                # LB volta, RB avança — a convenção de bumper do gênero. Estava
+                # invertido: LB andava +1 e RB −1.
                 scene.navigate_upgrade_select(-1)
+            elif button == XboxButton.RB:
+                scene.navigate_upgrade_select(+1)
             return
 
         # Tiro normal sai do RT via ``hold_shoot``. A/X/Y ficam livres para

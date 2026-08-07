@@ -173,3 +173,45 @@ def test_laser_shot_cooldown_espera_cargas_dos_orbes():
     upg.update(0.016, ctx)
     assert not upg.active
     assert upg.cooldown_left == upg.get_effective_cooldown(ctx)
+
+
+# ── disponibilidade (o que a HUD e o cursor do gamepad consultam) ────────────
+
+
+def test_em_execucao_nao_esta_disponivel_mesmo_com_cooldown_zero():
+    """`is_ready` cobre a janela que `cooldown_left` sozinho não vê.
+
+    Entre ativar e o efeito acabar, o cooldown ainda é ZERO (é o contrato
+    testado acima). Quem lia só o cooldown enxergava o upgrade recém-usado como
+    pronto — foi assim que a seleção rápida do gamepad parou de pular para o
+    próximo disponível.
+    """
+    upg = ActiveUpgrade(_meta(cooldown=5.0, duration=2.0))
+    ctx = _Ctx()
+    assert upg.is_ready
+    upg.activate(ctx)
+
+    assert upg.cooldown_left == 0.0
+    assert not upg.is_ready, "em execução não pode contar como disponível"
+
+    upg.update(2.0, ctx)  # fim da duração → cooldown parte
+    assert not upg.is_ready
+    upg.update(5.0, ctx)  # fim da recarga
+    assert upg.is_ready
+
+
+def test_can_activate_e_is_ready_nao_divergem():
+    """`can_activate` é `is_ready` + a parte que depende do mundo.
+
+    Duas listas de condições em paralelo era o que deixava a HUD e a ativação
+    discordando; aqui a de cima passa a ser a de baixo mais o contexto.
+    """
+    upg = ActiveUpgrade(_meta(cooldown=5.0, duration=2.0))
+    ctx = _Ctx()
+    for _ in range(3):
+        assert upg.can_activate(ctx) == upg.is_ready
+        upg.activate(ctx)
+        assert upg.can_activate(ctx) == upg.is_ready
+        upg.update(2.0, ctx)
+        assert upg.can_activate(ctx) == upg.is_ready
+        upg.update(5.0, ctx)

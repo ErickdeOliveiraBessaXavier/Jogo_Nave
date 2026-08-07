@@ -452,6 +452,66 @@ muda o som — reaplique aos objetos carregados.**
 
 ---
 
+## §19 — Foco, hover e entrada por dispositivo
+
+**O destaque muda a borda que o elemento já tem. Nenhuma segunda moldura.**
+
+- Hover (cursor sobre o elemento) e foco (teclado/controle) são o **mesmo
+  estado** — "é isto que responde se você confirmar" — e recebem o mesmo
+  desenho. Fonte única: `FOCUS_HIGHLIGHT` + `interactive_border_color`
+  (`scenes/ui_helpers.py`); `draw_bordered_button(..., focused=...)` é o botão
+  padrão do jogo. Telas que navegam por foco próprio
+  (`owns_gamepad_navigation`, sem cursor virtual) passam `focused=`.
+- **Proibido:** desenhar um contorno EXTRA (anel, halo, retângulo inflado) por
+  cima de um componente que já tem borda. O foco altera cor/espessura/brilho
+  do que está lá. Um elemento sem borda (o preview da nave) acende o que ele
+  já desenha — no caso, o holofote.
+- **Por que a regra existe** (medido): a tela de Aprimoramentos tinha o próprio
+  `_draw_focus_ring` — anel pulsante **ciano**, uma cor que não aparece em mais
+  nenhuma tela — desenhado por fora da borda do card, do slot e da aba. O
+  resultado era borda dupla em cinco componentes e um estilo de seleção que
+  ninguém mais no jogo usava. Convivia com uma segunda lógica de seleção
+  (traço azul de "selecionado") no mesmo card, então dois contornos concorriam
+  na mesma célula.
+- **Cadência de repetição é uma só.** Segurar a seta com o mouse, segurar o
+  analógico e segurar o D-pad usam `NAV_INITIAL_DELAY`/`NAV_REPEAT_RATE` da
+  cena. Ritmos diferentes por dispositivo leem como três interfaces.
+- **Roda do mouse é `pygame.MOUSEWHEEL`.** Os botões 4/5 são da era do
+  pygame 1 e o SDL2 não os emite — código que os espera não roda nunca e o
+  sintoma é "a roda não faz nada" enquanto o controle funciona. `MOUSEWHEEL`
+  não carrega posição: use `pygame.mouse.get_pos()`.
+- **Indicador que rola/aciona é BOTÃO.** Se a tela desenha uma seta de rolagem,
+  ela tem alvo de clique — e o alvo sai do **mesmo helper de geometria** que o
+  render usa (`detail_arrow_rects`). Desenhar num lugar e testar o clique em
+  outro é como a seta virou enfeite não-clicável.
+- **`A` aciona o FOCO, nunca "o que estiver sob o cursor".** Tela sem foco
+  próprio herda o cursor virtual do app, e ele entra onde a tela anterior o
+  deixou — em geral fora do modal. Aí `A` não acha nada sob o ponteiro e cai no
+  fallback: no modal pré-jogo, apertar `A` "para escolher" **começava a
+  partida**. Quem tem foco explícito (`owns_gamepad_navigation`) trata
+  `JOYHATMOTION` e faz o polling do analógico por conta (o app não move cursor
+  ali) e abre com o primeiro elemento já destacado.
+- **Duas fontes de movimento não convivem.** Ligar o Modo Controle Xbox
+  **desliga** o `mouse_control`, e o toggle do mouse fica travado enquanto isso
+  (`UserPreferences.set_gamepad_enabled` / `mouse_control_locked`). A regra mora
+  na preferência, não na tela: são três caminhos que ligam o controle
+  (Configurações, modal de controles, auto-ligar do hot-plug) e a exclusão
+  precisa valer nos três. **Por quê:** o analógico só vence enquanto está
+  inclinado (`ShipMovement._move_impl`); soltar o stick devolvia a nave para
+  debaixo de um ponteiro parado, e a nave "escapava" sem nada explicando.
+  Varrido por `tests/test_control_exclusivity.py` (atribuição crua a
+  `gamepad_enabled` é erro).
+- **Bumpers seguem a convenção do gênero:** LB volta, RB avança. Vale para
+  qualquer cursor navegável por bumper.
+- **"Disponível" é `is_ready`, não `cooldown_left <= 0`.** O cooldown de um
+  upgrade só parte quando o efeito TERMINA (§ `ActiveUpgrade.update`), então
+  entre ativar e acabar ele tem cooldown zero **e** não pode ser usado. HUD e
+  cursor de seleção consultam `is_ready`; `can_activate` é `is_ready` mais o que
+  depende do mundo. Subclasse com regra própria sobrescreve `is_ready` — nunca
+  duplica a lista de condições em `can_activate`.
+
+---
+
 ## Resumo (checklist de PR)
 
 - [ ] Nenhum sistema lê privado (`_x`) de outro objeto
@@ -471,4 +531,8 @@ muda o som — reaplique aos objetos carregados.**
 - [ ] UI (fontes/caixas/offsets) escalada por `ui_scale`; validada fora de 720p
 - [ ] Navegação por `app.go_to`/`go_back`/`open_overlay`; nenhuma cena desenha fade de troca
 - [ ] Preferência aplicada a recurso já carregado é reaplicada (volume → `_update_all_volumes`)
+- [ ] Foco/hover mudam a borda existente (`interactive_border_color`); nenhum anel por cima
+- [ ] Roda do mouse por `MOUSEWHEEL`; indicador clicável compartilha geometria com o render
+- [ ] Controle e mouse não movem a nave juntos (`set_gamepad_enabled`); LB volta / RB avança
+- [ ] Disponibilidade de upgrade por `is_ready` (cooldown zero ≠ pronto durante o efeito)
 - [ ] `ruff check game tests` limpo e `pytest` verde antes do PR

@@ -67,6 +67,7 @@ PT: dict[str, str] = {
     "controls.toggle.autofire": "Tiro automático: {v}",
     "controls.method.mouse": "Mouse",
     "controls.method.keyboard": "Teclado",
+    "controls.method.gamepad": "Controle",
     "controls.on": "Ligado",
     "controls.off": "Desligado",
     "controls.settings_hint": "Dica: você pode mudar isto quando quiser — e encontrar mais opções — no menu Configurações.",
@@ -150,6 +151,7 @@ PT: dict[str, str] = {
     "settings.restart_msg": "As alterações só serão vistas ao reiniciar o jogo. Deseja fazer isso agora?",
     "settings.info_title": "Aviso",
     "settings.coop_block_msg": "Essa opção só pode ser alterada fora de uma partida cooperativa. Volte ao menu principal e ajuste antes de iniciar o coop.",
+    "settings.mouse_locked_msg": "O Controle por Mouse fica desligado enquanto o Modo Controle Xbox está ativo — a nave não pode seguir o ponteiro e o analógico ao mesmo tempo. Desligue o Controle Xbox para usar o mouse.",
 
     # ── Seleção de mundo ─────────────────────────────────────────────────────
     "world.title": "Selecione o Mundo",

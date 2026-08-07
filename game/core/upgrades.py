@@ -114,14 +114,35 @@ class ActiveUpgrade:
         self.charges_left: Optional[int] = meta.base_charges
         self.active: bool = False
 
-    def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
+    @property
+    def is_ready(self) -> bool:
+        """Disponível para ativar AGORA — sem consultar o contexto.
+
+        É o `can_activate` menos a parte que depende do mundo
+        (`additional_can_activate`), para quem só precisa saber se o slot
+        responde: a HUD e o cursor de seleção do gamepad, que não têm ctx.
+
+        **Cuidado com o intervalo entre ativar e recarregar:** o `cooldown_left`
+        continua ZERO enquanto o efeito está em execução — ele só parte quando o
+        efeito termina (ver `update`). Quem usa `cooldown_left <= 0` como
+        "disponível" enxerga o upgrade recém-usado como pronto durante toda a
+        duração dele, e foi isso que quebrou a seleção rápida: o cursor parava no
+        que acabou de ser disparado em vez de pular para um que responde.
+
+        Subclasse com regra de disponibilidade própria sobrescreve ESTA
+        propriedade (não o `can_activate`), e assim a HUD, o cursor e a ativação
+        continuam concordando.
+        """
         if self.active and not self.allows_refresh():
             return False
         if self.cooldown_left > 0.0:
             return False
         if self.charges_left is not None and self.charges_left <= 0:
             return False
-        return self.additional_can_activate(ctx)
+        return True
+
+    def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
+        return self.is_ready and self.additional_can_activate(ctx)
 
     def activate(self, ctx: UpgradeContextProtocol) -> bool:
         if not self.can_activate(ctx):
@@ -262,12 +283,15 @@ class ShieldBurstUpgrade(ActiveUpgrade):
     def allows_refresh(self) -> bool:
         return False
 
-    def can_activate(self, ctx: UpgradeContextProtocol) -> bool:
-        if self._monitoring_shield:
-            return False
-        if self.cooldown_left > 0.0:
-            return False
-        return self.additional_can_activate(ctx)
+    @property
+    def is_ready(self) -> bool:
+        """Enquanto o escudo estiver de pé, este upgrade não responde.
+
+        Sobrescreve `is_ready` e não `can_activate` (§5): assim a HUD e o cursor
+        de seleção do gamepad — que consultam a propriedade — enxergam a mesma
+        indisponibilidade que a ativação enxerga.
+        """
+        return not self._monitoring_shield and self.cooldown_left <= 0.0
 
     def activate(self, ctx: UpgradeContextProtocol) -> bool:
         if not self.can_activate(ctx):

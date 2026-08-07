@@ -59,6 +59,7 @@ EN: dict[str, str] = {
     "controls.toggle.autofire": "Auto fire: {v}",
     "controls.method.mouse": "Mouse",
     "controls.method.keyboard": "Keyboard",
+    "controls.method.gamepad": "Controller",
     "controls.on": "On",
     "controls.off": "Off",
     "controls.settings_hint": "Tip: you can change this anytime — and find more options — in the Settings menu.",
@@ -141,6 +142,7 @@ EN: dict[str, str] = {
     "settings.restart_msg": "Changes will only take effect after restarting the game. Do you want to do that now?",
     "settings.info_title": "Notice",
     "settings.coop_block_msg": "This option can only be changed outside a co-op match. Return to the main menu and adjust it before starting co-op.",
+    "settings.mouse_locked_msg": "Mouse Control stays off while Xbox Controller mode is on — the ship cannot follow the pointer and the stick at the same time. Turn off the Xbox Controller to use the mouse.",
 
     # ── World selection ──────────────────────────────────────────────────────
     "world.title": "Select World",

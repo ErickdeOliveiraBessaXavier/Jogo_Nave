@@ -77,16 +77,22 @@ from ..systems.loadout_controller import (
     LoadoutController,
     LoadoutResult,
 )
-from .ui_helpers import draw_bordered_button, wrap_text
+from .ui_helpers import (
+    FOCUS_HIGHLIGHT,
+    draw_bordered_button,
+    interactive_border_color,
+    wrap_text,
+)
 from .upgrade_flight import FlightTrack
 from .upgrade_icons import icon_surface
 from .upgrades_layout import (
+    DETAIL_LINE_H,
     UILayout,
     build_layout,
     case_size,
     cell_icon_rect,
     cell_medallion_radius,
-    detail_gutter_x,
+    detail_arrow_rects,
     detail_showcase_rect,
     detail_text_rect,
     max_scroll,
@@ -274,6 +280,10 @@ class UpgradesSelectionScene(Scene):
         self.detail_scroll = 0
         self._detail_stick_dir = 0
         self._detail_repeat_timer = 0.0
+        # Seta do card sob o botão do mouse, e o relógio da repetição ao
+        # segurar. Mesma cadência do analógico (ver `_poll_detail_arrow`).
+        self._detail_arrow_held = 0
+        self._detail_arrow_timer = 0.0
 
         # --- Navegação por FOCO (controle) --------------------------------
         # Descritor do elemento focado: (região, índice). Regiões: "slot",
@@ -400,7 +410,7 @@ class UpgradesSelectionScene(Scene):
 
     def _apply_nav(self, dx: int, dy: int) -> None:
         """Move o foco em (dx, dy) e força o modo focus (esconde o cursor)."""
-        self.app._set_cursor_mode("focus")
+        self.app.set_cursor_mode("focus")
         self._move_focus(dx, dy)
 
     def _move_focus(self, dx: int, dy: int) -> None:
@@ -493,6 +503,69 @@ class UpgradesSelectionScene(Scene):
             self.detail_scroll = novo
             sound_manager.play_sound("button_hover")
 
+    def _scroll_request(self, delta: int, pos: Tuple[int, int]) -> None:
+        """Roteador ÚNICO de rolagem — roda do mouse e teclado passam por aqui.
+
+        Uma regra só, para os dispositivos não divergirem (§9): o cursor sobre o
+        card rola o TEXTO; fora dele rola o grid. E quando o grid não tem para
+        onde rolar (o caso normal: os 23 upgrades cabem inteiros), a rolagem cai
+        para o texto em vez de não fazer nada — girar a roda e a tela não reagir
+        lê como travamento, não como "aqui não rola".
+        """
+        if not delta:
+            return
+        sobre_o_card = self.layout.detail_card.collidepoint(pos)
+        if sobre_o_card or self.max_scroll <= 0.0:
+            self._scroll_detail(delta)
+        else:
+            self._scroll_by(1 if delta > 0 else -1)
+
+    def _detail_arrow_at(self, pos: Tuple[int, int]) -> int:
+        """Direção da seta do card sob ``pos`` (-1 cima, +1 baixo, 0 nenhuma).
+
+        Só responde pela seta que está DESENHADA: nas pontas do texto a seta
+        some, e clicar no vazio onde ela estava não deve rolar. O alvo tem de
+        coincidir com o que o jogador vê.
+        """
+        limite = self._detail_max_scroll()
+        if limite <= 0:
+            return 0
+        cima, baixo = detail_arrow_rects(self.layout.detail_card, self._s, DETAIL_LINES)
+        if self.detail_scroll > 0 and cima.collidepoint(pos):
+            return -1
+        if self.detail_scroll < limite and baixo.collidepoint(pos):
+            return 1
+        return 0
+
+    def _press_detail_arrow(self, direcao: int) -> None:
+        """Clique na seta: rola uma linha e arma a repetição de segurar."""
+        self._detail_arrow_held = direcao
+        self._detail_arrow_timer = self.NAV_INITIAL_DELAY
+        self._scroll_detail(direcao)
+
+    def _poll_detail_arrow(self, dt: float) -> None:
+        """Segurar a seta repete, na cadência do analógico (`NAV_REPEAT_RATE`).
+
+        Mesma matemática do `_poll_detail_stick` de propósito: segurar a seta e
+        segurar o RS têm de andar no mesmo ritmo, senão a tela tem dois "feels"
+        de rolagem. Solta o botão, sai do alvo ou a seta some ao chegar na ponta
+        → para. O botão é lido aqui (e não só no MOUSEBUTTONUP) porque a janela
+        pode perder o foco com o botão apertado e o UP nunca chegar.
+        """
+        if self._detail_arrow_held == 0:
+            return
+        pos = pygame.mouse.get_pos()
+        if (
+            not pygame.mouse.get_pressed()[0]
+            or self._detail_arrow_at(pos) != self._detail_arrow_held
+        ):
+            self._detail_arrow_held, self._detail_arrow_timer = 0, 0.0
+            return
+        self._detail_arrow_timer -= dt
+        if self._detail_arrow_timer <= 0.0:
+            self._detail_arrow_timer = self.NAV_REPEAT_RATE
+            self._scroll_detail(self._detail_arrow_held)
+
     def _poll_detail_stick(self, dt: float) -> None:
         """Analógico DIREITO rola a descrição; o esquerdo move o foco.
 
@@ -578,6 +651,15 @@ class UpgradesSelectionScene(Scene):
             if event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                 self._cycle_tab(-1 if event.key == pygame.K_LEFT else 1)
                 return
+            if event.key in (pygame.K_UP, pygame.K_DOWN):
+                # Teclado rola pelo MESMO roteador da roda do mouse. A cena não
+                # move foco por teclado (isso é do controle e do cursor), então
+                # as setas ficam livres para o gesto que o teclado tem de ter:
+                # rolar o texto que não coube.
+                self._scroll_request(
+                    -1 if event.key == pygame.K_UP else 1, pygame.mouse.get_pos()
+                )
+                return
             if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
                 # Rolam a DESCRIÇÃO quando ela tem mais texto do que cabe;
                 # senão rolam o grid (que só rola com elenco grande).
@@ -616,20 +698,30 @@ class UpgradesSelectionScene(Scene):
                 return
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # As setas do card são testadas ANTES dos nós: elas ficam na calha,
+            # dentro do card de descrição, que não é alvo de ação nenhuma — mas
+            # a ordem deixa explícito que a seta ganha o clique.
+            seta = self._detail_arrow_at(event.pos)
+            if seta:
+                self._press_detail_arrow(seta)
+                return
             node = self._node_at_pos(event.pos)
             if node is not None:
                 self.focus = node
                 self._activate(node)
             return
 
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):
-            # A roda age sobre o que está SOB o cursor: em cima do card, rola o
-            # texto; em qualquer outro lugar, o grid.
-            direcao = -1 if event.button == 4 else 1
-            if self.layout.detail_card.collidepoint(event.pos):
-                self._scroll_detail(direcao)
-            else:
-                self._scroll_by(direcao)
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self._detail_arrow_held, self._detail_arrow_timer = 0, 0.0
+            return
+
+        if event.type == pygame.MOUSEWHEEL:
+            # A roda é MOUSEWHEEL, não botão 4/5 — o SDL2 (pygame 2) não emite
+            # mais os botões legados, e era por isso que a roda não fazia NADA
+            # aqui enquanto o controle rolava normalmente. O evento não carrega
+            # posição (é do dispositivo, não do ponteiro), daí o `get_pos`.
+            # `event.y` > 0 é girar para CIMA = subir no texto.
+            self._scroll_request(-int(event.y), pygame.mouse.get_pos())
 
     def _activate(self, desc: Optional[tuple]) -> None:
         """Roteador único de ação — clique do mouse e ``A`` do controle.
@@ -892,6 +984,9 @@ class UpgradesSelectionScene(Scene):
         # LS navega o grid, RS rola a descrição — dois eixos, dois destinos.
         self._poll_stick_nav(dt)
         self._poll_detail_stick(dt)
+        # Seta do card segurada com o mouse: mesma repetição, no update (§3 —
+        # o render não mexe em rolagem).
+        self._poll_detail_arrow(dt)
         self._validate_focus()
 
         # Rolagem: o alvo persegue o foco e a posição desenhada persegue o
@@ -905,9 +1000,12 @@ class UpgradesSelectionScene(Scene):
             self.scroll_y = self.scroll_target
         self._rebuild_grid()
 
-        if self.app._cursor_navigation_mode == "cursor":
+        if self.app.cursor_navigation_mode == "cursor":
             # Modo mouse: hover segue o cursor E sincroniza o foco, para a
-            # troca mouse↔controle continuar do mesmo ponto.
+            # troca mouse↔controle continuar do mesmo ponto. Em modo focus o
+            # cursor está escondido e NÃO opina — senão um ponteiro parado em
+            # cima de um card roubaria de volta, a cada frame, o foco que o
+            # analógico acabou de mover.
             node = self._node_at_pos(pygame.mouse.get_pos())
             if node is not None:
                 self.focus = node
@@ -993,33 +1091,12 @@ class UpgradesSelectionScene(Scene):
             letter.set_alpha(alpha)
         surface.blit(letter, letter.get_rect(center=center))
 
-    def _draw_focus_ring(
-        self, surface: pygame.Surface, rect: pygame.Rect, *, inside: bool = False
-    ) -> None:
-        """Anel pulsante de seleção ao redor do item em foco.
-
-        Crítico no controle: o ponteiro do mouse fica oculto no modo de
-        navegação por D-pad, então este anel é a única indicação clara de qual
-        card/slot está selecionado.
-
-        ``inside`` desenha o anel POR DENTRO do rect. É o que os cards usam: o
-        anel externo cai fora da janela recortada do grid e some justamente nos
-        cards da primeira e da última linha, que é onde o foco mais para."""
-        pulse = (math.sin(self._time * 6) + 1) * 0.5 if self._animations_on() else 0.5
-        color = (int(80 + 70 * pulse), int(190 + 50 * pulse), 255)
-        if inside:
-            pygame.draw.rect(
-                surface,
-                color,
-                rect.inflate(-self._s(3), -self._s(3)),
-                3,
-                border_radius=self.RADIUS,
-            )
-            return
-        ring = rect.inflate(self._s(8), self._s(8))
-        pygame.draw.rect(
-            surface, color, ring, 3, border_radius=self.RADIUS + self._s(3)
-        )
+    # `_draw_focus_ring` foi REMOVIDO. Ele desenhava um anel pulsante ciano por
+    # fora (ou por dentro) do elemento focado — uma segunda moldura sobre a
+    # borda que o card/slot/aba já tinha, com uma cor que não existia em mais
+    # nenhuma tela. Hoje o foco muda a BORDA EXISTENTE, via
+    # `interactive_border_color` (`ui_helpers`), que é o mesmo caminho do hover
+    # do botão Voltar e de todos os botões do jogo.
 
     def _draw_pill(
         self,
@@ -1147,7 +1224,10 @@ class UpgradesSelectionScene(Scene):
 
         # Holofote: elipse difusa sob a nave. Dá chão ao sprite e é o que faz o
         # preview ler como "peça em exposição" em vez de sprite solto no painel.
-        self._draw_spotlight(surface, rect)
+        # O preview não tem borda para acender, então é o HOLOFOTE que muda de
+        # cor no foco — a mesma ideia (alterar o que já está desenhado) sem
+        # inventar uma moldura só para esta peça.
+        self._draw_spotlight(surface, rect, focused=self.focus == ("ship", 0))
 
         pulse = 1.0 + 0.04 * math.sin(self._time * 3) if self._animations_on() else 1.0
         try:
@@ -1169,24 +1249,28 @@ class UpgradesSelectionScene(Scene):
             icon = pygame.transform.scale(self.locked_icon, (icon_s, icon_s))
             surface.blit(icon, icon.get_rect(center=rect.center))
 
-        if self.focus == ("ship", 0):
-            self._draw_focus_ring(surface, self.layout.ship_preview)
-
-    def _draw_spotlight(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
+    def _draw_spotlight(
+        self, surface: pygame.Surface, rect: pygame.Rect, *, focused: bool = False
+    ) -> None:
         """Halo elíptico atrás/abaixo da nave, desenhado em camadas.
 
         Camadas concêntricas com alpha baixo em vez de um blur de verdade: o
         jogo é pixel art e um degradê suave destoaria; três elipses dão o
-        volume necessário e custam três `draw` por frame."""
+        volume necessário e custam três `draw` por frame.
+
+        ``focused`` acende o holofote na cor de destaque da interface, mais
+        forte. É o equivalente aqui ao que a borda faz nos cards: o elemento que
+        já existe muda de estado."""
         cx = rect.centerx
         cy = rect.centery + int(rect.height * 0.28)
+        cor = FOCUS_HIGHLIGHT if focused else (120, 140, 210)
         for i, alpha in enumerate((14, 20, 30)):
             fator = 1.0 - i * 0.26
             w = int(rect.width * 1.05 * fator)
             h = int(rect.height * 0.34 * fator)
             pygame.draw.ellipse(
                 surface,
-                (120, 140, 210, alpha),
+                (*cor, alpha * 2 if focused else alpha),
                 pygame.Rect(cx - w // 2, cy - h // 2, w, h),
             )
 
@@ -1491,20 +1575,21 @@ class UpgradesSelectionScene(Scene):
             if equipped is not None:
                 bg = (38, 46, 38)
             pygame.draw.rect(surface, bg, draw_rect, border_radius=self.RADIUS)
-            border = (
-                colors.YELLOW
-                if focused
-                else (70, 70, 78)
+            # UMA borda só: o foco muda a cor e a espessura dela (o mesmo que o
+            # hover faz no botão Voltar), em vez de ganhar um anel por fora.
+            border = interactive_border_color(
+                (70, 70, 78)
                 if locked
                 else CUSTOM_GOLD
                 if equipped is not None
-                else colors.GRAY
+                else colors.GRAY,
+                active=focused,
             )
             pygame.draw.rect(
                 surface,
                 border,
                 draw_rect,
-                2 if equipped is not None else 1,
+                2 if (focused or equipped is not None) else 1,
                 border_radius=self.RADIUS,
             )
 
@@ -1516,9 +1601,6 @@ class UpgradesSelectionScene(Scene):
                     self._draw_equipped_slot(surface, draw_rect, meta)
             else:
                 self._draw_empty_slot(surface, draw_rect, i)
-
-            if focused:
-                self._draw_focus_ring(surface, draw_rect)
 
     def _draw_locked_slot(
         self, surface: pygame.Surface, rect: pygame.Rect, cost: int
@@ -1616,17 +1698,17 @@ class UpgradesSelectionScene(Scene):
             pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
             pygame.draw.rect(
                 surface,
-                cor if ativa else (70, 70, 82),
+                interactive_border_color(
+                    cor if ativa else (70, 70, 82), active=focada
+                ),
                 rect,
-                2 if ativa else 1,
+                2 if (ativa or focada) else 1,
                 border_radius=self.RADIUS,
             )
             label = self.tiny_font.render(
                 t(key), True, colors.WHITE if ativa else (150, 150, 162)
             )
             surface.blit(label, label.get_rect(center=rect.center))
-            if focada:
-                self._draw_focus_ring(surface, rect)
 
     def _draw_scrollbar(self, surface: pygame.Surface) -> None:
         """Barra de rolagem fina. Só aparece quando há o que rolar."""
@@ -1674,15 +1756,31 @@ class UpgradesSelectionScene(Scene):
             else (20, 20, 24)
         )
         pygame.draw.rect(surface, bg, rect, border_radius=self.RADIUS)
-        borda = (
-            CUSTOM_GOLD
-            if equipped
-            else (*_category_color(meta), 110)
-            if unlocked
-            else (58, 58, 66)
-        )
+        # Uma borda, quatro estados, nesta ordem de prioridade: FOCADO (o que
+        # responde ao confirmar) > selecionado (o que o card descreve) >
+        # equipado > normal. Antes, foco e seleção desenhavam contornos EXTRA
+        # por cima — dois riscos concorrendo na mesma célula.
+        if focused:
+            borda, largura = FOCUS_HIGHLIGHT, 2
+        elif equipped:
+            # Equipado vem antes de selecionado: é estado durável do perfil, e
+            # apagá-lo por causa de onde o card de baixo está apontando faria a
+            # nave parecer ter perdido o upgrade.
+            borda, largura = CUSTOM_GOLD, 2
+        elif selected:
+            # O dourado do destaque falando mais baixo: mesma família, sem
+            # competir com a célula focada.
+            borda, largura = (
+                int(FOCUS_HIGHLIGHT[0] * 0.62),
+                int(FOCUS_HIGHLIGHT[1] * 0.62),
+                int(FOCUS_HIGHLIGHT[2] * 0.62),
+            ), 1
+        elif unlocked:
+            borda, largura = (*_category_color(meta), 110), 1
+        else:
+            borda, largura = (58, 58, 66), 1
         pygame.draw.rect(
-            surface, borda, rect, 2 if equipped else 1, border_radius=self.RADIUS
+            surface, borda, rect, largura, border_radius=self.RADIUS
         )
 
         icon_rect = cell_icon_rect(rect, self._s)
@@ -1707,15 +1805,6 @@ class UpgradesSelectionScene(Scene):
             icone = pygame.transform.scale(self.locked_icon, (tam, tam))
             surface.blit(icone, icone.get_rect(center=icon_rect.center))
 
-        # Selecionado (o que o card embaixo está descrevendo) ganha um traço
-        # discreto; o FOCADO ganha o anel. São estados diferentes: no mouse o
-        # foco acompanha o cursor, mas a seleção fica onde o jogador parou.
-        if selected and not focused:
-            pygame.draw.rect(
-                surface, (120, 170, 220), rect, 1, border_radius=self.RADIUS
-            )
-        if focused:
-            self._draw_focus_ring(surface, rect, inside=True)
 
     def _draw_detail_card(self, surface: pygame.Surface) -> None:
         """Card de descrição do upgrade selecionado — altura fixa.
@@ -1798,20 +1887,22 @@ class UpgradesSelectionScene(Scene):
 
         for linha in visiveis:
             surface.blit(self.small_font.render(linha, True, (215, 215, 225)), (x, y))
-            y += self._s(15)
+            y += self._s(DETAIL_LINE_H)
 
         if limite <= 0:
             return
 
         # Setas e barra na CALHA reservada (fora da largura do texto), do topo
-        # à base da janela.
-        topo_y = texto.y + self._s(2)
-        base_y = texto.y + DETAIL_LINES * self._s(15) - self._s(4)
-        seta_x = detail_gutter_x(self.layout.detail_card, self._s)
+        # à base da janela. A posição vem do MESMO helper que o clique consulta
+        # (`detail_arrow_rects`): desenhar num lugar e testar noutro é como a
+        # seta virou enfeite não-clicável.
+        cima, baixo = detail_arrow_rects(self.layout.detail_card, self._s, DETAIL_LINES)
+        topo_y, base_y, seta_x = cima.centery, baixo.centery, cima.centerx
+        sob_o_cursor = self._detail_arrow_at(pygame.mouse.get_pos())
         if self.detail_scroll > 0:
-            self._draw_scroll_arrow(surface, seta_x, topo_y, -1)
+            self._draw_scroll_arrow(surface, seta_x, topo_y, -1, sob_o_cursor == -1)
         if self.detail_scroll < limite:
-            self._draw_scroll_arrow(surface, seta_x, base_y, 1)
+            self._draw_scroll_arrow(surface, seta_x, base_y, 1, sob_o_cursor == 1)
 
         # Barrinha de posição entre as duas setas: diz QUANTO falta, não só que
         # falta. Some junto com as setas quando o texto cabe inteiro.
@@ -1835,7 +1926,12 @@ class UpgradesSelectionScene(Scene):
             )
 
     def _draw_scroll_arrow(
-        self, surface: pygame.Surface, x: int, y: int, direcao: int
+        self,
+        surface: pygame.Surface,
+        x: int,
+        y: int,
+        direcao: int,
+        hover: bool = False,
     ) -> None:
         """Triângulo pequeno indicando texto escondido acima/abaixo.
 
@@ -1843,6 +1939,10 @@ class UpgradesSelectionScene(Scene):
         pixelada (a mesma razão que tirou os símbolos do texto). O bob vertical
         é de 2px — o bastante para o olho pegar o movimento na periferia sem
         virar um elemento piscando na cara de quem está lendo.
+
+        ``hover`` clareia a seta quando o cursor está sobre o alvo de clique: é
+        o que conta ao jogador de mouse que aquilo é botão, e não só um aviso de
+        "tem mais texto".
         """
         bob = 0
         if self._animations_on():
@@ -1851,7 +1951,9 @@ class UpgradesSelectionScene(Scene):
         w = self._s(5)
         h = self._s(4) * direcao
         pygame.draw.polygon(
-            surface, CUSTOM_GOLD, [(x - w, y), (x + w, y), (x, y + h)]
+            surface,
+            (255, 244, 214) if hover else CUSTOM_GOLD,
+            [(x - w, y), (x + w, y), (x, y + h)],
         )
 
     def _draw_showcase(
@@ -2056,9 +2158,8 @@ class UpgradesSelectionScene(Scene):
             CUSTOM_PURPLE,
             255,
             0,
+            focused=self.focus == ("back", 0),
         )
-        if self.focus == ("back", 0):
-            self._draw_focus_ring(surface, self.layout.back_button)
 
     def _draw_flights(self, surface: pygame.Surface) -> None:
         self.flights.draw(

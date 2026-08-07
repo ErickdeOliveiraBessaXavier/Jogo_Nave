@@ -582,32 +582,7 @@ class SettingsView:
                     rect.height,
                 )
                 if click_rect.collidepoint(pos):
-                    if self._try_show_coop_block(key):
-                        return True
-                    self.toggles[key] = not self.toggles[key]
-                    # Salvar nas preferências
-                    if key == "p1_prefers_keyboard":
-                        self.preferences.p1_prefers_keyboard = self.toggles[key]
-                        self._apply_live_control_settings()
-                    if key == "mouse_control":
-                        self.preferences.mouse_control = self.toggles[key]
-                        self._apply_live_control_settings()
-                    elif key == "auto_fire":
-                        self.preferences.auto_fire = self.toggles[key]
-                        self._apply_live_control_settings()
-                    elif key == "virtual_joystick":
-                        self.preferences.virtual_joystick = self.toggles[key]
-                        self._apply_live_control_settings()
-                    elif key == "touch_mode":
-                        self.preferences.touch_mode = self.toggles[key]
-                        # Escolha explícita: trava o auto-ligar pelo toque.
-                        self._apply_live_control_settings()
-                    elif key == "gamepad_enabled":
-                        self.preferences.gamepad_enabled = self.toggles[key]
-                        # Escolha explícita: trava o auto-ligar do gamepad.
-                        self.preferences.gamepad_choice_made = True
-                        self._apply_live_control_settings()
-                    self.preferences.save()
+                    self._flip_toggle(key)
                     return True
 
             # Sliders (clique verticalmente tolerante)
@@ -664,6 +639,57 @@ class SettingsView:
             return roster.count() >= 2
         except (AttributeError, TypeError):
             return False
+
+    def _flip_toggle(self, key: str) -> bool:
+        """Inverte um toggle de controle e aplica ao vivo. Caminho ÚNICO.
+
+        Mouse e controle chegavam aqui por dois blocos idênticos (o clique e o
+        `_activate_at` do gamepad), e a regra nova de exclusão precisaria ser
+        escrita duas vezes — que é como as duas cópias divergem.
+        """
+        if self._try_show_coop_block(key):
+            return False
+        if self._is_toggle_locked(key):
+            self.info_popup_text = t("settings.mouse_locked_msg")
+            return False
+
+        self.toggles[key] = not self.toggles[key]
+        prefs = self.preferences
+        # Mexer em qualquer ajuste de controle conta como "já defini como quero
+        # jogar": o modal pré-jogo para de repetir a pergunta (ver
+        # `ControlsModalScene.show_quick_toggles`).
+        prefs.controls_configured = True
+        if key == "p1_prefers_keyboard":
+            prefs.p1_prefers_keyboard = self.toggles[key]
+        elif key == "mouse_control":
+            prefs.mouse_control = self.toggles[key]
+        elif key == "auto_fire":
+            prefs.auto_fire = self.toggles[key]
+        elif key == "virtual_joystick":
+            prefs.virtual_joystick = self.toggles[key]
+        elif key == "touch_mode":
+            prefs.touch_mode = self.toggles[key]
+        elif key == "gamepad_enabled":
+            # Pelo setter: ligar o controle desliga o mouse (§ exclusão mútua).
+            prefs.set_gamepad_enabled(self.toggles[key])
+            # Escolha explícita: trava o auto-ligar do gamepad.
+            prefs.gamepad_choice_made = True
+            # A caixa do mouse tem de refletir o que o setter fez, no mesmo
+            # frame — senão fica marcada descrevendo algo que já não vale.
+            self.toggles["mouse_control"] = prefs.mouse_control
+
+        self._apply_live_control_settings()
+        prefs.save()
+        return True
+
+    def _is_toggle_locked(self, key: str) -> bool:
+        """True quando o toggle está travado por outra preferência.
+
+        Hoje só o `mouse_control`, travado pelo Modo Controle Xbox. O toggle
+        continua VISÍVEL (esmaecido) em vez de sumir: uma opção que desaparece
+        deixa o jogador procurando o que ele lembra de ter visto.
+        """
+        return key == "mouse_control" and self.preferences.mouse_control_locked
 
     def _try_show_coop_block(self, key: str) -> bool:
         """Se o toggle `key` é sensível e coop está ativo, mostra info popup.
@@ -732,31 +758,7 @@ class SettingsView:
                 rect.height,
             )
             if click_rect.collidepoint(pos):
-                if self._try_show_coop_block(key):
-                    return True
-                self.toggles[key] = not self.toggles[key]
-                if key == "p1_prefers_keyboard":
-                    self.preferences.p1_prefers_keyboard = self.toggles[key]
-                    self._apply_live_control_settings()
-                elif key == "mouse_control":
-                    self.preferences.mouse_control = self.toggles[key]
-                    self._apply_live_control_settings()
-                elif key == "auto_fire":
-                    self.preferences.auto_fire = self.toggles[key]
-                    self._apply_live_control_settings()
-                elif key == "virtual_joystick":
-                    self.preferences.virtual_joystick = self.toggles[key]
-                    self._apply_live_control_settings()
-                elif key == "touch_mode":
-                    self.preferences.touch_mode = self.toggles[key]
-                    # Escolha explícita: trava o auto-ligar pelo toque.
-                    self._apply_live_control_settings()
-                elif key == "gamepad_enabled":
-                    self.preferences.gamepad_enabled = self.toggles[key]
-                    # Escolha explícita: trava o auto-ligar do gamepad.
-                    self.preferences.gamepad_choice_made = True
-                    self._apply_live_control_settings()
-                self.preferences.save()
+                self._flip_toggle(key)
                 return True
 
         # Slider: A em cima do slider seta o valor pra posição da mira.
@@ -842,14 +844,11 @@ class SettingsView:
         if self._app is None:
             return
 
-        # Sincroniza preferências em memória do app.
-        self._app.preferences.mouse_control = self.preferences.mouse_control
-        self._app.preferences.auto_fire = self.preferences.auto_fire
-        self._app.preferences.touch_mode = self.preferences.touch_mode
-        self._app.preferences.virtual_joystick = self.preferences.virtual_joystick
-        self._app.preferences.gamepad_enabled = self.preferences.gamepad_enabled
-        self._app.preferences.gamepad_choice_made = self.preferences.gamepad_choice_made
-        self._app.preferences.p1_prefers_keyboard = self.preferences.p1_prefers_keyboard
+        # Sem cópia campo a campo para o app: `self.preferences` **é**
+        # `app.preferences` (mesma instância, ver o construtor e §18). O bloco
+        # que existia aqui atribuía cada campo a si mesmo — e uma dessas linhas
+        # escrevia `gamepad_enabled` cru, por fora do `set_gamepad_enabled`, que
+        # é onde mora a exclusão com o mouse.
 
         # Sincroniza sistema de input global.
         self._app.input.mouse_control = self.preferences.mouse_control
@@ -1261,12 +1260,19 @@ class SettingsView:
                 card_rect.right - self._s(25) - rect.x,
                 rect.height,
             )
-            is_hovered = click_rect.collidepoint(pygame.mouse.get_pos()) and not coop_active
+            locked = self._is_toggle_locked(key)
+            is_hovered = (
+                click_rect.collidepoint(pygame.mouse.get_pos())
+                and not coop_active
+                and not locked
+            )
 
             # Checkbox
             is_checked = self.toggles[key]
             # Borda fica dourada se estiver checado ou se estiver sob hover do mouse
             checkbox_color = CUSTOM_GOLD if (is_checked or is_hovered) else colors.GRAY
+            if locked:
+                checkbox_color = colors.GRAY
             pygame.draw.rect(
                 surface, (*checkbox_color, alpha), rect, 2, border_radius=self._s(5)
             )
@@ -1299,6 +1305,12 @@ class SettingsView:
                     label_text += suffix
             if coop_active and key in ("gamepad_enabled", "p1_prefers_keyboard"):
                 label_text += t("settings.status.coop_locked")
+                label_color = colors.GRAY
+            if locked:
+                # Só esmaece — SEM sufixo no rótulo. A linha tem 45px de passo
+                # fixo e o rótulo já quebra em duas linhas; um "(desligado pelo
+                # Controle Xbox)" empurrava para três e escrevia por cima do
+                # toggle de baixo. O porquê é dito no popup ao tentar marcar.
                 label_color = colors.GRAY
 
             # Mudar a cor do texto para dourado se passar o mouse sobre ele (e não estiver desabilitado)

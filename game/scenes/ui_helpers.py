@@ -5,7 +5,6 @@ from typing import Callable
 import pygame
 
 from ..core import colors
-from ..core.colors import CUSTOM_GOLD, CUSTOM_PURPLE
 
 # Scratch de tela cheia REUTILIZÁVEL para fades/overlays. Alocar uma SRCALPHA de
 # tela cheia (~3,7 MB em 720p) a cada frame durante um fade gera churn de GC e os
@@ -86,6 +85,33 @@ class UIParticle:
         surface.blit(p_surf, (self.x - self.size, self.y - self.size))
 
 
+# Destaque de QUALQUER elemento interativo ATIVO — sob o cursor (hover) ou com o
+# foco do teclado/controle. Ponto único da interface: mexer aqui muda todos os
+# botões, cards e slots de uma vez.
+#
+# É o dourado da interface CLAREADO, e não o `CUSTOM_GOLD` puro, porque o
+# dourado puro já é um estado no arsenal ("equipado") — o destaque precisa se
+# distinguir dele sem inventar uma cor fora da paleta.
+FOCUS_HIGHLIGHT: tuple[int, int, int] = (255, 226, 168)
+
+
+def interactive_border_color(
+    base_color: tuple[int, int, int], *, active: bool
+) -> tuple[int, int, int]:
+    """Cor da borda de um elemento interativo. ``active`` = hover OU foco.
+
+    **Muda a borda que já existe; não desenha contorno novo.** A tela de
+    Aprimoramentos tinha a regra própria oposta — um anel pulsante POR FORA do
+    elemento, além da borda dele — e o resultado era borda dupla numa tela só,
+    com uma cor (ciano) que não existia em mais lugar nenhum do jogo.
+
+    Hover e foco recebem o MESMO tratamento de propósito: são o mesmo estado
+    ("é isto que vai responder se você confirmar"), e separá-los é o que faz
+    mouse, teclado e controle parecerem três interfaces diferentes.
+    """
+    return FOCUS_HIGHLIGHT if active else base_color
+
+
 def draw_bordered_button(
     surface: pygame.Surface,
     rect: pygame.Rect,
@@ -94,12 +120,21 @@ def draw_bordered_button(
     color: tuple[int, int, int],
     alpha: int = 255,
     offset_y: int = 0,
+    *,
+    focused: bool = False,
 ) -> None:
+    """Botão padrão da interface: uma borda só, que muda de cor quando ativo.
+
+    ``focused`` existe para as telas que navegam por FOCO próprio em vez do
+    cursor virtual (`owns_gamepad_navigation`): sem ele, o botão só reagiria ao
+    mouse e o jogador de controle não veria destaque nenhum — que foi a origem
+    do anel externo desenhado por cima na tela de Aprimoramentos.
+    """
     adjusted = rect.copy()
     adjusted.y += offset_y
 
     is_hovered = adjusted.collidepoint(pygame.mouse.get_pos())
-    border_color = CUSTOM_GOLD if (is_hovered and color == CUSTOM_PURPLE) else color
+    border_color = interactive_border_color(color, active=focused or is_hovered)
 
     temp = pygame.Surface((adjusted.width + 4, adjusted.height + 4), pygame.SRCALPHA)
     pygame.draw.rect(

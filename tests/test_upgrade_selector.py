@@ -11,8 +11,20 @@ from game.systems.upgrade_selector import UpgradeSelector
 
 
 class _Upg:
-    def __init__(self, cooldown_left):
+    """Stub com o contrato de disponibilidade do `ActiveUpgrade`.
+
+    `active` existe aqui porque é o estado que o seletor errava: durante a
+    execução do efeito o `cooldown_left` ainda é ZERO (a recarga só parte quando
+    o efeito acaba), então "cooldown zerado" **não** quer dizer "pode usar".
+    """
+
+    def __init__(self, cooldown_left, active=False):
         self.cooldown_left = cooldown_left
+        self.active = active
+
+    @property
+    def is_ready(self):
+        return not self.active and self.cooldown_left <= 0.0
 
 
 @pytest.fixture
@@ -89,6 +101,32 @@ def test_confirm_em_slot_vazio_nao_ativa():
     sel.index = 0  # slot vazio
     sel.confirm()
     assert activated == []
+
+
+def test_upgrade_em_execucao_nao_conta_como_pronto():
+    """Seleção rápida: usar um e chamar o cursor leva ao PRÓXIMO disponível.
+
+    O regressão real: o upgrade recém-disparado fica `active` com
+    `cooldown_left == 0` durante toda a duração do efeito. Com a checagem antiga
+    (só o cooldown) o cursor pousava justamente nele — o único que não responde —
+    e o jogador apertava A no vazio.
+    """
+    slots = [_Upg(0.0, active=True), _Upg(0.0)]
+    sel = UpgradeSelector(get_slots=lambda: slots, activate=lambda i: None)
+    sel.toggle()
+    assert sel.index == 1, "o cursor parou no upgrade que está em execução"
+
+
+def test_em_execucao_vai_para_o_fim_da_fila_como_o_em_recarga():
+    """Ativo (ainda sem cooldown) navega junto dos indisponíveis, não à frente."""
+    slots = [_Upg(0.0, active=True), _Upg(3.0), _Upg(0.0)]
+    sel = UpgradeSelector(get_slots=lambda: slots, activate=lambda i: None)
+    sel.toggle()
+    assert sel.index == 2  # o único disponível abre a fila
+    sel.navigate(+1)
+    assert sel.index == 0  # depois os indisponíveis, na ordem dos slots
+    sel.navigate(+1)
+    assert sel.index == 1
 
 
 def test_le_a_lista_fresca_a_cada_chamada():
