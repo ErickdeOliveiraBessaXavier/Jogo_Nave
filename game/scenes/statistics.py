@@ -251,6 +251,15 @@ class StatisticsView:
             self.dialog.handle_event(event)
             return True
 
+        if event.type == pygame.KEYDOWN and event.key in (
+            pygame.K_RETURN,
+            pygame.K_SPACE,
+        ):
+            # Enter aciona o que as setas/TAB destacaram — mesmo `_activate_at`
+            # do A do controle. Sem isto o teclado navega e não confirma (§19).
+            self._activate_at(pygame.mouse.get_pos())
+            return True
+
         if event.type == pygame.JOYBUTTONDOWN:
             from ..core.gamepad import XboxButton
 
@@ -1070,6 +1079,10 @@ class StatisticsScene(Scene):
     desenha transição nenhuma.
     """
 
+    # Setas percorrem abas, filtros e o botão de voltar (§19). A rolagem das
+    # listas é da roda do mouse e dos bumpers — não disputa a tecla.
+    arrow_keys_navigate_focus = True
+
     def __init__(self, game_app: "GameApp"):
         super().__init__(game_app)
         self.r = game_app.renderer  # Usar renderer compartilhado
@@ -1084,7 +1097,11 @@ class StatisticsScene(Scene):
     def enter(self):
         super().enter()
         self.view.reset()
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
 
     def exit(self):
         if self.view.profile:

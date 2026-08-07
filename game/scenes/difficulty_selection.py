@@ -32,16 +32,21 @@ class DifficultySelectionView:
         on_select: Callable[[DifficultyPreset], None],
         on_back: Callable[[], None],
         renderer: Any = None,
+        app: Any = None,
     ):
         """
         Args:
             on_select: Callback chamado quando uma dificuldade é selecionada
             on_back: Callback chamado quando o usuário quer voltar
             renderer: Renderer compartilhado (opcional)
+            app: `GameApp` — só para mover o ponteiro por `warp_cursor` quando
+                LB/RB trocam de card (ver `_warp_cursor`). Opcional: sem ele a
+                view continua funcional, só sem o registro do warp.
         """
         self.on_select = on_select
         self.on_back = on_back
         self.renderer = renderer
+        self._app = app
 
         # Escala de UI relativa ao design base (1280×720). Todas as resoluções
         # ofertadas são 16:9, então um único fator (largura) cobre os dois
@@ -193,6 +198,11 @@ class DifficultySelectionView:
             if event.key == pygame.K_ESCAPE:
                 self.on_back()
                 return True  # Evento consumido
+            # Enter/Espaço acionam o card que as setas destacaram (§19). As
+            # setas em si são navegação e ficam com o app
+            # (`arrow_keys_navigate_focus` da MainMenuScene).
+            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                return self._activate_at(pygame.mouse.get_pos())
 
         elif event.type == pygame.JOYBUTTONDOWN:
             # Controle: A confirma no card sob o cursor virtual (movido pelo
@@ -201,17 +211,7 @@ class DifficultySelectionView:
             from ..core.gamepad import XboxButton
 
             if event.button == XboxButton.A:
-                pos = pygame.mouse.get_pos()
-                if self.back_button_rect.collidepoint(pos):
-                    sound_manager.play_sound("button_click")
-                    self.on_back()
-                    return True
-                for preset, button_data in self.difficulty_buttons.items():
-                    if button_data["rect"].collidepoint(pos):
-                        sound_manager.play_sound("button_click")
-                        self.selected_difficulty = preset
-                        self.on_select(preset)
-                        return True
+                return self._activate_at(pygame.mouse.get_pos())
             elif event.button == XboxButton.B:
                 self.on_back()
                 return True
@@ -223,6 +223,35 @@ class DifficultySelectionView:
                 return True
 
         return False  # Evento não consumido
+
+    def _activate_at(self, pos: tuple[int, int]) -> bool:
+        """Aciona o card (ou o Voltar) sob a mira — caminho do A e do Enter."""
+        if self.back_button_rect.collidepoint(pos):
+            sound_manager.play_sound("button_click")
+            self.on_back()
+            return True
+        for preset, button_data in self.difficulty_buttons.items():
+            if button_data["rect"].collidepoint(pos):
+                sound_manager.play_sound("button_click")
+                self.selected_difficulty = preset
+                self.on_select(preset)
+                return True
+        return False
+
+    def _warp_cursor(self, pos: tuple[int, int]) -> None:
+        """Move a mira pelo app, que registra o destino.
+
+        Sem o app (view instanciada solta, em teste), cai no `set_pos` direto —
+        o ponteiro vai para o lugar certo, só não há quem absorva o eco.
+        """
+        app = self._app
+        if app is not None and hasattr(app, "warp_cursor"):
+            app.warp_cursor(pos)
+            return
+        try:
+            pygame.mouse.set_pos(pos)
+        except pygame.error:
+            pass
 
     def _cycle_difficulty(self, direction: int) -> None:
         """Move o cursor para o card de dificuldade vizinho na direção dada.
@@ -247,10 +276,10 @@ class DifficultySelectionView:
         if target_idx == current_idx:
             return
         target_rect = self.difficulty_buttons[presets[target_idx]]["rect"]
-        try:
-            pygame.mouse.set_pos(target_rect.center)
-        except pygame.error:
-            pass
+        # Pelo `warp_cursor` do app: um `set_pos` cru emite um MOUSEMOTION que o
+        # app lê como "o usuário mexeu no mouse" e o ponteiro reaparece no meio
+        # da navegação por LB/RB.
+        self._warp_cursor(target_rect.center)
         self.hovered_difficulty = presets[target_idx]
         sound_manager.play_sound("button_hover")
 

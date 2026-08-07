@@ -521,6 +521,22 @@ class WorldSelectionView:
         self.previous_background = None
         self.is_transitioning = False
 
+    def _activate_at(self, pos: tuple[int, int]) -> None:
+        """Aciona o que está sob a mira — caminho único do A e do Enter.
+
+        Sobre o card (ou fora de tudo) entra no mundo focado; sobre as setinhas
+        gira o carrossel; sobre o Voltar, volta.
+        """
+        if self.back_button_rect.collidepoint(pos):
+            sound_manager.play_sound("button_click")
+            self.on_back()
+        elif self.left_arrow_rect.collidepoint(pos):
+            self._cycle_world(-1)
+        elif self.right_arrow_rect.collidepoint(pos):
+            self._cycle_world(+1)
+        else:
+            self._select_current_world()
+
     def handle_event(self, event: pygame.event.Event) -> None:
         """Processa eventos de entrada."""
         if event.type == pygame.KEYDOWN:
@@ -542,15 +558,19 @@ class WorldSelectionView:
                 self.last_key_time = current_time
                 sound_manager.play_sound("button_hover")
 
-            elif event.key == pygame.K_RETURN:
+            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                 # K_RETURN sintético logo após um A do controle: o handler nativo
                 # do A já resolveu a ação cursor-aware (seta/card/voltar). Ignora
                 # este para não sobrepor com uma seleção de mundo. Enter real do
-                # teclado nunca vem precedido de A → flag False → seleciona normal.
+                # teclado nunca vem precedido de A → flag False → segue abaixo.
                 if self._suppress_synthetic_confirm:
                     self._suppress_synthetic_confirm = False
                     return
-                self._select_current_world()
+                # Cursor-aware como o A: ↑/↓ do teclado agora alcançam o botão
+                # Voltar e as setinhas (ver `MainMenuScene.
+                # arrow_keys_navigate_focus`), e o Enter tem de respeitar onde a
+                # mira parou em vez de sempre entrar no mundo.
+                self._activate_at(pygame.mouse.get_pos())
 
             elif event.key == pygame.K_ESCAPE:
                 self.on_back()
@@ -563,17 +583,7 @@ class WorldSelectionView:
                 # K_RETURN sintético que o app dispara em seguida — senão ele
                 # selecionaria o mundo por cima da ação da seta sob a mira.
                 self._suppress_synthetic_confirm = True
-                pos = pygame.mouse.get_pos()
-                if self.back_button_rect.collidepoint(pos):
-                    sound_manager.play_sound("button_click")
-                    self.on_back()
-                elif self.left_arrow_rect.collidepoint(pos):
-                    self._cycle_world(-1)
-                elif self.right_arrow_rect.collidepoint(pos):
-                    self._cycle_world(+1)
-                else:
-                    # Cursor sobre card ou neutro: confirma o mundo focado.
-                    self._select_current_world()
+                self._activate_at(pygame.mouse.get_pos())
                 return
             if event.button == XboxButton.B:
                 self.on_back()

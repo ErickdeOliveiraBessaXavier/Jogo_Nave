@@ -15,6 +15,9 @@ if TYPE_CHECKING:
 
 
 class PausedScene(Scene):
+    # Setas percorrem os três botões (§19): a tela não usa seta para nada.
+    arrow_keys_navigate_focus = True
+
     def __init__(self, app: "GameApp", previous_scene: Optional[Scene] = None):
         super().__init__(app)
         self.r = app.renderer  # Usar renderer compartilhado
@@ -55,7 +58,11 @@ class PausedScene(Scene):
         self.prev_menu_button_hovered = False
 
     def enter(self):
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
         self.go_to_settings = False
         self.go_to_menu = False
         if self.first_entry:
@@ -106,26 +113,36 @@ class PausedScene(Scene):
     def update(self, dt: float):
         pass
 
-    def handle_event(self, event: pygame.event.Event):
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+    def _activate_at(self, pos: tuple[int, int]) -> None:
+        """Aciona o botão sob a mira — caminho único do A e do Enter.
+
+        Sem botão sob a mira, vale ``Continuar``: é a ação padrão da pausa.
+        """
+        if self.continue_button_rect.collidepoint(pos):
             self._activate_continue()
-            return
+        elif self.settings_button_rect.collidepoint(pos):
+            self._activate_settings()
+        elif self.menu_button_rect.collidepoint(pos):
+            self._activate_menu()
+        else:
+            self._activate_continue()
+
+    def handle_event(self, event: pygame.event.Event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_p:
+                self._activate_continue()
+                return
+            # Enter/Espaço acionam o que as setas destacaram (§19) — sem isto a
+            # navegação por teclado chega ao botão e não consegue apertá-lo.
+            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._activate_at(pygame.mouse.get_pos())
+                return
 
         if event.type == pygame.JOYBUTTONDOWN:
             from ..core.gamepad import XboxButton
 
             if event.button == XboxButton.A:
-                pos = pygame.mouse.get_pos()
-                if self.continue_button_rect.collidepoint(pos):
-                    self._activate_continue()
-                elif self.settings_button_rect.collidepoint(pos):
-                    self._activate_settings()
-                elif self.menu_button_rect.collidepoint(pos):
-                    self._activate_menu()
-                else:
-                    # Sem botão sob a mira: A age como ``Continuar`` por
-                    # ser a ação padrão na pausa.
-                    self._activate_continue()
+                self._activate_at(pygame.mouse.get_pos())
                 return
             if event.button == XboxButton.B:
                 self._activate_continue()

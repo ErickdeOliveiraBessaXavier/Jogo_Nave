@@ -50,7 +50,11 @@ class WorldTransitionScene(Scene):
 
     def enter(self) -> None:
         """Ativada ao entrar na cena."""
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
         logger.info("🌍 Entrando no mundo: %s", self.new_world.name)
 
     def exit(self) -> None:

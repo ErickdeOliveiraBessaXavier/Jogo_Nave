@@ -436,6 +436,38 @@ class SettingsView:
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Processa eventos da view."""
+        if event.type == pygame.KEYDOWN and event.key in (
+            pygame.K_LEFT,
+            pygame.K_RIGHT,
+        ):
+            # Só chega aqui com a mira sobre um slider: fora dele, o app já
+            # consumiu a seta para navegar (ver `arrow_keys_navigate_focus`).
+            if self.slider_under_cursor() is not None:
+                self._adjust_slider_under_cursor(
+                    -1 if event.key == pygame.K_LEFT else 1
+                )
+                return True
+
+        if event.type == pygame.KEYDOWN and event.key in (
+            pygame.K_RETURN,
+            pygame.K_SPACE,
+        ):
+            # Enter aciona o que as setas/TAB destacaram — mesmo caminho do A do
+            # controle, popups inclusive (eles são modais: precisam responder
+            # antes, senão o Enter atravessaria para a tela de trás).
+            if self.info_popup_text is not None:
+                self.info_popup_text = None
+                return True
+            if self.show_restart_popup:
+                pos = pygame.mouse.get_pos()
+                if self.layout_rects["popup_yes_button"].collidepoint(pos):
+                    self._popup_confirm()
+                else:
+                    # Mesmo default do A: sem mirar o "sim", fecha sem reiniciar.
+                    self.show_restart_popup = False
+                return True
+            return self._activate_at(pygame.mouse.get_pos())
+
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if self.info_popup_text is not None:
                 self.info_popup_text = None
@@ -771,17 +803,26 @@ class SettingsView:
                 return True
         return False
 
-    def _adjust_slider_under_cursor(self, direction: int) -> None:
-        """LB/RB no settings ajusta volume em passos de 5%."""
+    def slider_under_cursor(self) -> str | None:
+        """Slider sob a mira, se houver. Mesma área de tolerância do ajuste.
+
+        Público porque a CENA consulta (ver `SettingsScene.
+        arrow_keys_navigate_focus`) para decidir se ←/→ ajustam ou navegam.
+        """
         pos = pygame.mouse.get_pos()
-        for key, rect in self.layout_rects["sliders"].items():
+        for key, rect in self.layout_rects.get("sliders", {}).items():
             if rect.inflate(40, 30).collidepoint(pos):
-                self.sliders[key] = max(
-                    0.0, min(1.0, self.sliders[key] + direction * 0.05)
-                )
-                self._update_volume(key)
-                self.preferences.save()
-                return
+                return key
+        return None
+
+    def _adjust_slider_under_cursor(self, direction: int) -> None:
+        """LB/RB (e ←/→ no teclado) ajustam o volume em passos de 5%."""
+        key = self.slider_under_cursor()
+        if key is None:
+            return
+        self.sliders[key] = max(0.0, min(1.0, self.sliders[key] + direction * 0.05))
+        self._update_volume(key)
+        self.preferences.save()
 
     def _select_quality(self, name: str) -> None:
         """Aplica o nível de qualidade visual ao vivo (sem reinício) e persiste."""
@@ -1511,6 +1552,16 @@ class SettingsScene(Scene):
     desenha transição nenhuma.
     """
 
+    @property
+    def arrow_keys_navigate_focus(self) -> "bool | str":
+        """Setas navegam — mas ←/→ viram ajuste em cima de um slider.
+
+        Ali o eixo horizontal é do volume (o mesmo que LB/RB fazem no controle),
+        e é a única forma de o teclado alcançar os sliders; ↑/↓ seguem navegando
+        e tiram a mira de cima deles. Sem a exceção, a tela ganharia navegação e
+        continuaria sem ajuste por teclado."""
+        return "vertical" if self.view.slider_under_cursor() else True
+
     def __init__(
         self,
         app: "GameApp",
@@ -1540,7 +1591,11 @@ class SettingsScene(Scene):
         self.app.go_back()
 
     def enter(self):
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
         self.view.reset()
 
     def exit(self):

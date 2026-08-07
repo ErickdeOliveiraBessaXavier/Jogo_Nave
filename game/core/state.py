@@ -10,6 +10,20 @@ if TYPE_CHECKING:
 
 
 class Scene(ABC):
+    # Quando True, as SETAS do teclado movem a mira entre os
+    # `get_focusable_rects()` — o app trata (`_handle_arrow_navigation`), com a
+    # mesma busca geométrica do D-pad.
+    #
+    # Opt-in, e não o contrário, porque muita tela já usa as setas para outra
+    # coisa: escolher letra nas iniciais do game over, trocar de aba, rolar
+    # texto. Ligar por padrão roubaria a tecla dessas telas sem que nada
+    # falhasse — o sintoma seria só o jogo deixando de responder direito.
+    #
+    # ``"vertical"`` entrega só ↑/↓ à navegação e devolve ←/→ para a cena. É
+    # para quem tem um eixo próprio em algum elemento (o slider de volume em
+    # Configurações), sem abrir mão de navegar.
+    arrow_keys_navigate_focus: "bool | str" = False
+
     def __init__(self, app: "GameApp") -> None:
         self.app = app
         # Escala de UI relativa ao design base (1280×720). O jogo roda com

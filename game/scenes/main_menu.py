@@ -405,6 +405,7 @@ class MainMenuScene(Scene):
             on_select=self._on_difficulty_selected,
             on_back=self._on_difficulty_back,
             renderer=self.r,
+            app=self.app,
         )
         self.world_selection_view = WorldSelectionView(
             on_world_selected=self._on_world_selected,
@@ -444,6 +445,22 @@ class MainMenuScene(Scene):
     @property
     def current_view(self) -> MenuView:
         return self.view_stack[-1]
+
+    @property
+    def arrow_keys_navigate_focus(self) -> "bool | str":
+        """Depende da view — cada uma já usa (ou não) a seta para algo (§19).
+
+        - DIFICULDADE: não tratava seta nenhuma; era a única view do menu onde o
+          teclado não navegava. Ganha os quatro sentidos.
+        - MUNDOS: ←/→ giram o carrossel e continuam sendo da view; ↑/↓ estavam
+          livres e passam a alcançar as setas e o botão Voltar.
+        - PRINCIPAL: move o próprio `focus_index` com ↑/↓. Fica como está.
+        """
+        if self.current_view == MenuView.DIFFICULTY_SELECTION:
+            return True
+        if self.current_view == MenuView.WORLD_SELECTION:
+            return "vertical"
+        return False
 
     @property
     def settings_focus_index(self) -> int:
@@ -674,7 +691,11 @@ class MainMenuScene(Scene):
     # ------------------------------------------------------------------ #
 
     def enter(self, reset_background: bool = True):
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
         # Garante que sons de fases anteriores (loops de bosses, etc) sejam parados
         sound_manager.stop_all_sfx()
         sound_manager.music_state_manager.transition_to(MusicState.MENU)

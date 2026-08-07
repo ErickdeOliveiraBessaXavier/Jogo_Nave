@@ -669,7 +669,11 @@ class GameOverScene(Scene):
         self.app.go_to(lambda: UpgradesSelectionScene(self.app), push=True)
 
     def enter(self):
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
         # Também roda ao voltar da tela de Aprimoramentos (`StateManager.pop`
         # re-entra na cena de baixo): o que o jogador acabou de equipar ou
         # comprar tem de se refletir na legenda antes do próximo frame.

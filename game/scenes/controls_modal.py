@@ -179,7 +179,11 @@ class ControlsModalScene(Scene):
         )
 
     def enter(self):
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
         # Com controle ativo o modal já abre em modo foco, com o primeiro
         # elemento destacado: o ponteiro entra onde a tela anterior o deixou
         # (fora do modal, quase sempre), e é isso que fazia parecer que nada
@@ -355,7 +359,10 @@ class ControlsModalScene(Scene):
                 self._activate_focused()
             elif event.key in (pygame.K_UP, pygame.K_LEFT):
                 self._move_focus(-1)
-            elif event.key in (pygame.K_DOWN, pygame.K_RIGHT, pygame.K_TAB):
+            elif event.key == pygame.K_TAB:
+                # Shift+TAB volta, como em qualquer formulário.
+                self._move_focus(-1 if event.mod & pygame.KMOD_SHIFT else 1)
+            elif event.key in (pygame.K_DOWN, pygame.K_RIGHT):
                 self._move_focus(1)
             return
 

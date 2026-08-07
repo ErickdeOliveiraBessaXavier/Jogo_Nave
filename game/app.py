@@ -39,6 +39,20 @@ _VIRTUAL_CURSOR_DEAD_ZONE = 0.30
 # levavam o cursor instantaneamente para a borda superior da tela.
 _VIRTUAL_CURSOR_MAX_DT = 1.0 / 30.0
 
+# Folga (px) ao reconhecer o MOUSEMOTION que o SDL emite depois de um
+# `warp_cursor`. Com `pygame.SCALED` a coordenada faz um ida-e-volta
+# lógico→físico→lógico e volta 1px deslocada quando o fator de escala não é
+# inteiro. Pequena de propósito: movimento humano de verdade cobre bem mais.
+_WARP_MATCH_TOLERANCE = 2
+
+# Seta → direção (dx, dy) na convenção da tela: dy +1 é para BAIXO.
+_ARROW_DIRECTIONS: dict[int, tuple[int, int]] = {
+    pygame.K_LEFT: (-1, 0),
+    pygame.K_RIGHT: (1, 0),
+    pygame.K_UP: (0, -1),
+    pygame.K_DOWN: (0, 1),
+}
+
 # Clamp do passo de tempo do loop. Um frame lento (construção da PlayingScene +
 # carga de assets na 1ª partida, alt-tab, breakpoint) gera um dt enorme no frame
 # seguinte que fast-forwarda animações e física — era o que "comia" o fade-in de
@@ -208,6 +222,11 @@ class GameApp:
         # Sem isso, focus navigation por DPad coexistia com cursor visível e
         # criava o conflito ``mira aponta em A, focus está em B``.
         self._cursor_navigation_mode: str = "cursor"  # ``cursor`` ou ``focus``
+        # Posições para onde o JOGO moveu o ponteiro (ver `warp_cursor`): o eco
+        # em MOUSEMOTION delas não conta como "o usuário mexeu no mouse".
+        self._warp_targets: list[tuple[int, int]] = []
+        # Última cena para a qual a visibilidade do ponteiro foi reaplicada.
+        self._cursor_synced_scene: Optional[Scene] = None
 
         from .render.renderer import Renderer
 
@@ -395,6 +414,71 @@ class GameApp:
         except pygame.error:
             pass
 
+    def _sync_cursor_visibility(self, scene: Optional[Scene]) -> None:
+        """Reaplica no ponteiro a visibilidade que o MODO atual pede.
+
+        Roda a cada troca de cena. Existe porque `_set_cursor_mode` só chama
+        `set_visible` quando o modo MUDA: bastava uma cena forçar
+        `set_visible(True)` no `enter()` para o estado real passar a contradizer
+        o modo — o jogador navegando no controle (modo focus) via o ponteiro na
+        tela, e apertar LB/RB de novo não o escondia, porque para o app nada
+        havia mudado. Mesmo tipo de defeito do §18: o campo certo, o recurso
+        aplicado errado.
+
+        Cena de gameplay é pulada — ela tem política própria (esconde sempre).
+        """
+        if scene is None or self._scene_is_gameplay(scene):
+            return
+        try:
+            pygame.mouse.set_visible(self._cursor_navigation_mode == "cursor")
+        except pygame.error:
+            pass
+
+    def warp_cursor(self, pos: tuple[int, int]) -> bool:
+        """Move o PONTEIRO em nome da navegação por controle/teclado.
+
+        Use isto, e não `pygame.mouse.set_pos`, em qualquer tela que reposiciona
+        a mira por causa de um input discreto (LB/RB, D-pad, setas). O `set_pos`
+        emite um `MOUSEMOTION` que o `_track_input_mode` não tem como distinguir
+        de um movimento humano: ele devolvia o modo para ``cursor`` e o ponteiro
+        **reaparecia no meio da navegação por controle** — o defeito era visível
+        na seleção de dificuldade (LB/RB) e valia para toda tela que faz isso.
+
+        A posição de destino fica registrada; o `MOUSEMOTION` que chegar
+        exatamente nela é consumido como sintético. Casar por POSIÇÃO (e não uma
+        flag de "próximo evento") é o que sobrevive a dois warps seguidos e ao
+        warp que não gera evento nenhum — qualquer movimento real limpa a lista.
+        """
+        try:
+            pygame.mouse.set_pos(pos)
+        except pygame.error:
+            return False
+        alvo = (int(pos[0]), int(pos[1]))
+        self._warp_targets.append(alvo)
+        # Teto pequeno: warps pendentes não se acumulam entre frames.
+        if len(self._warp_targets) > 4:
+            del self._warp_targets[0]
+        return True
+
+    def _consume_warp_motion(self, pos: tuple[int, int]) -> bool:
+        """True se este `MOUSEMOTION` é o eco de um `warp_cursor`.
+
+        Casa com folga de `_WARP_MATCH_TOLERANCE` px: com `pygame.SCALED` a
+        posição faz um ida-e-volta lógico→físico→lógico, e em fator de escala
+        não inteiro (576p numa tela 1080p) ela pode voltar 1px deslocada. Exigir
+        igualdade exata deixaria justamente essas resoluções sem proteção.
+        """
+        x, y = int(pos[0]), int(pos[1])
+        for i, (ax, ay) in enumerate(self._warp_targets):
+            if (
+                abs(ax - x) <= _WARP_MATCH_TOLERANCE
+                and abs(ay - y) <= _WARP_MATCH_TOLERANCE
+            ):
+                del self._warp_targets[i]
+                return True
+        self._warp_targets.clear()
+        return False
+
     def _track_input_mode(self, event: pygame.event.Event) -> None:
         """Inspeciona cada evento pra decidir se o usuário está em modo
         cursor (mira livre) ou focus (navegação discreta).
@@ -423,21 +507,14 @@ class GameApp:
             if event.key in nav_keys:
                 self._set_cursor_mode("focus")
         elif event.type == pygame.MOUSEMOTION:
-            # Ignora MOUSEMOTION sintético do próprio snap-focus — ele tem
-            # ``rel`` calculado, mas o sintético do snap também. Diferenciar
-            # via mode atual: se acabamos de entrar em focus, o sintético
-            # que sai do _snap_focus_to_direction não deveria reverter.
-            # Aqui um movimento ``real`` do mouse tem buttons preenchidos
-            # ou pelo menos rel > 0 não-sintético — heurística: ignoramos
-            # se ``rel`` for exatamente o esperado pelo snap. Como não dá
-            # pra distinguir 100%, simples: qualquer MOUSEMOTION reabilita
-            # cursor. Snap só dispara em DPad, então o flick para focus
-            # acontece ANTES do MOUSEMOTION sintético — o set_pos posterior
-            # gera um motion que reverte. Para evitar isso, marcamos uma
-            # flag no snap (vide _snap_focus_to_direction).
-            if not getattr(self, "_suppress_next_motion_mode_switch", False):
-                self._set_cursor_mode("cursor")
-            self._suppress_next_motion_mode_switch = False
+            # Só movimento REAL do mouse devolve o controle ao cursor. O
+            # ponteiro também é movido pelo próprio jogo quando o controle
+            # navega (`warp_cursor`), e o `set_pos` gera um MOUSEMOTION
+            # indistinguível do humano — foi ele que fazia o cursor reaparecer
+            # no meio de uma navegação por LB/RB.
+            if self._consume_warp_motion(event.pos):
+                return
+            self._set_cursor_mode("cursor")
 
     def _synthesize_menu_events(self, event: pygame.event.Event, scene: Scene) -> None:
         """Despacha eventos sintéticos KEYDOWN equivalentes ao apertar botões
@@ -505,6 +582,98 @@ class GameApp:
                     )
                 )
 
+    def _handle_tab_navigation(self, event: pygame.event.Event, scene: Scene) -> bool:
+        """TAB / Shift+TAB percorrem os elementos focáveis da cena.
+
+        Um lugar só para o jogo inteiro: quase toda tela já publica
+        `get_focusable_rects()` (era o que o snap-focus do D-pad consumia), e o
+        TAB percorre essa MESMA lista, na ordem em que a cena a declarou. Assim
+        o teclado ganha a navegação sem que cada tela precise implementar a sua.
+
+        Pulamos gameplay (TAB não navega no meio de uma partida) e cenas com
+        foco próprio (`owns_gamepad_navigation`): lá o TAB é tratado pela
+        própria cena, que tem um índice de foco em vez de um cursor.
+        """
+        if event.type != pygame.KEYDOWN or event.key != pygame.K_TAB:
+            return False
+        if self._scene_is_gameplay(scene) or getattr(
+            scene, "owns_gamepad_navigation", False
+        ):
+            return False
+        try:
+            rects = scene.get_focusable_rects()
+        except (AttributeError, NotImplementedError):
+            return False
+        if not rects:
+            return False
+
+        passo = -1 if (event.mod & pygame.KMOD_SHIFT) else 1
+        cursor = pygame.mouse.get_pos()
+        atual = next(
+            (i for i, r in enumerate(rects) if r.collidepoint(cursor)), None
+        )
+        # Sem cursor sobre nada (entrou na tela agora), TAB começa do primeiro e
+        # Shift+TAB do último — o comportamento que todo formulário tem.
+        alvo = rects[0] if passo > 0 else rects[-1]
+        if atual is not None:
+            alvo = rects[(atual + passo) % len(rects)]
+        return self._focus_rect(scene, alvo)
+
+    def _handle_arrow_navigation(
+        self, event: pygame.event.Event, scene: Scene
+    ) -> bool:
+        """Setas movem a mira entre os focáveis, nas telas que pedem (§19).
+
+        Mesma busca geométrica do D-pad (`_snap_focus_to_direction`): seta é
+        direção, e numa tela em grade (cards de dificuldade, cartões de
+        Configurações) "o de cima" é o que está por cima na tela, não o
+        anterior na lista — que é o serviço do TAB.
+
+        Só age em cena que declara `arrow_keys_navigate_focus`. As demais usam
+        as setas para o que é delas (iniciais do game over, abas, rolagem).
+        """
+        if event.type != pygame.KEYDOWN:
+            return False
+        direcao = _ARROW_DIRECTIONS.get(event.key)
+        if direcao is None:
+            return False
+        if self._scene_is_gameplay(scene):
+            return False
+        modo = getattr(scene, "arrow_keys_navigate_focus", False)
+        if not modo:
+            return False
+        # "vertical": a cena reservou o eixo horizontal para si (ver `Scene`).
+        if modo == "vertical" and direcao[0] != 0:
+            return False
+        return self._snap_focus_to_direction(scene, *direcao)
+
+    def _focus_rect(self, scene: Scene, rect: pygame.Rect) -> bool:
+        """Leva a mira ao centro de ``rect`` e avisa a cena, em modo focus.
+
+        Caminho comum do snap por D-pad e do TAB: mover pelo `warp_cursor` (o
+        eco não pode reacender o ponteiro) e entregar à cena um MOUSEMOTION
+        sintético, que é como as telas de cursor atualizam o hover.
+        """
+        cursor_x, cursor_y = pygame.mouse.get_pos()
+        new_x = max(0, min(self.screen_width - 1, rect.centerx))
+        new_y = max(0, min(self.screen_height - 1, rect.centery))
+        if not self.warp_cursor((new_x, new_y)):
+            return False
+        self._set_cursor_mode("focus")
+        self._virtual_cursor_x = float(new_x)
+        self._virtual_cursor_y = float(new_y)
+        scene.handle_event(
+            pygame.event.Event(
+                pygame.MOUSEMOTION,
+                {
+                    "pos": (new_x, new_y),
+                    "rel": (new_x - cursor_x, new_y - cursor_y),
+                    "buttons": (0, 0, 0),
+                },
+            )
+        )
+        return True
+
     def _snap_focus_to_direction(self, scene: Scene, dx: int, dy: int) -> bool:
         """Move o cursor para o rect focusable mais próximo na direção (dx, dy).
 
@@ -563,32 +732,9 @@ class GameApp:
 
         if best_rect is None:
             return False
-
-        new_x, new_y = best_rect.center
-        new_x = max(0, min(self.screen_width - 1, new_x))
-        new_y = max(0, min(self.screen_height - 1, new_y))
-        try:
-            pygame.mouse.set_pos((new_x, new_y))
-        except pygame.error:
-            return False
-        # Atualiza estado do cursor virtual para a sincronização do
-        # _update_virtual_cursor não puxar o cursor de volta no frame
-        # seguinte (ela lê pygame.mouse.get_pos, então fica coerente).
-        self._virtual_cursor_x = float(new_x)
-        self._virtual_cursor_y = float(new_y)
-        # Marca a flag pro próximo MOUSEMOTION (gerado pelo set_pos acima OU
-        # pelo sintético abaixo) não reverter o modo de focus para cursor.
-        self._suppress_next_motion_mode_switch = True
-        motion = pygame.event.Event(
-            pygame.MOUSEMOTION,
-            {
-                "pos": (new_x, new_y),
-                "rel": (new_x - cursor_x, new_y - cursor_y),
-                "buttons": (0, 0, 0),
-            },
-        )
-        scene.handle_event(motion)
-        return True
+        # Mesmo caminho do TAB (`_focus_rect`): warp registrado + MOUSEMOTION
+        # sintético para a cena atualizar o hover no mesmo frame.
+        return self._focus_rect(scene, best_rect)
 
     def _draw_rotate_hint(self) -> None:
         """Faixa pedindo para girar o aparelho, quando a tela está em retrato.
@@ -751,6 +897,16 @@ class GameApp:
                     # cliques rápidos = duas telas puladas). QUIT acima segue
                     # valendo, para o jogo sempre poder fechar.
                     elif current_scene and not self.transition.busy:
+                        # TAB é do app: percorre os focáveis da cena antes que
+                        # ela veja a tecla (nenhuma tela de cursor usa TAB para
+                        # outra coisa; as que usam têm foco próprio e são
+                        # puladas lá dentro).
+                        if self._handle_tab_navigation(event, current_scene):
+                            continue
+                        # Setas: só nas telas que declaram o opt-in (as outras
+                        # já usam as setas para coisa própria).
+                        if self._handle_arrow_navigation(event, current_scene):
+                            continue
                         current_scene.handle_event(event)
                         # Camada A: traduz eventos JOY em KEYDOWN equivalentes
                         # para cenas que já reagem ao teclado (não-gameplay).
@@ -766,6 +922,13 @@ class GameApp:
                 # cena antiga, que já saiu da pilha.
                 self.transition.update(dt)
                 current_scene = self.states.current()
+
+                # Trocou de cena → o ponteiro volta a obedecer ao modo. O
+                # `enter()` da cena nova roda antes disto (dentro do commit da
+                # transição), então esta é a última palavra.
+                if current_scene is not self._cursor_synced_scene:
+                    self._cursor_synced_scene = current_scene
+                    self._sync_cursor_visibility(current_scene)
 
                 # Camada B: cursor virtual via stick direito (fora de gameplay).
                 if current_scene:

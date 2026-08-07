@@ -413,6 +413,24 @@ class UpgradesSelectionScene(Scene):
         self.app.set_cursor_mode("focus")
         self._move_focus(dx, dy)
 
+    def _cycle_focus(self, delta: int) -> None:
+        """Anda um passo na ordem em que `_focus_nodes` declara os elementos.
+
+        É a ordem VISUAL da tela (nave → slots → abas → cards → voltar), que é
+        o que o TAB precisa; a navegação direcional continua sendo geométrica.
+        """
+        self.app.set_cursor_mode("focus")
+        descs = [d for d, _ in self._focus_nodes()]
+        if not descs:
+            return
+        try:
+            atual = descs.index(self.focus)
+        except ValueError:
+            atual = -1 if delta > 0 else 0
+        self.focus = descs[(atual + delta) % len(descs)]
+        self._ensure_focus_visible()
+        sound_manager.play_sound("button_hover")
+
     def _move_focus(self, dx: int, dy: int) -> None:
         """Foco → vizinho mais próximo na direção (dx +1=dir, dy +1=baixo).
 
@@ -668,6 +686,16 @@ class UpgradesSelectionScene(Scene):
                     self._scroll_detail(direcao)
                 else:
                     self._scroll_by(direcao, page=True)
+                return
+            if event.key == pygame.K_TAB:
+                # TAB percorre os focáveis na ordem visual (Shift+TAB volta) —
+                # o mesmo gesto que o app dá às telas de cursor, aqui aplicado
+                # ao foco próprio desta cena.
+                self._cycle_focus(-1 if event.mod & pygame.KMOD_SHIFT else 1)
+                return
+            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._validate_focus()
+                self._activate(self.focus)
                 return
 
         # D-pad move o FOCO discreto (hat: y +1 = cima). Fonte única com o

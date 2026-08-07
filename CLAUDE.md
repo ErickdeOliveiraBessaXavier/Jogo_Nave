@@ -484,6 +484,33 @@ muda o som — reaplique aos objetos carregados.**
   ela tem alvo de clique — e o alvo sai do **mesmo helper de geometria** que o
   render usa (`detail_arrow_rects`). Desenhar num lugar e testar o clique em
   outro é como a seta virou enfeite não-clicável.
+- **Quem move o ponteiro por input discreto usa `app.warp_cursor`.** Nunca
+  `pygame.mouse.set_pos` direto: o SDL responde com um `MOUSEMOTION` idêntico
+  ao humano, o app lê como "o usuário pegou no mouse" e **o cursor reaparece no
+  meio da navegação por controle** (visto com LB/RB na seleção de dificuldade).
+  O `warp_cursor` registra o destino e o eco é absorvido.
+- **A visibilidade do ponteiro é do app, não da cena.** Cena de menu não chama
+  `pygame.mouse.set_visible(True)`; o `_sync_cursor_visibility` reaplica o modo
+  a cada troca de cena. Forçar na cena deixava o estado real contradizendo o
+  modo, e como o `_set_cursor_mode` só age quando o modo MUDA, apertar LB de
+  novo não escondia nada. Exceção: cena de gameplay, que tem política própria.
+  Varrido por `tests/test_cursor_mode.py`.
+- **`TAB`/`Shift+TAB` percorrem `get_focusable_rects()`**, tratados no app
+  (`_handle_tab_navigation`) na ordem em que a cena declarou a lista — a mesma
+  que o snap-focus do D-pad usa. Tela nova ganha navegação por teclado só por
+  publicar os rects. Cena com foco próprio (`owns_gamepad_navigation`) trata o
+  TAB ela mesma, sobre o próprio índice de foco.
+- **Setas são opt-in por cena** (`Scene.arrow_keys_navigate_focus`), tratadas
+  pelo app com a busca **geométrica** do D-pad — TAB anda na ordem da lista,
+  seta anda na direção da tela. Opt-in porque muita tela já usa a seta para o
+  que é dela (iniciais do game over, abas, carrossel de mundos, rolagem de
+  texto): ligar por padrão roubaria a tecla sem quebrar teste nenhum. O valor
+  `"vertical"` entrega só ↑/↓ e devolve ←/→ à cena (slider de volume em
+  Configurações, carrossel na seleção de mundos).
+- **Quem navega por seta confirma por Enter.** `Enter`/`Espaço` acionam o
+  elemento sob a mira pelo MESMO roteador do `A` do controle (`_activate_at`).
+  Navegar sem poder acionar é meio caminho e não falha em lugar nenhum —
+  varrido por `tests/test_tab_navigation.py`.
 - **`A` aciona o FOCO, nunca "o que estiver sob o cursor".** Tela sem foco
   próprio herda o cursor virtual do app, e ele entra onde a tela anterior o
   deixou — em geral fora do modal. Aí `A` não acha nada sob o ponteiro e cai no
@@ -534,5 +561,7 @@ muda o som — reaplique aos objetos carregados.**
 - [ ] Foco/hover mudam a borda existente (`interactive_border_color`); nenhum anel por cima
 - [ ] Roda do mouse por `MOUSEWHEEL`; indicador clicável compartilha geometria com o render
 - [ ] Controle e mouse não movem a nave juntos (`set_gamepad_enabled`); LB volta / RB avança
+- [ ] Ponteiro movido por `app.warp_cursor`; visibilidade só pelo app; TAB percorre os focáveis
+- [ ] Setas por opt-in (`arrow_keys_navigate_focus`) e Enter aciona pelo mesmo caminho do `A`
 - [ ] Disponibilidade de upgrade por `is_ready` (cooldown zero ≠ pronto durante o efeito)
 - [ ] `ruff check game tests` limpo e `pytest` verde antes do PR

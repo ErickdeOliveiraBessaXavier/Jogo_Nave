@@ -54,14 +54,15 @@ class LanguageSelectionScene(Scene):
             self.buttons.append((code, label, rect))
 
     def enter(self) -> None:
-        pygame.mouse.set_visible(True)
+        # O ponteiro NÃO é forçado a aparecer aqui: quem manda na visibilidade
+        # é o modo de navegação do app (`_sync_cursor_visibility`, chamado na
+        # troca de cena). Forçar `set_visible(True)` deixava o cursor na tela
+        # durante a navegação por controle, e o app não o escondia de volta
+        # porque, para ele, o modo não tinha mudado.
         self.entry_progress = 0.0
         # Foco inicial no 1º idioma (dá highlight p/ teclado/controle de cara).
         if self.buttons:
-            try:
-                pygame.mouse.set_pos(self.buttons[0][2].center)
-            except pygame.error:
-                pass
+            self.app.warp_cursor(self.buttons[0][2].center)
 
     # ── Navegação ────────────────────────────────────────────────────────────
     def _focus(self, index: int) -> None:
@@ -69,10 +70,9 @@ class LanguageSelectionScene(Scene):
         if not self.buttons:
             return
         index = max(0, min(len(self.buttons) - 1, index))
-        try:
-            pygame.mouse.set_pos(self.buttons[index][2].center)
-        except pygame.error:
-            pass
+        # `warp_cursor` e não `set_pos`: aqui a mira é movida por seta/D-pad, e
+        # o eco em MOUSEMOTION do `set_pos` reacenderia o cursor do mouse.
+        self.app.warp_cursor(self.buttons[index][2].center)
         sound_manager.play_sound("button_hover")
 
     def _current_index(self) -> int:
