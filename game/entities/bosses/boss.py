@@ -15,6 +15,9 @@ from ..effects.boss_particles import BossParticleSystem
 from .boss_pixel_map import (
     COLORS_FRENZY,
     COLORS_NORMAL,
+    ENERGY_CORE,
+    ENERGY_GLOW,
+    ENERGY_HOT,
     PIXEL_COLS,
     PIXEL_MAP,
 )
@@ -32,6 +35,15 @@ BossSoundEvent = Literal[
     "stop_fire",
 ]
 
+# Identidade do feixe deste boss, aplicada em TODO `BossLaser` que ele cria.
+# Não é o default da classe de propósito: o mesmo `BossLaser` é o tiro carregado
+# do Caçador (jogador), que continua vermelho. Ver `boss_laser.DEFAULT_*`.
+_LASER_COLORS: dict[str, Any] = {
+    "glow_color": ENERGY_CORE,
+    "core_color": ENERGY_HOT,
+    "spark_colors": (ENERGY_HOT, ENERGY_GLOW, ENERGY_CORE),
+}
+
 
 class Boss(BossHitMixin):
     """
@@ -43,13 +55,10 @@ class Boss(BossHitMixin):
     # Attack constants
     FRENZY_LASER_ANGLES: List[float] = [-0.349, 0, 0.349]
     LASER_DISTANCE: int = 2000
-    MAX_CHARGE_RADIUS: float = 15.0
     _FRENZY_SALVO_AIM_WINDOW: float = 0.25
     _FRENZY_SALVO_REARM_DELAY: float = 0.8
 
-    def __init__(
-        self, x: float, y: float, health: int = Config.BOSS_HEALTH, hit_score: int = 50
-    ):
+    def __init__(self, x: float, y: float, health: int = Config.BOSS_HEALTH):
         # Position and size - Adjusted for pixel map proportions
         self.w = 180  # 18 cols * 10 px
         self.h = 140  # 14 rows * 10 px
@@ -62,7 +71,6 @@ class Boss(BossHitMixin):
         # Health and state
         self.health = health
         self.max_health = health
-        self.hit_score = hit_score
         self.dead = False
 
         # Movement
@@ -99,7 +107,6 @@ class Boss(BossHitMixin):
         self._sound_events: List[BossSoundEvent] = []
 
         # Orientation system
-        self.rotation_angle = 0.0
         self.facing_direction = pygame.Vector2(0, 1)
         self.face_center = pygame.Vector2(0, 0)
         # Três canhões desde o início: laterais (esq./dir.) + central. A central
@@ -120,7 +127,6 @@ class Boss(BossHitMixin):
         # Floating squares
         self.floating_squares: List[BossSquare] = []
         self._init_floating_squares()
-        self.squares_animation_timer = 0.0
 
         # Launch queue
         self.square_launch_queue: List[BossSquare] = []
@@ -358,32 +364,23 @@ class Boss(BossHitMixin):
         center_x = self.x + self.w / 2
         center_y = self.y + self.h / 2
 
-        self.squares_animation_timer += dt * 5
-        pulse_scale = 1.0 + 0.2 * abs(math.cos(self.squares_animation_timer))
-
+        # O boss dirige só a ÓRBITA (posição) — ele é quem tem o centro. Giro,
+        # `prepare_timer` e pulsação são do BLOCO, no `BossSquare.update`.
+        #
+        # Antes os dois avançavam as MESMAS variáveis no mesmo frame: em
+        # "preparing" o timer corria em dobro (o telégrafo de 1,0s durava 0,5s) e
+        # o giro somava 720+360=1080°/s, contra os 720 que a constante declara.
+        # `size` tinha dois donos e valia o que escrevesse por último.
         for square in self.floating_squares:
-            if square.state == "orbiting":
-                square.orbit_angle = (
-                    square.orbit_angle + square.orbit_speed * dt
-                ) % 360
-                angle_rad = math.radians(square.orbit_angle)
-                target_x = center_x + math.cos(angle_rad) * square.orbit_radius
-                target_y = center_y + math.sin(angle_rad) * square.orbit_radius
-                lerp_speed = 7.0 * square.speed_var
-                square.x += (target_x - square.x) * lerp_speed * dt
-                square.y += (target_y - square.y) * lerp_speed * dt
-                square.size = square.base_size * pulse_scale
-                # (Havia um `square.rotation = 0.0` aqui. Era o segundo ponto que
-                # travava o giro — o outro estava no `BossSquare.update` — e
-                # juntos deixavam os 14 blocos parados enquanto orbitavam. A
-                # ÓRBITA continua sendo dirigida acima; só o giro do bloco mudou.)
-            elif square.state in ("preparing", "launching"):
-                square.prepare_timer += dt
-                square.rotation += dt * 720
-                prepare_pulse = 1.0 + 0.4 * abs(math.sin(square.prepare_timer * 10))
-                square.size = square.base_size * prepare_pulse
-                if square.state == "preparing" and square.prepare_timer >= 1.0:
-                    square.state = "ready_to_launch"
+            if square.state != "orbiting":
+                continue
+            square.orbit_angle = (square.orbit_angle + square.orbit_speed * dt) % 360
+            angle_rad = math.radians(square.orbit_angle)
+            target_x = center_x + math.cos(angle_rad) * square.orbit_radius
+            target_y = center_y + math.sin(angle_rad) * square.orbit_radius
+            lerp_speed = 7.0 * square.speed_var
+            square.x += (target_x - square.x) * lerp_speed * dt
+            square.y += (target_y - square.y) * lerp_speed * dt
 
         # Canhões colados ao corpo todo frame; a mira rastreia o jogador
         # continuamente, exceto quando travada (PREPARING_TO_FIRE/FIRING).
@@ -539,18 +536,6 @@ class Boss(BossHitMixin):
         ):
             pattern = "single"
 
-        locked_cannons: List[dict[str, Any]] = []
-        for cannon in self.cannons:
-            tip_x, tip_y = cannon.get_barrel_tip_position()
-            direction = cannon.get_direction()
-            locked_cannons.append(
-                {
-                    "tip_x": tip_x,
-                    "tip_y": tip_y,
-                    "dir_x": direction.x,
-                    "dir_y": direction.y,
-                }
-            )
         return {
             "face_x": self.face_center.x,
             "face_y": self.face_center.y,
@@ -565,7 +550,6 @@ class Boss(BossHitMixin):
             # laser principal executado 3 vezes em fila, só mais rápido.
             "salvo_idx": 0,
             "salvo_order": [0, 1, 2],
-            "locked_cannons": locked_cannons,
         }
 
     def _update_preparing_to_fire_state(self, dt: float) -> List[BossLaser]:
@@ -639,8 +623,6 @@ class Boss(BossHitMixin):
         idx: int = data["salvo_idx"]
         order: List[int] = data["salvo_order"]
         cannon_idx: int = order[idx]
-        # locked_cannons snapshot is not used for salvo shots anymore
-        # (we re-aim at firing time), so omit the unused local variables.
         self._active_salvo_cannon_idx = cannon_idx
 
         # owner é sempre o canhão real; tip/direção vêm do alvo salvo na janela
@@ -667,6 +649,7 @@ class Boss(BossHitMixin):
             tip_y + dirv.y * self.LASER_DISTANCE,
             lifetime=data["lifetime"],
             owner=cannon,
+            **_LASER_COLORS,
         )
         self.fired_lasers.append(laser)
         self._sound_events.append("play_fire")
@@ -745,6 +728,7 @@ class Boss(BossHitMixin):
                 tip_y + left_dir.y * self.LASER_DISTANCE,
                 lifetime=lifetime,
                 owner=self.cannons[0],
+                **_LASER_COLORS,
             )
         )
         # lateral direito
@@ -757,6 +741,7 @@ class Boss(BossHitMixin):
                 tip_y + right_dir.y * self.LASER_DISTANCE,
                 lifetime=lifetime,
                 owner=self.cannons[1],
+                **_LASER_COLORS,
             )
         )
         # meio normal
@@ -768,6 +753,7 @@ class Boss(BossHitMixin):
                 tip_cy + base_dir.y * self.LASER_DISTANCE,
                 lifetime=lifetime,
                 owner=self.cannons[2],
+                **_LASER_COLORS,
             )
         )
         return lasers
@@ -781,52 +767,32 @@ class Boss(BossHitMixin):
         face_normal: pygame.Vector2,
     ) -> List[BossLaser]:
         if is_frenzy:
-            # If we have multiple cannons (created on frenzy), spawn one laser per cannon
-            if hasattr(self, "cannons") and len(self.cannons) >= 3:
-                lasers: List[BossLaser] = []
-                # offsets and sequence delays for left, right, center
-                seq_delays = [0.0, 0.15, 0.35]  # tighter sequential cadence
-                for idx, c in enumerate(self.cannons):
-                    tip_x, tip_y = c.get_barrel_tip_position()
-                    # Salva sequencial: o deslocamento vem da ordem e não de
-                    # mira lateral. Cada canhão herda o vetor principal e aplica
-                    # um pequeno desvio angular, sem lock-in nos adjacentes.
-                    angle = 0.0
-                    if idx == 0:
-                        angle = -self.FRENZY_LASER_ANGLES[2]
-                    elif idx == 1:
-                        angle = self.FRENZY_LASER_ANGLES[2]
-                    cos_a, sin_a = math.cos(angle), math.sin(angle)
-                    dx = face_normal.x * cos_a - face_normal.y * sin_a
-                    dy = face_normal.x * sin_a + face_normal.y * cos_a
-                    lasers.append(
-                        BossLaser(
-                            tip_x,
-                            tip_y,
-                            tip_x + dx * self.LASER_DISTANCE,
-                            tip_y + dy * self.LASER_DISTANCE,
-                            lifetime=lifetime,
-                            owner=c,
-                            start_delay=seq_delays[min(idx, len(seq_delays) - 1)],
-                        )
-                    )
-                return lasers
-            # fallback: create fan from face center
+            # Um laser por canhão, em salva sequencial.
             lasers: List[BossLaser] = []
-            for i in [2, 0, 1]:
-                ang = self.FRENZY_LASER_ANGLES[i]
-                cos_a, sin_a = math.cos(ang), math.sin(ang)
-                rot_dir = pygame.Vector2(
-                    face_normal.x * cos_a - face_normal.y * sin_a,
-                    face_normal.x * sin_a + face_normal.y * cos_a,
-                )
+            seq_delays = [0.0, 0.15, 0.35]  # cadência sequencial curta
+            for idx, c in enumerate(self.cannons):
+                tip_x, tip_y = c.get_barrel_tip_position()
+                # O deslocamento vem da ORDEM, não de mira lateral: cada canhão
+                # herda o vetor principal e aplica um desvio angular pequeno,
+                # sem lock-in nos adjacentes.
+                angle = 0.0
+                if idx == 0:
+                    angle = -self.FRENZY_LASER_ANGLES[2]
+                elif idx == 1:
+                    angle = self.FRENZY_LASER_ANGLES[2]
+                cos_a, sin_a = math.cos(angle), math.sin(angle)
+                dx = face_normal.x * cos_a - face_normal.y * sin_a
+                dy = face_normal.x * sin_a + face_normal.y * cos_a
                 lasers.append(
                     BossLaser(
-                        face_x,
-                        face_y,
-                        face_x + rot_dir.x * self.LASER_DISTANCE,
-                        face_y + rot_dir.y * self.LASER_DISTANCE,
+                        tip_x,
+                        tip_y,
+                        tip_x + dx * self.LASER_DISTANCE,
+                        tip_y + dy * self.LASER_DISTANCE,
                         lifetime=lifetime,
+                        owner=c,
+                        start_delay=seq_delays[min(idx, len(seq_delays) - 1)],
+                        **_LASER_COLORS,
                     )
                 )
             return lasers
@@ -837,6 +803,7 @@ class Boss(BossHitMixin):
                 face_x + face_normal.x * self.LASER_DISTANCE,
                 face_y + face_normal.y * self.LASER_DISTANCE,
                 lifetime=lifetime,
+                **_LASER_COLORS,
             )
         ]
 
@@ -1033,9 +1000,11 @@ class Boss(BossHitMixin):
                 else Config.BOSS_CHARGE_CIRCLE_MAX_RADIUS
             )
             if rad > 0:
+                # Anéis de carga: rampa de energia (fora mais frio, dentro
+                # incandescente). Eram amarelo puro sobre um boss de aço azul.
                 pygame.draw.circle(
                     surface,
-                    (255, 255, 100),
+                    ENERGY_CORE,
                     (
                         int(self.face_center.x + self.shake_offset_x),
                         int(self.face_center.y + self.shake_offset_y),
@@ -1046,7 +1015,7 @@ class Boss(BossHitMixin):
                 if rad > 8:
                     pygame.draw.circle(
                         surface,
-                        (255, 255, 0),
+                        ENERGY_HOT,
                         (
                             int(self.face_center.x + self.shake_offset_x),
                             int(self.face_center.y + self.shake_offset_y),
@@ -1062,7 +1031,7 @@ class Boss(BossHitMixin):
             if (pygame.time.get_ticks() % 200) < 100:
                 pygame.draw.circle(
                     surface,
-                    (255, 255, 255),
+                    ENERGY_HOT,
                     (
                         int(self.face_center.x + self.shake_offset_x),
                         int(self.face_center.y + self.shake_offset_y),
@@ -1237,10 +1206,12 @@ class Boss(BossHitMixin):
             if primary
             else tuple(max(50, int(c * 0.6)) for c in colors.BOSS_AIM_LINE)
         )
-        # Interpolar cor: base -> brilho vermelho conforme intensidade
-        r = int(base_color[0] + (255 - base_color[0]) * intensity)
-        g = int(base_color[1] + (50 - base_color[1]) * intensity)
-        b = int(base_color[2] + (50 - base_color[2]) * intensity)
+        # Interpolar da cor base até o incandescente da rampa conforme a
+        # intensidade. O alvo era um vermelho cravado (255, 50, 50): a mira
+        # acendia numa cor que o boss não tem em mais lugar nenhum.
+        r = int(base_color[0] + (ENERGY_HOT[0] - base_color[0]) * intensity)
+        g = int(base_color[1] + (ENERGY_HOT[1] - base_color[1]) * intensity)
+        b = int(base_color[2] + (ENERGY_HOT[2] - base_color[2]) * intensity)
         color = (r, g, b)
 
         # Aumentar largura conforme intensidade

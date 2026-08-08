@@ -13,6 +13,19 @@ if TYPE_CHECKING:
     from ...systems.entity_context import EnemyUpdateContext
     from ...systems.hit_result import HitResult
 
+# Paleta PRÓPRIA, com as chaves que o `draw` consulta (casco/energia/trilha).
+#
+# Antes o default era o `COLORS_NORMAL` do boss "normal" — herança do nome, não
+# do jogo: este aqui é um inimigo comum que spawna em TODOS os temas, quase
+# nunca junto daquele boss. O acoplamento era invisível até a paleta do boss
+# mudar e repintar este inimigo de brinde. Estes valores são os que ele sempre
+# teve; mexer neles agora mexe só nele.
+MINION_PALETTE: dict[str, tuple[int, int, int]] = {
+    "G": (200, 100, 0),    # casco (laranja)
+    "H": (255, 200, 50),   # energia (amarelo brilhante)
+    "C": (80, 100, 120),   # base da trilha (aço)
+}
+
 
 class SquareMinionBoss(SquareProjectileBase):
     """
@@ -47,9 +60,7 @@ class SquareMinionBoss(SquareProjectileBase):
         self.w = size
         self.h = size
 
-        # Palette support
-        from .boss_pixel_map import COLORS_NORMAL
-        self.palette = palette or COLORS_NORMAL
+        self.palette = palette or MINION_PALETTE
 
         # Calculate direction towards player at spawn
         dx = player_x - x

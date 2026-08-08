@@ -45,6 +45,32 @@ def get_rect_mask(width: int, height: int) -> pygame.mask.Mask:
     return mask
 
 
+def death_explosion_anchor(
+    target: Any, hit_x: float, hit_y: float
+) -> tuple[float, float]:
+    """Centro do alvo, para ancorar a explosão de MORTE.
+
+    O ponto de impacto (`hit_x`, `hit_y`) é o CANTO do projétil no frame do
+    acerto — cai na borda do alvo, não no meio dele. Enquanto o inimigo sumia no
+    mesmo frame da morte ninguém notava; com animação de morte desenhada na
+    tela, a explosão aparece visivelmente fora do sprite. Medido no Alien: 22px
+    abaixo do centro, 40% da altura dele.
+
+    É a mesma razão que já leva a cadeia e a implosão ao centro do alvo em
+    `collisions.py` ("nasce no CENTRO do inimigo atingido, não no canto da
+    bala"). O hit NÃO-letal continua no ponto de impacto: ali a centelha deve
+    mesmo aparecer onde o tiro bateu.
+
+    Lê `rect` e **não** `collision_circle()`: quem entra em animação de morte
+    zera a própria hitbox dentro do `on_hit` (Alien e MetropolisDrone devolvem
+    -1000,-1000 enquanto morrem), e este anchor é resolvido depois do `on_hit`.
+    """
+    rect = getattr(target, "rect", None)
+    if rect is None or rect.width <= 0 or rect.height <= 0:
+        return hit_x, hit_y
+    return float(rect.centerx), float(rect.centery)
+
+
 def get_enemy_collision_mask_data(
     enemy: Any,
 ) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
@@ -246,9 +272,14 @@ class CollisionPhysics:
                     pattern=impact.pattern,
                 )
             else:
+                ex, ey = (
+                    death_explosion_anchor(target, hit_x, hit_y)
+                    if result.killed
+                    else (hit_x, hit_y)
+                )
                 entity_manager.spawn_explosion(
-                    hit_x,
-                    hit_y,
+                    ex,
+                    ey,
                     size=result.explosion_size,
                     explosion_type=result.explosion_type,
                 )
@@ -319,9 +350,12 @@ class CollisionPhysics:
             contact_x, contact_y
         )
         if result.explosion_size > 0:
-            entity_manager.spawn_explosion(
-                contact_x, contact_y, size=result.explosion_size
+            ex, ey = (
+                death_explosion_anchor(target, contact_x, contact_y)
+                if result.killed
+                else (contact_x, contact_y)
             )
+            entity_manager.spawn_explosion(ex, ey, size=result.explosion_size)
         if result.sound is not None:
             result.sound()
         if result.killed:

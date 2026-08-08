@@ -123,12 +123,19 @@ class AlienConfig:
     ALIEN_BULLET_MAX_RADIUS: int = 8
     ALIEN_BULLET_PULSE_SPEED: float = 4.0
     ALIEN_BULLET_COLOR_CHANGE_INTERVAL: float = 0.2
-    ALIEN_WIDTH: int = 75
-    ALIEN_HEIGHT: int = 58
+    # Sprite nativo é 32×28; 64×56 é 2× exato — mantém a proporção da arte
+    # (75×58 esticava só a largura, achatando o desenho) e dobra os pixels
+    # sem sobra, sem linhas de espessura desigual.
+    ALIEN_WIDTH: int = 52
+    ALIEN_HEIGHT: int = 56
     ALIEN_SPEED_X_OPTIONS: list[int] = field(default_factory=lambda: [-100, 100])
     ALIEN_SPEED_Y: float = 60.0
     ALIEN_HEALTH: int = 15
-    ALIEN_ANIMATION_FRAME_DURATION: float = 0.1
+    # Loop de voo: 4 frames × 0.2s = 0.8s por ciclo (os 12 frames antigos a
+    # 0.1s davam 1.2s — com 4 frames, 0.1s deixava a animação frenética)
+    ALIEN_ANIMATION_FRAME_DURATION: float = 0.2
+    # Animação de morte (Sprite_Morte): 4 frames × 0.09s ≈ 0.36s, roda uma vez
+    ALIEN_DEATH_FRAME_DURATION: float = 0.09
     ALIEN_DEATH_MARGIN: int = 100
     ALIEN_POINTS_VALUE: int = 150
     ALIEN_SHOOT_PAUSE_DURATION: float = 0.5

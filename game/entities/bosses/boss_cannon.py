@@ -1,18 +1,9 @@
 import math
-from typing import List, Tuple
+from typing import Tuple
 
 import pygame
 
-from ...core.config import config as Config
-from ..projectiles.boss_laser import BossLaser
-
-
-class BossAttackSystem:
-    """Manages all attack patterns and projectile spawning for the boss."""
-
-    # Constants for better maintainability
-    FRENZY_LASER_ANGLES: List[float] = [-0.349, 0, 0.349]  # 20 degrees in radians
-    LASER_DISTANCE: int = 2000  # Maximum laser reach
+from .boss_pixel_map import COLORS_NORMAL, ENERGY_CORE, ENERGY_HOT
 
 
 class BossCannon:
@@ -28,14 +19,17 @@ class BossCannon:
         self.barrel_width: int = 8
         self.barrel_tip_width: int = 6
 
-        # Cores do canhão
-        self.base_color = (80, 80, 100)
-        self.base_highlight = (120, 120, 150)
-        self.base_shadow = (50, 50, 70)
-        self.barrel_color = (100, 100, 120)
-        self.barrel_highlight = (150, 150, 180)
-        self.barrel_inner = (60, 60, 80)
-        self.tip_glow_color = (255, 200, 100)
+        # Cores do canhão — o METAL sai da mesma rampa de aço do chassi
+        # (`COLORS_NORMAL`, chaves B/C/E/F/A) e o BRILHO sai da rampa de energia.
+        # Antes o canhão tinha um cinza levemente arroxeado próprio e um glow
+        # laranja: encostado no corpo azulado, lia como peça de outro modelo.
+        self.base_color = COLORS_NORMAL["C"]  # aço do corpo
+        self.base_highlight = COLORS_NORMAL["F"]  # face iluminada
+        self.base_shadow = COLORS_NORMAL["B"]  # sombra interna
+        self.barrel_color = (95, 115, 138)  # entre C e E: cano destaca do casco
+        self.barrel_highlight = COLORS_NORMAL["F"]
+        self.barrel_inner = COLORS_NORMAL["A"]  # sulco/boca escura
+        self.tip_glow_color = ENERGY_CORE
 
         # Estado de carregamento (para efeito de brilho)
         self.charging = False
@@ -88,13 +82,6 @@ class BossCannon:
         """Define o estado de carregamento para efeito visual."""
         self.charging = charging
         self.charge_progress = progress
-
-    def create_laser(self, lifetime: float) -> BossLaser:
-        """Cria um laser na direção atual do canhão."""
-        tip_x, tip_y = self.get_barrel_tip_position()
-        target_x = tip_x + self.facing_direction.x * Config.LASER_DISTANCE
-        target_y = tip_y + self.facing_direction.y * Config.LASER_DISTANCE
-        return BossLaser(tip_x, tip_y, target_x, target_y, lifetime=lifetime)
 
     def draw(
         self, surface: pygame.Surface, offset_x: float = 0, offset_y: float = 0
@@ -202,9 +189,7 @@ class BossCannon:
 
             # Núcleo brilhante no centro
             core_radius = int(3 + self.charge_progress * 4)
-            pygame.draw.circle(
-                surface, (255, 255, 200), (int(cx), int(cy)), core_radius
-            )
+            pygame.draw.circle(surface, ENERGY_HOT, (int(cx), int(cy)), core_radius)
 
         # Anel de destaque
         pygame.draw.circle(

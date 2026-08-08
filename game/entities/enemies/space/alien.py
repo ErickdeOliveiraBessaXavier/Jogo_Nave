@@ -1,4 +1,5 @@
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -18,33 +19,47 @@ class Alien:
     # Cores de explosão do alien (verde brilhante)
     EXPLOSION_COLORS = [(37, 217, 166), (78, 217, 74)]
 
-    # Cache de sprites de animação (carregado uma vez)
+    # Sprites: voo em loop na pasta base, morte (uma passada) em Sprite_Morte/
+    _SPRITE_DIR = BASE_DIR / "assets" / "images" / "Sprite_Nave_Inimiga_01" / "Alien"
+    _FRAME_COUNT = 4
+    _DEATH_FRAME_COUNT = 4
+
+    # Cache de sprites (carregados uma vez)
     _animation_frames: list[pygame.Surface] | None = None
+    _death_frames: list[pygame.Surface] | None = None
+
+    @classmethod
+    def _load_scaled_frames(
+        cls, folder: Path, filename_pattern: str, count: int
+    ) -> list[pygame.Surface]:
+        """Carrega ``count`` frames da pasta, já no tamanho do alien."""
+        size = (Config.ALIEN_WIDTH, Config.ALIEN_HEIGHT)
+        return [
+            pygame.transform.scale(
+                get_image(folder / filename_pattern.format(i=i)), size
+            )
+            for i in range(1, count + 1)
+        ]
 
     @classmethod
     def load_animation_frames(cls) -> list[pygame.Surface]:
-        """Carrega e redimensiona os sprites de animação uma vez."""
-        if cls._animation_frames is not None:
-            return cls._animation_frames
-
-        frames: list[pygame.Surface] = []
-        for i in range(1, 13):
-            path = (
-                BASE_DIR
-                / "assets"
-                / "images"
-                / "Sprite_Nave_Inimiga_01"
-                / f"nave_inimiga ({i}).png"
+        """Carrega e redimensiona os sprites de voo uma vez."""
+        if cls._animation_frames is None:
+            cls._animation_frames = cls._load_scaled_frames(
+                cls._SPRITE_DIR, "Alien_Sprite_{i:02d}.png", cls._FRAME_COUNT
             )
-            image = get_image(path)
-            # Redimensionar para o tamanho do alien
-            image = pygame.transform.scale(
-                image, (Config.ALIEN_WIDTH, Config.ALIEN_HEIGHT)
-            )
-            frames.append(image)
+        return cls._animation_frames
 
-        cls._animation_frames = frames
-        return frames
+    @classmethod
+    def load_death_frames(cls) -> list[pygame.Surface]:
+        """Carrega e redimensiona os sprites de morte uma vez."""
+        if cls._death_frames is None:
+            cls._death_frames = cls._load_scaled_frames(
+                cls._SPRITE_DIR / "Sprite_Morte",
+                "Alien_Sprite_Morte_{i:02d}.png",
+                cls._DEATH_FRAME_COUNT,
+            )
+        return cls._death_frames
 
     def __init__(self, aggressiveness_multiplier: float = 1.0):
         self.w, self.h = Config.ALIEN_WIDTH, Config.ALIEN_HEIGHT
@@ -94,6 +109,14 @@ class Alien:
         self.animation_timer = 0.0
         self.frame_duration = Config.ALIEN_ANIMATION_FRAME_DURATION
 
+        # Morte: os frames de Sprite_Morte rodam UMA vez antes da remoção. É só
+        # cosmético — pontuação, explosão e som saem do `HitResult` no instante
+        # do abate, como sempre.
+        self.death_frames = self.load_death_frames()
+        self._dying = False
+        self._death_frame = 0
+        self._death_timer = 0.0
+
         # Explosão (inicializar para satisfazer o Pylint)
         self.explosion_alien = []
         self._explosion_color_set = False
@@ -107,7 +130,41 @@ class Alien:
         if emitted:
             ctx.new_alien_bullets.extend(emitted)
 
+    def _start_death(self) -> None:
+        """Entra na animação de morte. Idempotente (abates simultâneos)."""
+        if self._dying:
+            return
+        self._dying = True
+        self._death_frame = 0
+        self._death_timer = 0.0
+        # Para de atirar: a formação dispara por ele consultando `shoot_timer`.
+        self.shoot_timer = float("inf")
+        self.burst_shots_remaining = 0
+        self.is_burst_mode = False
+        self.should_shoot = False
+        # Cores personalizadas da explosão (mantido do comportamento anterior)
+        if not self._explosion_color_set:
+            self.explosion_alien = list(self.EXPLOSION_COLORS)
+            self._explosion_color_set = True
+
+    def _advance_death_animation(self, dt: float) -> None:
+        """Avança os frames de morte; ao fim dos frames, marca `dead`."""
+        self._death_timer += dt
+        duration = Config.ALIEN_DEATH_FRAME_DURATION
+        while self._death_timer >= duration and self._death_frame < len(
+            self.death_frames
+        ):
+            self._death_timer -= duration
+            self._death_frame += 1
+        if self._death_frame >= len(self.death_frames):
+            self.dead = True
+
     def update(self, dt: float) -> list[AlienBullet] | None:
+        # Morrendo: só roda a animação de morte (sem mover, atirar ou colidir)
+        if self._dying:
+            self._advance_death_animation(dt)
+            return None
+
         # Se controlado por formação, não move automaticamente
         if self.formation_controlled:
             # Apenas atualiza timer de tiro (o disparo é gerenciado pela Formation)
@@ -222,20 +279,18 @@ class Alien:
             self.animation_timer = 0.0
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
 
-        # Se morreu, definir cores personalizadas para a explosão
-        if self.dead and not self._explosion_color_set:
-            # Cores: #25D9A6 (37, 217, 166) e #4ED94A (78, 217, 74)
-            self.explosion_alien = [(37, 217, 166), (78, 217, 74)]
-            self._explosion_color_set = True
-
         return bullets
 
     def draw(self, surface: pygame.Surface):
         # Verificar se tem alpha definido (para formações com fade-in)
         alpha = getattr(self, "alpha", 255)
 
-        # Obter frame atual
-        image = self.animation_frames[self.current_frame]
+        # Obter frame atual (voo ou morte)
+        if self._dying:
+            frame = min(self._death_frame, len(self.death_frames) - 1)
+            image = self.death_frames[frame]
+        else:
+            image = self.animation_frames[self.current_frame]
 
         # Aplicar alpha se necessário (para formações)
         if alpha < 255:
@@ -248,7 +303,14 @@ class Alien:
     def get_points_value(self) -> int:
         return Config.ALIEN_POINTS_VALUE
 
+    @property
+    def causes_damage(self) -> bool:
+        return not self._dying and not self.dead
+
     def collision_circle(self) -> tuple[float, float, float]:
+        if self._dying:
+            # Já pontuou e explodiu: os frames de morte são cosméticos.
+            return -1000.0, -1000.0, 0.0
         return self.x + self.w / 2, self.y + self.h / 2, max(self.w, self.h) / 2
 
     def on_hit(self, _damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
@@ -256,7 +318,9 @@ class Alien:
         from ....systems.hit_result import HitResult
         from ...effects.explosion import ExplosionType
 
-        self.dead = True
+        if self._dying or self.dead:
+            return HitResult()
+        self._start_death()
         return HitResult(
             killed=True,
             points=self.get_points_value(),
@@ -269,7 +333,9 @@ class Alien:
         from ....systems import hit_sounds
         from ....systems.hit_result import HitResult
 
-        self.dead = True
+        if self._dying or self.dead:
+            return HitResult()
+        self._start_death()
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
 
     def should_remove(self) -> bool:
@@ -278,3 +344,4 @@ class Alien:
 
 # REGISTRAR no sistema de pré-carregamento (fora da classe)
 sprite_loader.register("Alien", Alien.load_animation_frames)
+sprite_loader.register("Alien (morte)", Alien.load_death_frames)

@@ -237,13 +237,19 @@ class TestRotacaoContinua:
         assert parados == []
 
     def test_o_giro_e_constante_e_previsivel(self):
-        """'Suave e constante': avanço proporcional ao tempo, sem solavanco."""
+        """'Suave e constante': avanço proporcional ao tempo, sem solavanco.
+
+        A TAXA é por bloco desde que cada um ganhou `spin_var` (ver
+        `TestGiroPorBloco`); o que continua travado aqui é a proporcionalidade ao
+        tempo. Sem o `spin_var` na conta este teste ficava FLAKY: passava ou não
+        conforme o fator sorteado caísse dentro dos 5% de tolerância.
+        """
         em, boss = cenario()
         tick(em, 5)
         q = boss.floating_squares[0]
         q.rotation = 0.0
         tick(em, 30)
-        esperado = BossSquare.SPIN_ORBITING * (30 / 60)
+        esperado = BossSquare.SPIN_ORBITING * q.spin_var * (30 / 60)
         assert q.rotation == pytest.approx(esperado, rel=0.05)
 
     def test_o_boss_nao_zera_mais_a_rotacao(self):
@@ -270,6 +276,84 @@ class TestRotacaoContinua:
         em, boss = cenario()
         tick(em, 600)
         assert all(0.0 <= q.rotation < 360.0 for q in boss.floating_squares)
+
+
+class TestGiroPorBloco:
+    """Com o valor de classe puro os 14 giravam no MESMO passo, e a órbita lia
+    como uma engrenagem única em vez de blocos soltos."""
+
+    def test_cada_bloco_tem_o_proprio_fator(self):
+        _, boss = cenario()
+        fatores = {q.spin_var for q in boss.floating_squares}
+        assert len(fatores) == len(boss.floating_squares)
+
+    def test_o_fator_fica_na_faixa_declarada(self):
+        _, boss = cenario()
+        assert all(
+            BossSquare.SPIN_VAR_MIN <= q.spin_var <= BossSquare.SPIN_VAR_MAX
+            for q in boss.floating_squares
+        )
+
+    def test_o_fator_nunca_inverte_o_sentido(self):
+        """Só magnitude — sentidos opostos seriam dois grupos girando contra,
+        não a dessincronia pedida."""
+        assert BossSquare.SPIN_VAR_MIN > 0.0
+
+    def test_as_rotacoes_se_espalham_com_o_tempo(self):
+        """Janela de 1s de propósito, partindo todos do mesmo ângulo.
+
+        No pico (`SPIN_ORBITING * SPIN_VAR_MAX` ≈ 189°/s) ninguém completa uma
+        volta em 1s, então a comparação não esbarra no `% 360` — que faria dois
+        blocos coincidirem por acaso e tornaria o teste flaky.
+        """
+        em, boss = cenario()
+        tick(em, 5)
+        for q in boss.floating_squares:
+            q.rotation = 0.0
+        tick(em, 60)
+        assert BossSquare.SPIN_ORBITING * BossSquare.SPIN_VAR_MAX < 360.0
+        rots = {round(q.rotation, 1) for q in boss.floating_squares}
+        assert len(rots) == len(boss.floating_squares)
+
+
+class TestTelegrafoDoDisparo:
+    """`Boss.update` e `BossSquare.update` avançavam as MESMAS variáveis no mesmo
+    frame. Em "preparing" o `prepare_timer` corria em dobro (o telégrafo de 1,0s
+    durava 0,5s) e o giro somava 720+360 contra os 720 que a constante declara;
+    `size` tinha dois donos e valia o que escrevesse por último.
+    """
+
+    def _em_preparacao(self):
+        em, boss = cenario()
+        tick(em, 5)
+        q = boss.floating_squares[0]
+        q.state, q.prepare_timer = "preparing", 0.0
+        return em, boss, q
+
+    def test_dura_o_tempo_declarado(self):
+        em, _, q = self._em_preparacao()
+        passos = 0
+        while q.state == "preparing" and passos < 300:
+            tick(em, 1)
+            passos += 1
+        assert q.state == "ready_to_launch"
+        assert passos / 60 == pytest.approx(BossSquare.PREPARE_DURATION, rel=0.05)
+
+    def test_o_boss_nao_avanca_mais_o_relogio_do_bloco(self):
+        """Um dono por variável: quem conta o tempo, gira e pulsa é o bloco."""
+        _, boss, q = self._em_preparacao()
+        antes = (q.rotation, q.prepare_timer, q.size)
+        boss.update(1 / 60, 640.0, 600.0)  # só o boss, sem o tick do bloco
+        assert (q.rotation, q.prepare_timer, q.size) == antes
+
+    def test_o_boss_ainda_dirige_a_orbita(self):
+        """O que ficou com o boss é a POSIÇÃO — ele é quem tem o centro."""
+        em, boss = cenario()
+        tick(em, 5)
+        q = next(x for x in boss.floating_squares if x.state == "orbiting")
+        antes = (q.x, q.y)
+        boss.update(1 / 60, 640.0, 600.0)
+        assert (q.x, q.y) != antes
 
 
 class TestIdentidadeVisual:

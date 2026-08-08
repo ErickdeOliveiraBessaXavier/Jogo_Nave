@@ -20,7 +20,10 @@ LIGHT_BLUE: Color = (173, 216, 230)
 LIGHT_GRAY: Color = (192, 192, 192)
 DARK_GRAY: Color = (64, 64, 64)
 BRIGHT_GRAY: Color = (180, 180, 180)
-BOSS_AIM_LINE: Color = (255, 100, 100)
+# Linha de mira do boss. Azul para acompanhar a rampa de energia dele
+# (`bosses/boss_pixel_map.ENERGY_*`) — era vermelha, a única cor quente que
+# sobrava num boss de aço azulado. Só o boss "normal" consome esta constante.
+BOSS_AIM_LINE: Color = (110, 225, 255)
 GUIDED_METEOR_GREEN: Color = (50, 255, 50)  # Verde brilhante para meteoros teleguiados
 PURPLE: Color = (200, 0, 255)
 

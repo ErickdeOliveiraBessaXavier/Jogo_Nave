@@ -6,6 +6,8 @@ import random
 import pygame
 
 from .._shared.draw_utils import draw_square_trail_particle, rotated_square_corners
+from .boss_pixel_map import ENERGY_CORE as BOSS_ENERGY_CORE
+from .boss_pixel_map import ENERGY_HOT as BOSS_ENERGY_HOT
 from .square_base import SquareProjectileBase
 
 
@@ -34,9 +36,19 @@ class BossSquare(SquareProjectileBase):
     # quadrado gira a batalha inteira. Antes o estado "orbiting" forçava
     # `rotation = 0.0` e a órbita ficava com 14 blocos parados.
     SPIN_ORBITING = 140.0  # constante e suave, sem competir com a órbita
-    SPIN_PREPARING = 720.0  # telegrafa o disparo (mantido do original)
+    # Faixa do fator POR BLOCO aplicado ao giro em órbita (ver `spin_var`). Só
+    # magnitude, sem inverter o sentido: a ideia é dessincronizar, não criar dois
+    # grupos girando em direções opostas.
+    SPIN_VAR_MIN = 0.7
+    SPIN_VAR_MAX = 1.35
+    SPIN_PREPARING = 720.0  # telegrafa o disparo ("preparing" e "launching")
     SPIN_FLYING = 360.0  # projétil em voo (mantido do original)
     SPIN_SCATTERING = 540.0  # solto no fim, gira mais enquanto se afasta
+
+    # Telégrafo: quanto o bloco pisca/gira em "preparing" antes de ficar pronto
+    # para ser lançado. O dono decide QUANDO começa (põe o estado em
+    # "preparing"); o tempo é contado aqui, junto com o giro e a pulsação.
+    PREPARE_DURATION = 1.0
 
     # Encerramento: tempo que o quadrado leva para se afastar e sumir depois de
     # o boss cair. Curto o bastante para não atrasar a transição de fase.
@@ -52,16 +64,19 @@ class BossSquare(SquareProjectileBase):
     # construção concêntrica, com o casco vindo da PALETA DO BOSS (então
     # acompanha o lerp para o frenzy) e só a energia sendo própria.
     #
-    # A energia é CIANO por três motivos: é complementar do núcleo laranja do
-    # boss, o que faz os dois lerem como um sistema só (coração quente, sistemas
-    # auxiliares frios); contrasta por saturação com o aço dessaturado do casco;
-    # e evita laranja/vermelho, já dominantes em explosões e ataques.
+    # A energia é CIANO porque contrasta por saturação com o aço dessaturado do
+    # casco e evita laranja/vermelho, já dominantes em explosões e ataques.
     #
     # No frenzy a energia NÃO vira vermelha — ela intensifica. O casco escurece
     # junto com o boss (vem da paleta dele), então o quadrado se corrompe com o
     # dono sem virar mais um borrão quente na tela.
-    ENERGY_CORE = (0, 210, 255)
-    ENERGY_HOT = (190, 250, 255)
+    #
+    # Estes dois valores eram cravados aqui e o resto do boss usava quentes
+    # avulsos (núcleo laranja, anéis amarelos, laser vermelho) — o orbital era o
+    # único elemento certo. Hoje a rampa mora em `boss_pixel_map` e vale para o
+    # boss inteiro; o quadrado a CONSOME em vez de ser a exceção que acertava.
+    ENERGY_CORE = BOSS_ENERGY_CORE
+    ENERGY_HOT = BOSS_ENERGY_HOT
     # Fração do meio-lado de cada anel concêntrico, de fora para dentro.
     RING_HULL = 0.80
     RING_CORE = 0.52
@@ -122,6 +137,13 @@ class BossSquare(SquareProjectileBase):
         self.animation_timer = 0.0
         self.animation_offset = random.uniform(0, 10)
 
+        # Giro no próprio eixo, PRÓPRIO de cada bloco. Com o valor de classe puro
+        # os 14 giravam no mesmo passo e a órbita lia como uma engrenagem única —
+        # os blocos pareciam presos a um mesmo eixo em vez de flutuarem soltos.
+        # Mesma ideia do `animation_offset` acima (que já dessincroniza o pulso) e
+        # do `speed_var` (a órbita), agora para a rotação.
+        self.spin_var = random.uniform(self.SPIN_VAR_MIN, self.SPIN_VAR_MAX)
+
         # Growth effect - aumenta conforme se move
         self.growth_timer = 0.0
         self.max_growth_scale = 4.5
@@ -175,11 +197,13 @@ class BossSquare(SquareProjectileBase):
         # Giro sobre o próprio eixo — nunca para, em nenhum estado. A órbita em
         # volta do boss é outra coisa e continua igual: quem a dirige é o boss
         # (`Boss._update_lerps`), mexendo em x/y. Aqui é só o giro do bloco.
-        if self.state == "preparing":
+        if self.state in ("preparing", "launching"):
+            # "launching" é a espera na fila de disparo: ainda é telégrafo, então
+            # mantém o giro rápido — é o agrupamento que o `Boss.update` fazia.
             self.rotation += dt * self.SPIN_PREPARING
             self.border_anim_offset += dt * 25
         elif self.state == "orbiting":
-            self.rotation += dt * self.SPIN_ORBITING
+            self.rotation += dt * self.SPIN_ORBITING * self.spin_var
             self.border_anim_offset += dt * 10
         else:
             self.rotation += dt * self.SPIN_FLYING
@@ -198,9 +222,12 @@ class BossSquare(SquareProjectileBase):
 
         # Pulsation animation
         self.animation_timer += dt * 5
-        if self.state == "preparing":
+        if self.state in ("preparing", "launching"):
             pulse_scale = 1.0 + 0.4 * abs(math.sin(self.prepare_timer * 10))
             self.prepare_timer += dt
+            # Fim do telégrafo: o dono varre por "ready_to_launch" para enfileirar.
+            if self.state == "preparing" and self.prepare_timer >= self.PREPARE_DURATION:
+                self.state = "ready_to_launch"
         else:
             anim_value = self.animation_timer + self.animation_offset
             pulse_scale = 1.0 + 0.2 * abs(math.cos(anim_value))

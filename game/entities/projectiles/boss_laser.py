@@ -1,10 +1,27 @@
 import random
-from typing import Any, List, Set
+from typing import Any, List, Set, Tuple
 
 import pygame
 
 from ...core.config import config as Config
 from ..effects.particle_types import DeathParticle
+
+
+Color = Tuple[int, int, int]
+
+# Cores PADRÃO do feixe (vermelho). Ficam como default porque esta classe tem
+# mais de um dono: além do boss, ela é o laser carregado do Caçador
+# (`EntityManager.spawn_cacador_laser`) — recolorir a classe inteira pintaria o
+# tiro do JOGADOR junto. Quem quer outra identidade passa as cores no construtor;
+# é o que o `Boss` faz para o azul dele. (`MetropolisOrbitalBeam` e `FenceBeam`
+# são subclasses que sobrescrevem `draw` por completo, então não passam por aqui.)
+DEFAULT_GLOW_COLOR: Color = (255, 100, 100)
+DEFAULT_CORE_COLOR: Color = (255, 255, 255)
+DEFAULT_SPARK_COLORS: Tuple[Color, ...] = (
+    (255, 255, 200),
+    (255, 220, 150),
+    (255, 255, 255),
+)
 
 
 class BossLaser:
@@ -19,7 +36,13 @@ class BossLaser:
         owner_ship: Any | None = None,
         owner: Any | None = None,
         start_delay: float = 0.0,
+        glow_color: Color = DEFAULT_GLOW_COLOR,
+        core_color: Color = DEFAULT_CORE_COLOR,
+        spark_colors: Tuple[Color, ...] = DEFAULT_SPARK_COLORS,
     ):
+        self.glow_color = glow_color
+        self.core_color = core_color
+        self.spark_colors = spark_colors
         self.x = x
         self.y = y
         self.target_x = target_x
@@ -102,9 +125,7 @@ class BossLaser:
                                 random.uniform(-180, 180), random.uniform(-80, 80)
                             ),
                             "size": random.uniform(2, 5),
-                            "color": random.choice(
-                                [(255, 255, 200), (255, 220, 150), (255, 255, 255)]
-                            ),
+                            "color": random.choice(self.spark_colors),
                             "lifespan": random.uniform(0.2, 0.4),
                         }
                         self.death_particles.append(particle)
@@ -151,14 +172,14 @@ class BossLaser:
             # Efeito de brilho (linha mais grossa e transparente)
             if line_width > 0:
                 alpha = 100  # Transparência
-                glow_color = (255, 100, 100, alpha)
+                glow = (*self.glow_color, alpha)
                 pygame.draw.line(
-                    surface, glow_color, start_point, end_point, line_width + 6
+                    surface, glow, start_point, end_point, line_width + 6
                 )
 
             # Núcleo do raio (linha sólida)
             pygame.draw.line(
-                surface, (255, 255, 255), start_point, end_point, line_width
+                surface, self.core_color, start_point, end_point, line_width
             )
 
         elif self.state == "dying":

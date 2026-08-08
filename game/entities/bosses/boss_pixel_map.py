@@ -26,6 +26,27 @@ PIXEL_MAP: list[list[str | None]] = [
 PIXEL_ROWS = len(PIXEL_MAP)  # 14
 PIXEL_COLS = len(PIXEL_MAP[0])  # 18
 
+# ── Rampa de ENERGIA do boss ────────────────────────────────────────────────
+#
+# Fonte ÚNICA de todo acento luminoso do boss: núcleo do chassi, glow e ponta do
+# canhão, anéis de carga, partículas de carga/dissipação, linha de mira, laser e
+# o núcleo dos quadrados orbitais. Quem precisa de "energia acesa" importa daqui
+# em vez de cravar a cor no ponto do desenho — era assim que a identidade se
+# perdia: cada arquivo escolhia o próprio quente (laranja no canhão, amarelo nos
+# anéis, vermelho no laser) sobre um chassi que sempre foi de aço AZULADO.
+#
+# Azul e não quente porque o azul já era a cor mais marcante do boss (rampa
+# C/E/F abaixo) e porque laranja/vermelho são a linguagem de EXPLOSÃO no jogo —
+# a arma do boss competia com o feedback de dano em vez de identificar o dono.
+#
+# Os valores de CORE e HOT são exatamente os que `BossSquare` já usava: os
+# orbitais eram o único elemento que acertava a identidade, então viraram a
+# âncora dela em vez de mais uma exceção.
+ENERGY_DEEP: Tuple[int, int, int] = (0, 70, 140)     # azul profundo (glow externo)
+ENERGY_CORE: Tuple[int, int, int] = (0, 210, 255)    # azul-ciano: energia acesa
+ENERGY_GLOW: Tuple[int, int, int] = (110, 225, 255)  # realce intermediário
+ENERGY_HOT: Tuple[int, int, int] = (190, 250, 255)   # branco-azulado incandescente
+
 # Cores base (Normal)
 COLORS_NORMAL: dict[str, Tuple[int, int, int]] = {
     "A": (30, 40, 50),      # Detalhe profundo
@@ -34,13 +55,19 @@ COLORS_NORMAL: dict[str, Tuple[int, int, int]] = {
     "D": (20, 25, 35),      # Contorno escuro
     "E": (110, 130, 150),   # Corpo luz 1
     "F": (150, 170, 190),   # Corpo luz 2 / Reflexos
-    "G": (200, 100, 0),     # Núcleo borda (Laranja)
-    "H": (255, 200, 50),    # Núcleo centro (Amarelo brilhante)
-    "I": (60, 60, 60),      # Base do canhão (Cinza)
-    "M": (30, 30, 30),      # Recuo do canhão
+    "G": (0, 150, 225),     # Núcleo borda (energia)
+    "H": (190, 250, 255),   # Núcleo centro (incandescente)
+    "I": (62, 70, 82),      # Base do canhão (cinza puxado ao azul do chassi)
+    "M": (30, 34, 42),      # Recuo do canhão
 }
 
 # Cores base (Frenzy)
+#
+# O CASCO corrompe para vermelho — é o sinal de que o boss enfureceu, e vale a
+# pena manter porque é informação de jogo, não decoração. A ENERGIA (G/H) NÃO
+# corrompe: ela intensifica, seguindo a mesma regra que `BossSquare` já
+# aplicava aos orbitais. O contraste casco quente + energia fria é o que mantém
+# a arma legível como "do mesmo boss" nos dois estados.
 COLORS_FRENZY: dict[str, Tuple[int, int, int]] = {
     "A": (50, 10, 20),      # Detalhe profundo avermelhado
     "B": (80, 20, 30),      # Sombra interna avermelhada
@@ -48,8 +75,8 @@ COLORS_FRENZY: dict[str, Tuple[int, int, int]] = {
     "D": (35, 10, 15),      # Contorno escuro
     "E": (180, 60, 70),     # Corpo luz 1
     "F": (220, 90, 100),    # Corpo luz 2 / Reflexos
-    "G": (255, 50, 0),      # Núcleo borda (Vermelho intenso)
-    "H": (255, 255, 100),   # Núcleo centro (Branco/Amarelado agressivo)
+    "G": (0, 190, 255),     # Núcleo borda (energia intensificada)
+    "H": (225, 252, 255),   # Núcleo centro (quase branco)
     "I": (80, 30, 30),      # Base do canhão
     "M": (40, 15, 15),      # Recuo do canhão
 }

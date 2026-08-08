@@ -4,8 +4,19 @@ from typing import List
 
 import pygame
 
-from ...core import colors
+from ..bosses.boss_pixel_map import (
+    ENERGY_CORE,
+    ENERGY_DEEP,
+    ENERGY_GLOW,
+    ENERGY_HOT,
+)
 from .particle_types import ChargingParticle, DisappearParticle
+
+# Cores das partículas de carga/dissipação: a rampa de energia do boss (§ paleta
+# em `boss_pixel_map`). Eram amarelo/laranja, os últimos acentos quentes de um
+# boss de aço azulado — o que fazia a carga parecer efeito de outra entidade.
+_CHARGING_COLORS = (ENERGY_CORE, ENERGY_GLOW, ENERGY_HOT, ENERGY_DEEP)
+_DISAPPEAR_COLORS = (ENERGY_CORE, ENERGY_GLOW, ENERGY_HOT)
 
 
 class BossParticleSystem:
@@ -54,9 +65,7 @@ class BossParticleSystem:
                 particle: ChargingParticle = {
                     "pos": pygame.Vector2(pos_x, pos_y),
                     "speed": random.uniform(80, 120),
-                    "color": random.choice(
-                        [colors.YELLOW, colors.ORANGE, (255, 200, 0), (255, 150, 0)]
-                    ),
+                    "color": random.choice(_CHARGING_COLORS),
                     "size": random.uniform(2, 4),
                 }
                 self.charging_particles.append(particle)
@@ -84,7 +93,7 @@ class BossParticleSystem:
                 "pos": pygame.Vector2(start_x, start_y),
                 "velocity": pygame.Vector2(velocity_x, velocity_y),
                 "size": random.uniform(2, 4),
-                "color": random.choice([colors.YELLOW, colors.ORANGE, (255, 200, 0)]),
+                "color": random.choice(_DISAPPEAR_COLORS),
                 "lifetime": 0.0,
                 "max_lifetime": random.uniform(0.5, 1.0),
             }
