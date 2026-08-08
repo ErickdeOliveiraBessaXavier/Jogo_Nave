@@ -299,12 +299,26 @@ class TestGiroPorBloco:
         não a dessincronia pedida."""
         assert BossSquare.SPIN_VAR_MIN > 0.0
 
-    def test_as_rotacoes_se_espalham_com_o_tempo(self):
-        """Janela de 1s de propósito, partindo todos do mesmo ângulo.
+    def test_o_fator_muda_a_taxa_de_giro(self):
+        """O mecanismo, com fatores CRAVADOS — sem depender do sorteio."""
+        em, boss = cenario()
+        tick(em, 5)
+        lento, rapido = boss.floating_squares[0], boss.floating_squares[1]
+        lento.spin_var, rapido.spin_var = 0.8, 1.2
+        lento.rotation = rapido.rotation = 0.0
+        tick(em, 60)  # 1s
+        base = BossSquare.SPIN_ORBITING
+        assert lento.rotation == pytest.approx(base * 0.8, rel=0.05)
+        assert rapido.rotation == pytest.approx(base * 1.2, rel=0.05)
 
-        No pico (`SPIN_ORBITING * SPIN_VAR_MAX` ≈ 189°/s) ninguém completa uma
-        volta em 1s, então a comparação não esbarra no `% 360` — que faria dois
-        blocos coincidirem por acaso e tornaria o teste flaky.
+    def test_nao_giram_em_unissono(self):
+        """Espalhamento real após 1s, partindo todos do mesmo ângulo.
+
+        Mede a FAIXA e não a contagem de valores distintos: arredondar para
+        comparar deixava o teste flaky (dois fatores próximos caem na mesma
+        casa decimal em ~10% dos sorteios). A janela de 1s também é de
+        propósito — no pico (≈189°/s) ninguém completa uma volta, então a
+        medida não esbarra no `% 360`.
         """
         em, boss = cenario()
         tick(em, 5)
@@ -312,8 +326,10 @@ class TestGiroPorBloco:
             q.rotation = 0.0
         tick(em, 60)
         assert BossSquare.SPIN_ORBITING * BossSquare.SPIN_VAR_MAX < 360.0
-        rots = {round(q.rotation, 1) for q in boss.floating_squares}
-        assert len(rots) == len(boss.floating_squares)
+        rots = [q.rotation for q in boss.floating_squares]
+        # No mesmo passo o espalhamento seria 0. A faixa de `spin_var` garante
+        # dezenas de graus mesmo no sorteio mais apertado que dá para esperar.
+        assert max(rots) - min(rots) > 10.0
 
 
 class TestTelegrafoDoDisparo:

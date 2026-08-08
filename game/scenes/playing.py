@@ -259,6 +259,10 @@ class PlayingScene(Scene):
             VirtualJoystick() if self.app.preferences.virtual_joystick else None
         )
 
+        # Ponteiro guardado enquanto a partida está interrompida (pausa).
+        # None = nada a restaurar. Ver `freeze_pointer`/`restore_pointer`.
+        self._frozen_pointer: tuple[int, int] | None = None
+
         ship_obj = Ship(
             ship_x,
             ship_y,
@@ -2136,6 +2140,51 @@ class PlayingScene(Scene):
         if self.app.states.current() is not self:
             return
         self.render_world(surface)
+
+    # ------------------------------------------------------------------
+    # Ponteiro congelado durante interrupções (pausa)
+    # ------------------------------------------------------------------
+
+    def _mouse_drives_ship(self) -> bool:
+        """A nave está sendo pilotada pelo ponteiro neste momento?"""
+        return bool(getattr(self.ship, "mouse_control", False))
+
+    def freeze_pointer(self) -> None:
+        """Guarda onde o ponteiro está, antes de a partida ser interrompida.
+
+        A nave persegue o cursor por **spring-follow**
+        (`ShipMovement._move_impl`): a velocidade é proporcional à DISTÂNCIA até
+        ele. Com o jogo parado a nave não anda, mas o ponteiro continua livre —
+        então mover o mouse durante a pausa aumenta essa distância, e no instante
+        em que a partida volta a nave arranca para a posição nova. É o "salto".
+
+        Guardar a posição e devolvê-la no `restore_pointer` preserva a distância
+        que existia antes, **inclusive quando ela não era zero** (nave ainda em
+        curso rumo ao cursor): é o que continua o movimento em vez de zerá-lo.
+        Nada aqui mexe no comportamento durante a gameplay — só no que o ponteiro
+        vale ao voltar.
+
+        Chamado pela cena que interrompe (ver `PausedScene.enter`), não daqui: é
+        ela quem sabe quando a partida parou.
+        """
+        self._frozen_pointer = (
+            pygame.mouse.get_pos() if self._mouse_drives_ship() else None
+        )
+
+    def restore_pointer(self) -> None:
+        """Devolve o ponteiro ao ponto salvo por `freeze_pointer`.
+
+        Consome o valor: uma segunda chamada não faz nada, e uma pausa que
+        terminou em "Menu" não deixa resíduo para a próxima partida.
+        """
+        pos, self._frozen_pointer = self._frozen_pointer, None
+        if pos is None or not self._mouse_drives_ship():
+            return
+        # `app.warp_cursor` e NÃO `pygame.mouse.set_pos` (§19): o SDL responde ao
+        # set_pos com um `MOUSEMOTION` idêntico ao humano, o app leria como "o
+        # jogador pegou no mouse" e devolveria o modo de navegação para `cursor`.
+        # O `warp_cursor` registra o destino e absorve esse eco.
+        self.app.warp_cursor(pos)
 
     def render_world(self, surface: pygame.Surface) -> None:
         """Renderiza o mundo do jogo SEM o guard de cena-topo.

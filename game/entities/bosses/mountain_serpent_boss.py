@@ -12,6 +12,7 @@ from .mountain_serpent_pixel_map import PIXEL_COLS as _PIXEL_COLS
 from .mountain_serpent_pixel_map import PIXEL_MAP as _PIXEL_MAP
 from .mountain_serpent_pixel_map import PIXEL_ROWS as _PIXEL_ROWS
 from .mountain_serpent_pixel_map import C as _PIX_COLORS
+from ..effects.critical_damage import CriticalDamageFX, area_from_box
 from ..enemies.mountain.stone_sentry import StoneSentry
 
 if TYPE_CHECKING:
@@ -975,6 +976,9 @@ class MountainSerpentBoss(BossHitMixin):
         self.max_health = self.health
         self.dead = False
         self._hit_flash = 0.0
+
+        # Fogo/fumaça de vida baixa, só na cabeça (`effects/critical_damage`).
+        self.critical_fx = CriticalDamageFX()
         self.emp_linger_timer = 0.0
         self._attack_timer = self.ATTACK_SPIT_COOLDOWN * 0.75
         self._phase = 1
@@ -1810,6 +1814,26 @@ class MountainSerpentBoss(BossHitMixin):
         if self.dead:
             return [], []
 
+        # Fogo/fumaça de vida baixa, só na CABEÇA. O corpo é uma cadeia de
+        # blocos: uma caixa cobrindo a serpente inteira acenderia fogo no vazio
+        # entre a cabeça e a cauda.
+        #
+        # Fica ANTES do `return` cedo da intro da cabeça, mais abaixo: o fogo é
+        # dano acumulado, não estado da FSM, e não pode congelar numa fase. O
+        # `_head_rect` aqui é o do frame anterior — um frame de atraso (~16ms)
+        # não se vê num efeito cosmético, e é o preço de não depender da fase.
+        self.critical_fx.update(
+            dt,
+            self.health / self.max_health if self.max_health else 0.0,
+            area_from_box(
+                self._head_rect.x,
+                self._head_rect.y,
+                self._head_rect.width,
+                self._head_rect.height,
+                inset=0.15,
+            ),
+        )
+
         self._hit_flash = max(0.0, self._hit_flash - dt)
         self._head_pain_timer = max(0.0, self._head_pain_timer - dt)
         self._spit_anim_timer = max(
@@ -1986,6 +2010,11 @@ class MountainSerpentBoss(BossHitMixin):
             surface.blit(white_sprite, (draw_x, draw_y))
         else:
             surface.blit(current_sprite, (draw_x, draw_y))
+
+        # Fogo/fumaça na cabeça, com o mesmo tremor dela. Independe de
+        # `is_vulnerable`: o fogo mostra o dano ACUMULADO, não a janela de
+        # vulnerabilidade do momento.
+        self.critical_fx.draw(surface, shake_x, shake_y)
 
         if self.is_vulnerable:
             self._draw_health_bar(surface)

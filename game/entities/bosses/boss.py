@@ -12,6 +12,7 @@ from .boss_cannon import BossCannon
 from .boss_hit_mixin import BossHitMixin
 from ..projectiles.boss_laser import BossLaser
 from ..effects.boss_particles import BossParticleSystem
+from ..effects.critical_damage import CriticalDamageFX, area_from_box
 from .boss_pixel_map import (
     COLORS_FRENZY,
     COLORS_NORMAL,
@@ -103,6 +104,9 @@ class Boss(BossHitMixin):
         self.breathing_timer = 0.0
 
         self.particle_system = BossParticleSystem()
+        # Fogo e fumaça de vida baixa. Sistema genérico (`effects/critical_damage`):
+        # recebe razão de vida + área de emissão e não conhece o boss.
+        self.critical_fx = CriticalDamageFX()
         self.fired_lasers: List[BossLaser] = []
         self._sound_events: List[BossSoundEvent] = []
 
@@ -310,6 +314,14 @@ class Boss(BossHitMixin):
         """Canhão central — sempre o último da lista; referência de face/mira."""
         return self.cannons[-1]
 
+    @property
+    def health_ratio(self) -> float:
+        return self.health / self.max_health if self.max_health > 0 else 0.0
+
+    def critical_fx_area(self) -> pygame.Rect:
+        """Onde o fogo de vida baixa nasce. NÃO é hitbox."""
+        return area_from_box(self.x, self.y, self.w, self.h)
+
     # --- Fases de estado (centralizam tuplas de BossState reusadas) ----------
 
     @property
@@ -464,6 +476,10 @@ class Boss(BossHitMixin):
             acc_dt, self.face_center.x, self.face_center.y
         )
         self.particle_system.update_circle_disappear_particles(acc_dt)
+
+        # Fogo/fumaça de vida baixa. `dt` cru e não `acc_dt`: é dano ambiente do
+        # casco, não faz parte da animação de carga que o frenzy acelera.
+        self.critical_fx.update(dt, self.health_ratio, self.critical_fx_area())
 
         return (lasers_fired, spawned_squares, self._sound_events)
 
@@ -987,8 +1003,17 @@ class Boss(BossHitMixin):
         # draw all cannons (central last so it renders on top)
         for c in self.cannons:
             c.draw(surface, self.shake_offset_x, self.shake_offset_y)
-        if self.state != BossState.ENTERING:
-            self._draw_health_bar(surface)
+
+        # Fogo/fumaça sobre o casco e os canhões. Recebe o mesmo tremor do corpo.
+        #
+        # Aqui havia uma barra de vida (faixa vermelha/verde acima do boss).
+        # Saiu por decisão de design: a vida se lê no ESTADO FÍSICO do boss —
+        # casco corrompido no frenzy e este fogo perto da morte. Mesmo caminho do
+        # `MetropolisOverlordBoss`, que já não tinha barra. Foi só o VISUAL:
+        # `health`/`max_health` seguem intactos e continuam governando dano,
+        # frenzy e morte.
+        self.critical_fx.draw(surface, self.shake_offset_x, self.shake_offset_y)
+
         if self.shows_aiming_line:
             self._draw_aiming_line(surface)
 
@@ -1235,18 +1260,6 @@ class Boss(BossHitMixin):
                     width,
                 )
             curr_dist += Config.BOSS_AIM_DASH_LENGTH + Config.BOSS_AIM_GAP_LENGTH
-
-    def _draw_health_bar(self, surface: pygame.Surface) -> None:
-        if self.health <= 0:
-            return
-        bmw, bh = min(200, self.w * 2), 10
-        bx, by = self.x + (self.w - bmw) / 2, self.y - 20
-        pygame.draw.rect(surface, (255, 0, 0), (bx, by, bmw, bh))
-        pygame.draw.rect(
-            surface,
-            (0, 255, 0),
-            (bx, by, int(bmw * (self.health / self.max_health)), bh),
-        )
 
     def can_take_damage(self) -> bool:
         return self.state != BossState.ENTERING and not self.dead

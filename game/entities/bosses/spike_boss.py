@@ -7,6 +7,7 @@ import pygame
 from ...core import colors
 from ...core.config import config as Config
 from ...core.sound import sound_manager
+from ..effects.critical_damage import CriticalDamageFX, area_from_box
 from .boss_hit_mixin import BossHitMixin
 from .spike import Spike
 from ..projectiles.spike_boss_laser import SpikeBossLaser
@@ -49,6 +50,9 @@ class SpikeBoss(BossHitMixin):
         self.health = health
         self.max_health = health
         self.dead = False
+
+        # Fogo/fumaça de vida baixa (`effects/critical_damage`).
+        self.critical_fx = CriticalDamageFX()
 
         # Movimento
         self.speed = Config.SPIKE_BOSS_SPEED
@@ -209,6 +213,14 @@ class SpikeBoss(BossHitMixin):
         self.player_x, self.player_y = player_x, player_y
         self._update_lerps(dt)
         self.breathing_timer += dt
+
+        # Antes de qualquer `return` cedo deste update (pausa de frenzy, etc.):
+        # o fogo não pode congelar junto com a FSM.
+        self.critical_fx.update(
+            dt,
+            self.health / self.max_health if self.max_health else 0.0,
+            area_from_box(self.x, self.y, self.w, self.h),
+        )
 
         if self.frenzy_pause_active:
             self.frenzy_pause_timer += dt
@@ -383,6 +395,9 @@ class SpikeBoss(BossHitMixin):
 
         # Efeitos adicionais
         self._draw_effects(surface, int(draw_y), jaw_gap)
+
+        # Fogo/fumaça de vida baixa, com o mesmo tremor do corpo.
+        self.critical_fx.draw(surface, offset_x, offset_y)
 
         if self.state != "entering":
             self._draw_health_bar(surface, draw_x, int(draw_y))

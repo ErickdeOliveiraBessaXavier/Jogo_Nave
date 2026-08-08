@@ -106,8 +106,8 @@ class ControlsModalScene(Scene):
                 t("controls.toggle.control", v=t("controls.method.keyboard")),
             ],
             [
-                t("controls.toggle.autofire", v=t("controls.on")),
-                t("controls.toggle.autofire", v=t("controls.off")),
+                t("controls.toggle.autofire", v=t("controls.fire.auto")),
+                t("controls.toggle.autofire", v=t("controls.fire.manual")),
             ],
         ]
         tg_rel_rects, self.toggle_font, tg_block_w, tg_block_h, _tg_rows = (
@@ -519,7 +519,13 @@ class ControlsModalScene(Scene):
                 if prefs.mouse_control
                 else t("controls.method.keyboard")
             )
-            autofire_val = t("controls.on") if prefs.auto_fire else t("controls.off")
+            # "Automático"/"Manual" em vez de "Ligado"/"Desligado": diz o que o
+            # tiro FAZ, e não o estado de uma opção chamada "tiro automático".
+            autofire_val = (
+                t("controls.fire.auto")
+                if prefs.auto_fire
+                else t("controls.fire.manual")
+            )
             draw_bordered_button(
                 surface,
                 self.toggle_rects["control"],

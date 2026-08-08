@@ -15,8 +15,11 @@ repetia a conta para saber de onde o medalhão parte.
 **Organização da coluna direita** (referência declarada: os amuletos de Hollow
 Knight): grid de ÍCONES em cima, um card de descrição de altura FIXA embaixo. O
 texto não se repete célula a célula — ele mora num lugar só e responde ao que
-está selecionado. É o que permite a célula ser pequena, o grid inteiro caber
-sem rolagem e a leitura ter um destino único.
+está selecionado, e é isso que dá à leitura um destino único.
+
+A célula já foi pequena o bastante para o elenco inteiro caber sem rolagem; hoje
+ela é maior (`GRID_COLS = 6`) e o grid ROLA. A troca está justificada na
+constante — e é a rolagem que sustenta o elenco crescer daqui para frente.
 """
 
 from __future__ import annotations
@@ -33,11 +36,16 @@ if TYPE_CHECKING:
 # `_s` da cena: converte pixel do design base (1280×720) para a resolução atual.
 Scale = Callable[[float], int]
 
-# Colunas do grid de ícones. OITO porque é o que faz os 23 upgrades caberem em
-# 3 linhas dentro da área disponível — ou seja, **sem rolagem nenhuma**, que era
-# metade do ponto da referência do Hollow Knight. O número é fixo (não derivado
-# da largura) para o grid ser idêntico em 576p, 720p e 1080p (§12).
-GRID_COLS = 8
+# Colunas do grid de ícones. Fixo (não derivado da largura) para o grid ser
+# idêntico em 576p, 720p e 1080p (§12).
+#
+# SEIS, e não os oito de antes: a célula era pequena demais para ler de relance.
+# Com 6 ela cresce ~31% (80×94 → 105×119 px em 720p) e o gap sobe junto, ao
+# custo de uma 4ª linha — o elenco de 23 deixa de caber na janela e a ROLAGEM
+# passa a ser usada de verdade (antes era rede de segurança, ver `max_scroll`).
+# Foi uma troca deliberada: legibilidade da célula acima do "tudo visível de uma
+# vez" da referência original (amuletos do Hollow Knight).
+GRID_COLS = 6
 
 # Altura de UMA linha da descrição, em px do design base. Mora aqui porque três
 # lugares precisam concordar sobre ela: a altura reservada do card
@@ -45,6 +53,37 @@ GRID_COLS = 8
 # setas (`detail_arrow_rects`). Cópias soltas divergem no primeiro ajuste de
 # fonte, e o sintoma é seta que não responde onde está desenhada.
 DETAIL_LINE_H = 15
+
+# Quanto o card em destaque cresce, em fração do tamanho da célula (0.16 = 16%
+# maior, ou seja 8% para cada lado).
+#
+# Mora AQUI, e não na cena que desenha, porque é geometria: o `grid_padding`
+# abaixo é dimensionado por ele. Com o número em dois lugares, aumentar o zoom
+# na cena passaria a cortar o card do anel externo contra o recorte da janela —
+# sem nada quebrar, só recortando.
+CELL_ZOOM = 0.16
+
+
+def grid_padding(s: Scale) -> int:
+    """Respiro entre o conteúdo do grid e a borda da janela recortada.
+
+    O grid é desenhado com `set_clip(viewport)` — obrigatório, senão a célula
+    passa por cima das abas ao rolar. Só que as células eram posicionadas
+    coladas nas bordas do viewport: o card da primeira/última coluna e da
+    primeira/última linha crescia DIRETO contra o recorte e aparecia cortado nas
+    extremidades e nos cantos.
+
+    O valor cobre a metade do zoom (8% de uma célula de ~114px em 720p ≈ 9px)
+    **com folga** — respiro, não empate: 10px deixavam 1px de sobra, que é
+    tecnicamente "não corta" e visualmente colado. Escala junto com a célula em
+    576p/1080p, e a folga mínima está travada por teste
+    (`test_o_card_com_zoom_cabe_no_recorte`).
+
+    Custa ~5% do tamanho da célula (105→100px de largura em 720p). Vale: sem
+    isso o efeito de hover é recortado justamente onde o olho vai primeiro, nas
+    extremidades e nos cantos do grid.
+    """
+    return s(16)
 
 
 @dataclass
@@ -86,6 +125,10 @@ class UILayout:
     cell_w: int = 0
     cell_h: int = 0
     cell_gap: int = 0
+    # Respiro entre o conteúdo do grid e a borda da janela recortada. É o que
+    # dá espaço para o card do anel EXTERNO crescer no hover sem bater no clip
+    # (ver `CELL_ZOOM` e `grid_padding`).
+    cell_margin: int = 0
 
     back_button: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
     stars_y: int = 0
@@ -226,8 +269,15 @@ def _layout_grid_column(
     # uma linha para o nome curto embaixo do ícone. O nome existe porque hoje o
     # "ícone" é uma letra — quando a arte real entrar, ele pode sair sem mexer
     # em geometria nenhuma.
-    layout.cell_gap = s(8)
-    grid_w = layout.viewport.width - bar_w - s(4)
+    # Gap generoso: com a célula maior, 8px colavam os cards num bloco só. Ele
+    # também é a folga que o zoom de hover/seleção ocupa ao crescer, sem o card
+    # destacado encostar nos vizinhos (ver `_draw_cell`).
+    layout.cell_gap = s(14)
+    layout.cell_margin = grid_padding(s)
+    # O padding sai da largura útil dos DOIS lados, senão o respiro da direita
+    # viria de dentro da última célula (e a coluna ficaria mais estreita que as
+    # outras).
+    grid_w = layout.viewport.width - bar_w - s(4) - 2 * layout.cell_margin
     layout.cell_w = (grid_w - layout.cell_gap * (GRID_COLS - 1)) // GRID_COLS
     layout.cell_h = layout.cell_w + s(14)
 
@@ -241,18 +291,28 @@ def detail_card_height(s: Scale, lines: int) -> int:
 
 
 def content_height(layout: UILayout, item_count: int) -> int:
-    """Altura total do grid de ``item_count`` células, com os vãos."""
+    """Altura total do grid, com os vãos e o respiro de cima e de baixo.
+
+    O padding entra na conta porque ele é conteúdo para efeito de ROLAGEM: sem
+    isso, `max_scroll` pararia com a última linha colada na borda de baixo e o
+    zoom dela sairia cortado justamente no fim da lista.
+    """
     if item_count <= 0:
         return 0
     rows = math.ceil(item_count / GRID_COLS)
-    return rows * layout.cell_h + (rows - 1) * layout.cell_gap
+    return (
+        2 * layout.cell_margin
+        + rows * layout.cell_h
+        + (rows - 1) * layout.cell_gap
+    )
 
 
 def max_scroll(layout: UILayout, item_count: int) -> float:
     """Quanto dá para rolar. Zero quando o grid inteiro cabe na janela.
 
-    Com o elenco atual (23) é sempre zero — a rolagem é rede de segurança para
-    quando o número de upgrades crescer, não parte do fluxo normal.
+    Com o elenco atual (23) e `GRID_COLS = 6` são 4 linhas para ~2,7 visíveis:
+    a rolagem faz parte do fluxo normal desde que a célula cresceu. Antes, com 8
+    colunas, tudo cabia e isto devolvia zero sempre.
     """
     return max(0.0, float(content_height(layout, item_count) - layout.viewport.height))
 
@@ -286,10 +346,12 @@ def place_cells(
     step_y = layout.cell_h + layout.cell_gap
     offset = int(scroll_y)
 
+    pad = layout.cell_margin
+
     def rect_em(i: int) -> pygame.Rect:
         return pygame.Rect(
-            vp.x + (i % GRID_COLS) * step_x,
-            vp.y + (i // GRID_COLS) * step_y - offset,
+            vp.x + pad + (i % GRID_COLS) * step_x,
+            vp.y + pad + (i // GRID_COLS) * step_y - offset,
             layout.cell_w,
             layout.cell_h,
         )
@@ -306,12 +368,16 @@ def scroll_to_reveal(layout: UILayout, index: int, scroll: float, limit: float) 
     inteiro (inclusive o que está fora da janela) e a janela o persegue.
     """
     row = index // GRID_COLS
-    top = row * (layout.cell_h + layout.cell_gap)
+    pad = layout.cell_margin
+    top = pad + row * (layout.cell_h + layout.cell_gap)
     bottom = top + layout.cell_h
-    if top < scroll:
-        scroll = float(top)
-    elif bottom > scroll + layout.viewport.height:
-        scroll = float(bottom - layout.viewport.height)
+    # Revela a célula MAIS o respiro dela: parar exatamente na borda deixaria o
+    # card focado (que é justamente o que cresce) com o zoom cortado no topo ou
+    # no rodapé da janela.
+    if top - pad < scroll:
+        scroll = float(top - pad)
+    elif bottom + pad > scroll + layout.viewport.height:
+        scroll = float(bottom + pad - layout.viewport.height)
     return max(0.0, min(limit, scroll))
 
 

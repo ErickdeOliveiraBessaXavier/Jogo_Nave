@@ -64,19 +64,26 @@ PT: dict[str, str] = {
     "controls.dont_show": "Não mostrar novamente",
     # Ajustes rápidos (toggles ao vivo dentro do modal)
     "controls.toggle.control": "Controle: {v}",
-    "controls.toggle.autofire": "Tiro automático: {v}",
+    # "Tiro: Automático/Manual" em vez de "Tiro automático: Ligado/Desligado".
+    # Os botões do bloco têm largura UNIFORME (o maior rótulo de todos manda,
+    # ver `layout_flow_buttons`), então o rótulo mais longo daqui definia a
+    # largura dos dois — e o antigo não deixava a fileira caber numa linha.
+    "controls.toggle.autofire": "Tiro: {v}",
     "controls.method.mouse": "Mouse",
     "controls.method.keyboard": "Teclado",
     "controls.method.gamepad": "Controle",
-    "controls.on": "Ligado",
-    "controls.off": "Desligado",
+    "controls.fire.auto": "Automático",
+    "controls.fire.manual": "Manual",
     "controls.settings_hint": "Dica: você pode mudar isto quando quiser — e encontrar mais opções — no menu Configurações.",
     # Teclado
     "controls.kb.move": "• Mouse/WASD: Mover",
     "controls.kb.move_mouse": "• Mouse: Mover",
     "controls.kb.move_keys": "• WASD: Mover",
     "controls.kb.shoot": "• Espaço: Atirar",
-    "controls.shoot_auto": "• Tiro automático ligado",
+    # Mesma palavra do atalho ("Tiro: Automático"). As linhas manuais ao lado
+    # continuam "• TECLA: Ação" (`kb.shoot`/`gp.shoot`) porque o trabalho desta
+    # coluna é ensinar a TECLA — trocá-las por "Manual" tiraria a informação.
+    "controls.shoot_auto": "• Tiro: Automático",
     "controls.kb.pause": "• P: Pausar | ESC: Sair",
     "controls.kb.rotate": "• Ctrl: Girar Nave",
     "controls.kb.dash": "• Shift: Dash",

@@ -6,8 +6,9 @@ invariantes abaixo são as que quebram calado quando alguém mexe num número de
 `_s()`:
 
 - nada estoura o painel;
-- o elenco inteiro cabe no grid **sem rolagem** (o ponto da referência do
-  Hollow Knight — ver o docstring de `upgrades_layout`);
+- o grid ROLA, e toda célula é alcançável rolando (a célula cresceu, e o elenco
+  deixou de caber de uma vez — ver `GRID_COLS` em `upgrades_layout`);
+- o card com o zoom de hover não é cortado pelo recorte da janela;
 - o card de descrição não invade o grid;
 - **toda nave exibe sua descrição inteira**, que é o problema que motivou tirar
   as barras de atributo do fluxo de texto.
@@ -20,6 +21,7 @@ from game.core.ship_types import all_ship_profiles, format_ship_description, shi
 from game.core.upgrades import list_all_upgrades_meta, upgrade_desc
 from game.scenes.ui_helpers import wrap_text
 from game.scenes.upgrades_layout import (
+    CELL_ZOOM,
     GRID_COLS,
     build_layout,
     case_size,
@@ -118,26 +120,93 @@ def test_grid_nao_invade_o_card_de_descricao(size):
 
 
 @pytest.mark.parametrize("size", RESOLUCOES)
-def test_elenco_inteiro_cabe_sem_rolagem(size):
-    """23 upgrades em 3 linhas de 8 — sem rolar, que é metade do ponto."""
+def test_o_elenco_rola(size):
+    """O grid ROLA desde que a célula cresceu (`GRID_COLS` 8 → 6).
+
+    Antes o teste travava o oposto — 23 upgrades em 3 linhas de 8, sem rolagem
+    nenhuma, que era metade do ponto da referência do Hollow Knight. A troca foi
+    deliberada: a célula pequena demais não se lia de relance, e a rolagem (que
+    já existia como rede de segurança) passou a ser usada de verdade.
+    """
     layout = montar(size)
-    assert max_scroll(layout, TOTAL_UPGRADES) == 0.0
-    assert content_height(layout, TOTAL_UPGRADES) <= layout.viewport.height
+    assert max_scroll(layout, TOTAL_UPGRADES) > 0.0
+    assert content_height(layout, TOTAL_UPGRADES) > layout.viewport.height
 
 
 @pytest.mark.parametrize("size", RESOLUCOES)
-def test_rolagem_volta_a_existir_se_o_elenco_dobrar(size):
-    """A rede de segurança continua armada para quando houver upgrades demais."""
+def test_a_rolagem_nao_e_absurda(size):
+    """Rolagem sim, maratona não: no máximo ~1 tela extra de conteúdo.
+
+    Se alguém encolher `GRID_COLS` de novo sem olhar, é aqui que aparece.
+    """
     layout = montar(size)
-    assert max_scroll(layout, TOTAL_UPGRADES * 2) > 0.0
+    assert max_scroll(layout, TOTAL_UPGRADES) <= layout.viewport.height
 
 
 @pytest.mark.parametrize("size", RESOLUCOES)
-def test_celulas_ficam_na_janela_do_grid(size):
+def test_o_card_com_zoom_cabe_no_recorte(size):
+    """O hover cresce o card; ele não pode ser cortado pela janela.
+
+    O grid é desenhado com `set_clip(viewport)` — obrigatório, senão a célula
+    passa por cima das abas ao rolar. As células ficavam coladas nas bordas do
+    viewport, então o card do anel EXTERNO crescia direto contra o recorte e
+    aparecia cortado nas extremidades e nos cantos.
+
+    Percorre TODAS as células, cada uma no scroll que a revela: é onde o card
+    focado (o que cresce) de fato aparece. Trava a folga mínima, e não só o
+    "não corta" — 1px de sobra passa neste teste e parece colado na tela.
+    """
+    layout = montar(size)
+    limite = max_scroll(layout, TOTAL_UPGRADES)
+    folga_minima = layout.cell_margin * 0.25
+    for i in range(TOTAL_UPGRADES):
+        alvo = scroll_to_reveal(layout, i, 0.0, limite)
+        place_cells(layout, list(range(TOTAL_UPGRADES)), alvo, case_size(TOTAL_UPGRADES))
+        c = layout.cells[i]
+        zoom = c.inflate(int(c.width * CELL_ZOOM), int(c.height * CELL_ZOOM))
+        assert layout.viewport.contains(zoom), f"card {i} com zoom sai do recorte"
+        folga = min(
+            zoom.left - layout.viewport.left,
+            layout.viewport.right - zoom.right,
+            zoom.top - layout.viewport.top,
+            layout.viewport.bottom - zoom.bottom,
+        )
+        assert folga >= folga_minima, f"card {i} ficou colado na borda ({folga}px)"
+
+
+@pytest.mark.parametrize("size", RESOLUCOES)
+def test_o_respiro_do_grid_cobre_o_zoom(size):
+    """O padding é dimensionado PELO zoom — os dois não podem divergir."""
+    layout = montar(size)
+    assert layout.cell_margin > layout.cell_h * CELL_ZOOM / 2
+    assert layout.cell_margin > layout.cell_w * CELL_ZOOM / 2
+
+
+@pytest.mark.parametrize("size", RESOLUCOES)
+def test_as_celulas_cabem_na_LARGURA_da_janela(size):
+    """Horizontalmente nada sobra: a rolagem é só vertical."""
     layout = montar(size)
     place_cells(layout, list(range(TOTAL_UPGRADES)), 0.0, case_size(TOTAL_UPGRADES))
     for c in layout.cells:
-        assert layout.viewport.contains(c), f"célula {c} fora da janela"
+        assert c.left >= layout.viewport.left, f"célula {c} passou da esquerda"
+        assert c.right <= layout.viewport.right, f"célula {c} passou da direita"
+
+
+@pytest.mark.parametrize("size", RESOLUCOES)
+def test_toda_celula_pode_ser_revelada_rolando(size):
+    """O que está fora da janela tem de ser ALCANÇÁVEL.
+
+    É o contrato que sustenta a navegação por controle: o foco anda por todas as
+    células, inclusive as das linhas de baixo, e `scroll_to_reveal` precisa
+    trazer cada uma para dentro da janela por inteiro.
+    """
+    layout = montar(size)
+    limite = max_scroll(layout, TOTAL_UPGRADES)
+    for i in range(TOTAL_UPGRADES):
+        alvo = scroll_to_reveal(layout, i, 0.0, limite)
+        place_cells(layout, list(range(TOTAL_UPGRADES)), alvo, case_size(TOTAL_UPGRADES))
+        c = layout.cells[i]
+        assert layout.viewport.contains(c), f"célula {i} não foi revelada: {c}"
 
 
 def test_estojo_fecha_as_linhas_com_vagas():

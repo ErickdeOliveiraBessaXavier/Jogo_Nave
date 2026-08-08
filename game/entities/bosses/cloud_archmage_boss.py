@@ -17,6 +17,7 @@ from .cloud_archmage_pixel_map import (
     HAT_MAP,
     PALETTES,
 )
+from ..effects.critical_damage import CriticalDamageFX, area_from_box
 from ..effects.fire_zone import FireZone
 from ..enemies.mountain.mountain_mage import MountainStalactite, MountainStalagmite
 from ..enemies.mountain.mountain_propeller import MountainPropeller
@@ -323,6 +324,9 @@ class CloudArchmageBoss:
         self.dead: bool = False
         self.active: bool = False
 
+        # Fogo/fumaça de vida baixa (`effects/critical_damage`).
+        self.critical_fx = CriticalDamageFX()
+
         self._state: ArchmageState = ArchmageState.INTRO
         self._state_timer: float = 2.5
         self._hit_flash: float = 0.0
@@ -616,6 +620,15 @@ class CloudArchmageBoss:
             return []
 
         self._player_pos = player_pos
+
+        # Fogo/fumaça de vida baixa. O corpo teleporta, então a área é montada
+        # a partir do x/y atual a cada frame e acompanha de graça.
+        self.critical_fx.update(
+            dt,
+            self.health / self.max_health if self.max_health else 0.0,
+            area_from_box(self.x, self.y, self.w, self.h),
+        )
+
         self._pulse_timer += dt
         self._gradient_timer += dt
         self._hit_flash = max(0.0, self._hit_flash - dt)
@@ -1991,6 +2004,10 @@ class CloudArchmageBoss:
         self._draw_fading_part(
             surface, "hat", state_key, self._hat_x, self._hat_y, fading, gradient_tint
         )
+        # Fogo/fumaça de vida baixa. Fica depois dos early-returns do `draw`
+        # (intro, teleporte): com o corpo invisível o fogo dele também some.
+        self.critical_fx.draw(surface)
+
         self._draw_health_bar(surface)
         self._draw_miss_indicator(surface)
 

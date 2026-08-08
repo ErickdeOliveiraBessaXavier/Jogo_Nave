@@ -68,12 +68,34 @@ class PausedScene(Scene):
         if self.first_entry:
             sound_manager.pause_music()
             sound_manager.pause_metropolis_laser_loop()
+            # Só na PRIMEIRA entrada: voltar de Configurações chama `enter` de
+            # novo, e re-congelar ali guardaria o ponteiro de onde o jogador
+            # deixou o mouse naquela tela, perdendo a posição da partida.
+            self._pointer_hook("freeze_pointer")
             self.first_entry = False
 
     def exit(self):
         if not self.go_to_menu and not self.go_to_settings:
             sound_manager.resume_music()
             sound_manager.resume_metropolis_laser_loop()
+            # Retomando de fato: devolve o ponteiro ao ponto de antes da pausa,
+            # senão a nave (que segue o cursor) arranca para onde o mouse foi
+            # parar durante a pausa. Roda no `exit`, ou seja no fim do fade de
+            # saída e ANTES do `enter` da partida (ver `SceneStack.pop`), então
+            # o ponteiro já está no lugar quando a nave volta a andar.
+            self._pointer_hook("restore_pointer")
+
+    def _pointer_hook(self, nome: str) -> None:
+        """Chama o gancho de ponteiro da cena de baixo, se ela tiver um.
+
+        Duck-typing pelo mesmo motivo do `render_world` no `render`: a pausa
+        cobre qualquer cena, e só as de gameplay pilotam nave com o ponteiro. A
+        pausa não sabe (nem precisa saber) o que é `mouse_control` — quem decide
+        se há algo a congelar é a cena da partida.
+        """
+        hook = getattr(self.previous_scene, nome, None)
+        if callable(hook):
+            hook()
 
     def get_focusable_rects(self) -> list[pygame.Rect]:
         return [

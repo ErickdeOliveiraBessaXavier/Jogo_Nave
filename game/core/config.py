@@ -126,8 +126,8 @@ class AlienConfig:
     # Sprite nativo é 32×28; 64×56 é 2× exato — mantém a proporção da arte
     # (75×58 esticava só a largura, achatando o desenho) e dobra os pixels
     # sem sobra, sem linhas de espessura desigual.
-    ALIEN_WIDTH: int = 52
-    ALIEN_HEIGHT: int = 56
+    ALIEN_WIDTH: int = 70
+    ALIEN_HEIGHT: int = 64
     ALIEN_SPEED_X_OPTIONS: list[int] = field(default_factory=lambda: [-100, 100])
     ALIEN_SPEED_Y: float = 60.0
     ALIEN_HEALTH: int = 15

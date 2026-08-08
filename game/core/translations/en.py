@@ -56,19 +56,22 @@ EN: dict[str, str] = {
     "controls.dont_show": "Don't show again",
     # Quick tweaks (live toggles inside the modal)
     "controls.toggle.control": "Control: {v}",
-    "controls.toggle.autofire": "Auto fire: {v}",
+    # "Fire: Auto/Manual" — ver a nota em pt.py: o rótulo mais longo deste
+    # botão definia a largura de todos os do bloco.
+    "controls.toggle.autofire": "Fire: {v}",
     "controls.method.mouse": "Mouse",
     "controls.method.keyboard": "Keyboard",
     "controls.method.gamepad": "Controller",
-    "controls.on": "On",
-    "controls.off": "Off",
+    "controls.fire.auto": "Auto",
+    "controls.fire.manual": "Manual",
     "controls.settings_hint": "Tip: you can change this anytime — and find more options — in the Settings menu.",
     # Keyboard
     "controls.kb.move": "• Mouse/WASD: Move",
     "controls.kb.move_mouse": "• Mouse: Move",
     "controls.kb.move_keys": "• WASD: Move",
     "controls.kb.shoot": "• Space: Shoot",
-    "controls.shoot_auto": "• Auto fire enabled",
+    # Ver a nota em pt.py: mesma palavra do atalho ("Fire: Auto").
+    "controls.shoot_auto": "• Fire: Auto",
     "controls.kb.pause": "• P: Pause | ESC: Quit",
     "controls.kb.rotate": "• Ctrl: Rotate Ship",
     "controls.kb.dash": "• Shift: Dash",

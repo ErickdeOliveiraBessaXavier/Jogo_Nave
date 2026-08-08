@@ -67,6 +67,7 @@ from ..core.upgrades import (
     UpgradeCategory,
     UpgradeMeta,
     UpgradeRole,
+    UpgradeType,
     get_upgrade_icon,
     list_all_upgrades_meta,
     upgrade_desc,
@@ -86,6 +87,7 @@ from .ui_helpers import (
 from .upgrade_flight import FlightTrack
 from .upgrade_icons import icon_surface
 from .upgrades_layout import (
+    CELL_ZOOM,
     DETAIL_LINE_H,
     UILayout,
     build_layout,
@@ -268,6 +270,11 @@ class UpgradesSelectionScene(Scene):
         self.hovered_upgrade: Optional[UpgradeMeta] = None
         self.hovered_slot_idx: Optional[int] = None
 
+        # Zoom por card, chaveado pelo TIPO do upgrade (e não pelo índice da
+        # célula): trocar de aba reordena o grid, e um índice guardaria a escala
+        # do vizinho. Só a aba visível é mantida — ver `_update_cell_zoom`.
+        self._cell_zoom: dict[UpgradeType, float] = {}
+
         # Upgrade exibido no card de descrição. É PEGAJOSO de propósito: segue o
         # foco enquanto ele está no grid e permanece no último quando o foco vai
         # para a nave ou os slots. Um card que esvazia a cada movimento pisca e
@@ -290,8 +297,15 @@ class UpgradesSelectionScene(Scene):
         # "upg", "ship", "ship_prev", "ship_next", "tab", "back". O foco é a
         # única fonte de verdade da navegação por controle.
         self.focus: tuple = ("upg", 0)
+        # Último foco que a rolagem automática já atendeu. Enquanto for igual ao
+        # foco atual, `_ensure_focus_visible` não mexe em `scroll_target` — é o
+        # que deixa a roda e o arrasto da barra serem donos da rolagem.
+        self._revealed_focus: Optional[tuple] = None
         self._nav_stick_dir: tuple = (0, 0)
         self._nav_repeat_timer: float = 0.0
+        # Arrasto da barra de rolagem: deslocamento entre onde o jogador pegou o
+        # polegar e o topo dele, para a barra não saltar sob o cursor no clique.
+        self._scrollbar_drag_offset: Optional[int] = None
 
         # Tremor de recusa: quem treme e por quanto tempo ainda.
         self.shaking_slot: Optional[int] = None
@@ -733,14 +747,23 @@ class UpgradesSelectionScene(Scene):
             if seta:
                 self._press_detail_arrow(seta)
                 return
+            # A barra vem antes dos nós: ela fica DENTRO do viewport, colada na
+            # borda direita, e sem esta ordem o clique nela caía no card vizinho.
+            if self._scrollbar_press(event.pos):
+                return
             node = self._node_at_pos(event.pos)
             if node is not None:
                 self.focus = node
                 self._activate(node)
             return
 
+        if event.type == pygame.MOUSEMOTION and self._scrollbar_drag_offset is not None:
+            self._scrollbar_drag_to(event.pos[1])
+            return
+
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             self._detail_arrow_held, self._detail_arrow_timer = 0, 0.0
+            self._scrollbar_drag_offset = None
             return
 
         if event.type == pygame.MOUSEWHEEL:
@@ -798,25 +821,102 @@ class UpgradesSelectionScene(Scene):
     def _cycle_tab(self, delta: int) -> None:
         self._set_tab((self.active_tab + delta) % len(_TABS))
 
+    # Passo da roda, em frações de uma linha do grid. Meia linha e não uma
+    # inteira: o alcance total é pouco mais de uma linha (≈170px em 720p contra
+    # 130px de linha), então o passo cheio ia do topo ao fim em dois cliques e
+    # lia como salto. Teclado/PageUp seguem no passo de página.
+    WHEEL_STEP_ROWS = 0.5
+
     def _scroll_by(self, direction: int, *, page: bool = False) -> None:
-        """Rola o grid. ``page`` avança uma janela inteira em vez de uma linha."""
+        """Rola o grid. ``page`` avança uma janela inteira em vez de meia linha."""
         if self.max_scroll <= 0.0:
             return
         step = (
             self.layout.viewport.height
             if page
-            else (self.layout.cell_h + self.layout.cell_gap)
+            else (self.layout.cell_h + self.layout.cell_gap) * self.WHEEL_STEP_ROWS
         )
-        self.scroll_target = max(
-            0.0, min(self.max_scroll, self.scroll_target + direction * step)
-        )
+        self._set_scroll(self.scroll_target + direction * step)
+
+    def _set_scroll(self, valor: float) -> None:
+        """Alvo da rolagem, preso à faixa válida. Ponto único de escrita."""
+        self.scroll_target = max(0.0, min(self.max_scroll, valor))
+
+    # ── Barra de rolagem: clique e arrasto ──────────────────────────────────
+
+    def _scrollbar_thumb(self) -> Optional[pygame.Rect]:
+        """Retângulo do polegar. `None` quando não há o que rolar.
+
+        MESMA conta do `_draw_scrollbar` — o alvo do arrasto e o que aparece na
+        tela saem daqui, senão o jogador pega num lugar e a barra responde de
+        outro (§19).
+        """
+        if self.max_scroll <= 0.0:
+            return None
+        track = self.layout.scrollbar
+        vp_h = self.layout.viewport.height
+        alt = max(self._s(24), int(track.height * (vp_h / (vp_h + self.max_scroll))))
+        y = track.y + int((track.height - alt) * (self.scroll_y / self.max_scroll))
+        return pygame.Rect(track.x, y, track.width, alt)
+
+    def _scrollbar_press(self, pos: Tuple[int, int]) -> bool:
+        """Clique na barra: pega o polegar, ou salta até o ponto clicado.
+
+        A calha é fina (5px do design), então o alvo é inflado na horizontal —
+        acertar 5px com o mouse é pedir demais.
+        """
+        polegar = self._scrollbar_thumb()
+        if polegar is None:
+            return False
+        alvo = self.layout.scrollbar.inflate(self._s(10), 0)
+        if not alvo.collidepoint(pos):
+            return False
+        if polegar.collidepoint(pos):
+            self._scrollbar_drag_offset = pos[1] - polegar.y
+        else:
+            # Clicou na calha: leva o polegar ao cursor e já segue arrastando,
+            # que é o que qualquer barra faz.
+            self._scrollbar_drag_offset = polegar.height // 2
+            self._scrollbar_drag_to(pos[1])
+        return True
+
+    def _scrollbar_drag_to(self, y: int) -> None:
+        """Converte a posição do polegar em rolagem."""
+        polegar = self._scrollbar_thumb()
+        if polegar is None or self._scrollbar_drag_offset is None:
+            return
+        track = self.layout.scrollbar
+        curso = track.height - polegar.height
+        if curso <= 0:
+            return
+        topo = y - self._scrollbar_drag_offset
+        fracao = (topo - track.y) / curso
+        self._set_scroll(self.max_scroll * max(0.0, min(1.0, fracao)))
+        # O arrasto é direto: sem a interpolação do `update`, a barra ficaria
+        # atrás do cursor e pareceria escorregar.
+        self.scroll_y = self.scroll_target
 
     def _ensure_focus_visible(self) -> None:
-        """Rola o mínimo necessário para o card focado caber na janela.
+        """Rola o mínimo para o card focado caber na janela — só quando o foco
+        ACABOU de mudar por navegação discreta.
 
         É o que liga a navegação por controle à rolagem: o foco anda pelo grid
         inteiro (inclusive o que está fora da janela) e a janela o persegue, em
-        vez de existir um comando separado de rolar."""
+        vez de existir um comando separado de rolar.
+
+        **Por que só na mudança:** rodando a cada frame, isto era o segundo dono
+        de `scroll_target` e ganhava sempre. Com o ponteiro parado sobre um card,
+        o hover fixava o foco nele, e no frame seguinte esta função devolvia a
+        rolagem para "revelar" um card que já estava visível — desfazendo o que a
+        roda tinha acabado de pedir. O sintoma era a roda **travada** sobre os
+        cards e errática nos vãos, conforme o foco estivesse perto ou longe.
+
+        O hover marca a própria mudança como já revelada (ver `update`): card sob
+        o ponteiro é, por definição, card visível — não há o que revelar.
+        """
+        if self.focus == self._revealed_focus:
+            return
+        self._revealed_focus = self.focus
         if not self.focus or self.focus[0] != "upg":
             return
         idx = self.focus[1]
@@ -1037,7 +1137,14 @@ class UpgradesSelectionScene(Scene):
             node = self._node_at_pos(pygame.mouse.get_pos())
             if node is not None:
                 self.focus = node
+                # Hover NÃO pede rolagem: o card está sob o ponteiro, logo já
+                # está visível. Marcar como revelado é o que impede
+                # `_ensure_focus_visible` de desfazer a roda no frame seguinte.
+                self._revealed_focus = node
         self._sync_hovered_from_focus()
+        # Depois do sync: o zoom lê hover/seleção já deste frame (§3 — a
+        # animação avança aqui, o render só desenha o valor).
+        self._update_cell_zoom(dt)
 
     def render(self, surface: pygame.Surface):
         surface.fill(BLACK)
@@ -1702,12 +1809,18 @@ class UpgradesSelectionScene(Scene):
             for rect in self.layout.sockets:
                 if rect.bottom >= self.layout.viewport.y and rect.y <= self.layout.viewport.bottom:
                     self._draw_socket(surface, rect)
-            for i, rect in enumerate(self.layout.cells):
-                if rect.bottom < self.layout.viewport.y:
-                    continue
-                if rect.y > self.layout.viewport.bottom:
-                    break  # o resto está abaixo da janela: nada a desenhar
-                self._draw_cell(surface, rect, self.layout.visible_upgrades[i])
+            # Ordenado pelo zoom: o card em destaque é desenhado por ÚLTIMO,
+            # para crescer POR CIMA dos vizinhos. Na ordem do grid, quem vem
+            # depois pintaria em cima dele e cortaria o zoom pela metade.
+            visiveis = [
+                (rect, self.layout.visible_upgrades[i])
+                for i, rect in enumerate(self.layout.cells)
+                if rect.bottom >= self.layout.viewport.y
+                and rect.y <= self.layout.viewport.bottom
+            ]
+            visiveis.sort(key=lambda par: self._cell_zoom.get(par[1].type, 1.0))
+            for rect, meta in visiveis:
+                self._draw_cell(surface, self._cell_draw_rect(rect, meta), meta)
         finally:
             surface.set_clip(previous_clip)
 
@@ -1739,21 +1852,80 @@ class UpgradesSelectionScene(Scene):
             surface.blit(label, label.get_rect(center=rect.center))
 
     def _draw_scrollbar(self, surface: pygame.Surface) -> None:
-        """Barra de rolagem fina. Só aparece quando há o que rolar."""
-        if self.max_scroll <= 0.0:
+        """Barra de rolagem fina. Só aparece quando há o que rolar.
+
+        O polegar sai de `_scrollbar_thumb`, o MESMO helper que o arrasto usa —
+        desenhar por uma conta e testar o clique por outra é como o indicador
+        vira enfeite não-clicável (§19).
+        """
+        polegar = self._scrollbar_thumb()
+        if polegar is None:
             return
         track = self.layout.scrollbar
         pygame.draw.rect(surface, (40, 40, 50), track, border_radius=track.width // 2)
-        vp_h = self.layout.viewport.height
-        proporcao = vp_h / (vp_h + self.max_scroll)
-        alt = max(self._s(24), int(track.height * proporcao))
-        avanco = self.scroll_y / self.max_scroll
-        y = track.y + int((track.height - alt) * avanco)
+        arrastando = self._scrollbar_drag_offset is not None
         pygame.draw.rect(
             surface,
-            (150, 150, 170),
-            pygame.Rect(track.x, y, track.width, alt),
+            (205, 205, 225) if arrastando else (150, 150, 170),
+            polegar,
             border_radius=track.width // 2,
+        )
+
+    # Zoom do card em destaque, em fração ADICIONAL do tamanho da célula. Vem do
+    # layout porque é ELE que dimensiona o respiro do grid por este número
+    # (`grid_padding`) — dois valores separados voltariam a cortar o card das
+    # bordas contra o recorte da janela.
+    CELL_ZOOM_FOCUSED = CELL_ZOOM
+    # O selecionado cresce menos que o focado, na mesma hierarquia que a borda
+    # já usa (focado > selecionado > equipado). Dois destaques do mesmo tamanho
+    # deixariam de dizer qual responde ao confirmar.
+    CELL_ZOOM_SELECTED = 0.07
+    CELL_ZOOM_SPEED = 14.0
+
+    def _cell_zoom_target(self, meta: UpgradeMeta) -> float:
+        """Escala que este card deveria ter agora (1.0 = tamanho da célula).
+
+        Equipado NÃO entra: até três cards ficariam permanentemente grandes, e o
+        estado durável dele já é dito pela borda dourada. Hover e foco são o
+        mesmo estado (§19), então mouse e controle dão o mesmo destaque.
+        """
+        if self.hovered_upgrade is not None and self.hovered_upgrade.type is meta.type:
+            return 1.0 + self.CELL_ZOOM_FOCUSED
+        if self.detail_meta is not None and self.detail_meta.type is meta.type:
+            return 1.0 + self.CELL_ZOOM_SELECTED
+        return 1.0
+
+    def _update_cell_zoom(self, dt: float) -> None:
+        """Aproxima cada card do próprio alvo. Chamado do `update` (§3).
+
+        Reconstrói o dicionário com os cards da aba visível: sem isso, um
+        upgrade filtrado para fora guardaria a escala antiga e voltaria grande
+        quando a aba fosse reaberta.
+        """
+        # Sem animações a escala é aplicada direto: o destaque continua legível,
+        # só não é interpolado.
+        passo = min(1.0, dt * self.CELL_ZOOM_SPEED) if self._animations_on() else 1.0
+        atualizados: dict[UpgradeType, float] = {}
+        for meta in self.layout.visible_upgrades:
+            atual = self._cell_zoom.get(meta.type, 1.0)
+            alvo = self._cell_zoom_target(meta)
+            atualizados[meta.type] = atual + (alvo - atual) * passo
+        self._cell_zoom = atualizados
+
+    def _cell_draw_rect(self, rect: pygame.Rect, meta: UpgradeMeta) -> pygame.Rect:
+        """Retângulo de DESENHO do card, já com o zoom.
+
+        O alvo de clique e de foco continua sendo `layout.cells` — a geometria
+        não muda, só a pintura. É de propósito: o zoom é consequência do hover,
+        então testar o clique no card já crescido criaria realimentação (crescer
+        aumenta a área que faz crescer). Como o card só cresce onde o ponteiro
+        JÁ está, a borda extra nunca precisa ser clicável.
+        """
+        escala = self._cell_zoom.get(meta.type, 1.0)
+        if escala <= 1.001:
+            return rect
+        return rect.inflate(
+            int(rect.width * (escala - 1.0)), int(rect.height * (escala - 1.0))
         )
 
     def _draw_cell(
@@ -1896,7 +2068,6 @@ class UpgradesSelectionScene(Scene):
             self._card_stats_line(meta), True, (150, 175, 205)
         )
         surface.blit(stats, (x, rect.bottom - self._s(20)))
-        self._draw_tier_pips(surface, rect, meta)
 
     def _draw_detail_text(
         self, surface: pygame.Surface, x: int, y: int, texto: pygame.Rect
@@ -2134,23 +2305,11 @@ class UpgradesSelectionScene(Scene):
             partes.pop()
         return partes[0]
 
-    def _draw_tier_pips(
-        self, surface: pygame.Surface, rect: pygame.Rect, meta: UpgradeMeta
-    ) -> None:
-        """Tier de poder (1–3) em pips no canto inferior direito.
-
-        É o que sobrou do peso: sem gate nenhum sobre o que cabe, só a
-        informação de que este upgrade pesa mais na balança do jogo."""
-        tier = max(1, min(3, meta.slot_weight))
-        r = self._s(4)
-        gap = self._s(11)
-        cy = rect.bottom - self._s(14)
-        x = rect.right - self._s(14) - r
-        for i in range(3):
-            filled = i < tier
-            color = _category_color(meta) if filled else (60, 60, 70)
-            pygame.draw.circle(surface, color, (x, cy), r, 0 if filled else 1)
-            x -= gap
+    # (Aqui ficavam os pips de tier de poder — o último resquício visual do
+    # orçamento de PESO, que saiu do modelo há tempos: `slot_weight` não gateia
+    # nada desde que o loadout virou 3 slots com um upgrade cada. Mostrar um
+    # número que não governa coisa alguma só pedia ao jogador para procurar uma
+    # regra inexistente. O campo continua no `UpgradeMeta`, agora sem leitor.)
 
     # ------------------------------------------------------------------
     # Render — rodapé e animações

@@ -20,6 +20,7 @@ import pytest
 from game.core.config import config as Config
 from game.core.config import set_screen_resolution
 from game.core.gamepad import XboxButton
+from game.core.i18n import t
 from game.core.preferences import UserPreferences
 from game.scenes.controls_modal import ControlsModalScene
 
@@ -217,6 +218,80 @@ def test_hover_nao_rouba_o_foco_em_modo_controle(tmp_path):
         )
     )
     assert cena._focused_action() == focado
+
+
+# ── formato compacto do atalho de tiro ──────────────────────────────────────
+#
+# O rótulo era "Tiro automático: Ligado/Desligado". Como os botões do bloco têm
+# largura UNIFORME (o maior rótulo entre TODOS os botões e estados manda, ver
+# `layout_flow_buttons`), o "Desligado" definia a largura dos DOIS e a fileira
+# não cabia numa linha: o bloco quebrava em duas e o modal crescia junto.
+# Hoje é "Tiro: Automático/Manual" e os dois atalhos ficam lado a lado.
+
+
+def _rotulos_do_atalho_de_tiro() -> list[str]:
+    return [
+        t("controls.toggle.autofire", v=t("controls.fire.auto")),
+        t("controls.toggle.autofire", v=t("controls.fire.manual")),
+    ]
+
+
+def test_o_atalho_de_tiro_diz_automatico_ou_manual(tmp_path):
+    """'Ligado/Desligado' descrevia o estado de uma opção; 'Automático/Manual'
+    diz o que o tiro faz."""
+    assert _rotulos_do_atalho_de_tiro() == ["Tiro: Automático", "Tiro: Manual"]
+
+
+def test_os_dois_atalhos_ficam_na_mesma_linha(tmp_path):
+    """O ganho concreto do rótulo curto: uma linha em vez de duas."""
+    cena, _prefs, _fim = montar(tmp_path, controls_configured=False)
+    control, autofire = cena.toggle_rects["control"], cena.toggle_rects["autofire"]
+    assert control.top == autofire.top, "os atalhos quebraram em linhas separadas"
+    assert control.right <= autofire.left, "os atalhos se sobrepõem"
+
+
+def test_o_atalho_de_tiro_nao_manda_mais_na_largura(tmp_path):
+    """Enquanto o rótulo de tiro era o mais longo, ele inflava o outro botão."""
+    cena, _prefs, _fim = montar(tmp_path, controls_configured=False)
+    fonte = cena.toggle_font
+    mais_longo_tiro = max(fonte.size(s)[0] for s in _rotulos_do_atalho_de_tiro())
+    mais_longo_controle = max(
+        fonte.size(t("controls.toggle.control", v=t(k)))[0]
+        for k in ("controls.method.mouse", "controls.method.keyboard")
+    )
+    assert mais_longo_tiro <= mais_longo_controle
+
+
+def test_a_largura_do_atalho_nao_muda_ao_alternar(tmp_path):
+    """Largura estável entre estados — senão o botão pula sob o cursor."""
+    cena, prefs, _fim = montar(tmp_path, controls_configured=False)
+    antes = cena.toggle_rects["autofire"].width
+    cena._toggle_auto_fire()
+    cena._calculate_layout()
+    assert cena.toggle_rects["autofire"].width == antes
+
+
+def test_a_coluna_de_instrucoes_usa_o_mesmo_vocabulario(tmp_path):
+    """O atalho e a instrução falam do mesmo assunto; usar duas palavras
+    diferentes ("Automático" no botão, "ligado" na instrução) faz parecer que
+    são dois ajustes."""
+    assert t("controls.fire.auto") in t("controls.shoot_auto")
+
+
+def test_a_instrucao_manual_continua_dizendo_a_tecla(tmp_path):
+    """Alinhar vocabulário não pode custar a informação da coluna: quem joga no
+    manual precisa saber QUAL tecla atira."""
+    assert "Espaço" in t("controls.kb.shoot")
+    assert "RT" in t("controls.gp.shoot")
+
+
+def test_alternar_continua_trocando_a_preferencia(tmp_path):
+    """A lógica de seleção é a mesma; mudou só a apresentação."""
+    cena, prefs, _fim = montar(tmp_path, controls_configured=False, auto_fire=False)
+    cena._activate("autofire")
+    assert prefs.auto_fire
+    cena._activate("autofire")
+    assert not prefs.auto_fire
 
 
 # ── layout em todas as resoluções (§12) ─────────────────────────────────────

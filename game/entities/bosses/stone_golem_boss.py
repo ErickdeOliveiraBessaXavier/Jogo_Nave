@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Final, List, Optional, Tuple
 import pygame
 
 from ...core.config import config as Config
+from ..effects.critical_damage import CriticalDamageFX, area_from_box
 from ..enemies.space.bot_elemental import ElementalRobot
 from .stone_golem_pixel_map import EYE_COL_END as _EYE_COL_END
 from .stone_golem_pixel_map import EYE_COL_START as _EYE_COL_START
@@ -932,6 +933,10 @@ class StoneGolemBoss(BossHitMixin):
         self._init_fsm(y)
         self._init_surfaces()
 
+        # Fogo/fumaça de vida baixa, no CORPO do golem (`effects/critical_damage`).
+        # `scale` acima do padrão porque o corpo é grande.
+        self.critical_fx = CriticalDamageFX(scale=1.5)
+
     @property
     def rect(self) -> pygame.Rect:
         """Rect de colisão (fonte única de verdade), atualizado in-place.
@@ -1318,6 +1323,17 @@ class StoneGolemBoss(BossHitMixin):
         new_mines: List[GolemMine] = []
         new_shards: List[AttackDebris] = []
         self._entity_manager = entity_manager
+
+        # Fogo/fumaça no corpo. A caixa acompanha o flutuar vertical, a mesma
+        # origem que o `draw` usa — senão o fogo ficaria pregado no chão
+        # enquanto o corpo sobe e desce.
+        self.critical_fx.update(
+            dt,
+            self.health / self.max_health if self.max_health else 0.0,
+            area_from_box(
+                self.x, self.y + self._current_float_y, self.w, self.h
+            ),
+        )
         self._time += dt
         self.fsm_ticks += dt
 
@@ -2280,6 +2296,11 @@ class StoneGolemBoss(BossHitMixin):
         for r in self._orbital_debris:
             if not r.behind_boss:
                 r.draw(surface)
+
+        # Fogo/fumaça no corpo. Só o JITTER como offset: o flutuar vertical já
+        # entrou na área de emissão no `update`, e somar de novo aqui dobraria.
+        self.critical_fx.draw(surface, self._jitter_x, self._jitter_y)
+
         self._draw_health_bar(surface, ox, oy)
 
     def _draw_eye(

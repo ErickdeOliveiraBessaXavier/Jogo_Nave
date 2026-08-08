@@ -9,6 +9,7 @@ from ...core.config import SlimeBossState, SlimeDripMode, StageConfig
 from ...core.config import config as Config
 from ...core.sound import sound_manager
 from ...core.sprite_loader import sprite_loader
+from ..effects.critical_damage import CriticalDamageFX, area_from_box
 from ..effects.slime_drip import SlimeDrippingEffect
 
 if TYPE_CHECKING:
@@ -77,6 +78,10 @@ class SlimeBoss:
         self.health = health if health is not None else Config.SLIME_BOSS_HEALTH
         self.max_health = self.health
         self.dead = False
+
+        # Fogo/fumaça de vida baixa. `scale` maior: o corpo é uma parede da
+        # largura da tela, e fogo de tamanho padrão sumiria nela.
+        self.critical_fx = CriticalDamageFX(scale=1.6)
         self.current_state = SlimeBossState.ENTERING
         self.stage_timer = 0.0
         self.current_stage_config: StageConfig | None = None
@@ -157,6 +162,16 @@ class SlimeBoss:
     ) -> tuple[list[Any], list[Any], list[Any]]:
         # Update animation
         self._update_animation(dt)
+
+        # Fogo/fumaça de vida baixa. Recortado pela tela: o corpo é mais alto que
+        # a área visível e fica com a maior parte acima do topo.
+        self.critical_fx.update(
+            dt,
+            self.health / self.max_health if self.max_health else 0.0,
+            area_from_box(
+                self.x, self.y, self.w, self.h, inset=0.1, clip_to_screen=True
+            ),
+        )
 
         # Decay hit flash timer
         if self.hit_flash_timer > 0.0:
@@ -513,6 +528,9 @@ class SlimeBoss:
         # ✅ FLASH OTIMIZADO: só desenhar se boss visível + usar cache de outline
         if self.hit_flash_timer > 0.0 and self.y > -self.h:  # Skip se off-screen
             self._draw_flash_outline(surface, scaled_frame, offset_x, offset_y)
+
+        # Fogo/fumaça de vida baixa, com o mesmo tremor do corpo.
+        self.critical_fx.draw(surface, offset_x, offset_y)
 
     @property
     def rect(self) -> pygame.Rect:

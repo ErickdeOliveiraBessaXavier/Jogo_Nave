@@ -7,6 +7,7 @@ import pygame
 from ...core import colors
 from ...core.config import config
 from ...core.sound import sound_manager
+from ..effects.critical_damage import CriticalDamageFX, area_from_box
 
 if TYPE_CHECKING:
     from ...systems.boss_context import BossUpdateContext, BossUpdateResult
@@ -125,6 +126,10 @@ class GiantMeteorBoss:
         self.max_health = self.health
         self.dead = False
 
+        # Fogo/fumaça de vida baixa. `scale` maior: o corpo é mais largo que a
+        # tela, e fogo de tamanho padrão sumiria nele.
+        self.critical_fx = CriticalDamageFX(scale=1.8)
+
         self.entry_speed = config.GIANT_METEOR_BOSS_ENTRY_SPEED
         self.speed = config.GIANT_METEOR_BOSS_FALL_SPEED
 
@@ -205,6 +210,16 @@ class GiantMeteorBoss:
             return
 
         hp_pct = self.health / self.max_health
+
+        # Fogo/fumaça de vida baixa. Recortado pela tela: o corpo é maior que a
+        # área visível e entra com ~70% da altura acima do topo.
+        self.critical_fx.update(
+            dt,
+            hp_pct,
+            area_from_box(
+                self.x, self.y, self.w, self.h, inset=0.1, clip_to_screen=True
+            ),
+        )
         stage = min(_CRACK_STAGES - 1, int((1.0 - hp_pct) * _CRACK_STAGES))
 
         if stage != self._last_damage_stage:
@@ -272,6 +287,9 @@ class GiantMeteorBoss:
             intns = self._shake_intensity * (self._shake_timer / _SHAKE_DURATION)
             sx, sy = random.uniform(-intns, intns), random.uniform(-intns, intns)
         surface.blit(self._surface, (int(self.x + sx), int(self.y + sy)))
+
+        # Fogo/fumaça de vida baixa, com o mesmo tremor do corpo.
+        self.critical_fx.draw(surface, sx, sy)
 
     # ------------------------------------------------------------------
     # Shape generation
