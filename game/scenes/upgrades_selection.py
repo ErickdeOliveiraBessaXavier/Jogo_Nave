@@ -79,6 +79,7 @@ from ..systems.loadout_controller import (
     LoadoutResult,
 )
 from .ui_helpers import (
+    CONFIRM_KEYS,
     FOCUS_HIGHLIGHT,
     draw_bordered_button,
     interactive_border_color,
@@ -106,6 +107,14 @@ from .upgrades_layout import (
 if TYPE_CHECKING:
     from ..app import GameApp
 
+
+# Setas → vetor de navegação, no mesmo eixo do D-pad (dy +1 = baixo).
+_ARROW_DIRS: dict[int, Tuple[int, int]] = {
+    pygame.K_LEFT: (-1, 0),
+    pygame.K_RIGHT: (1, 0),
+    pygame.K_UP: (0, -1),
+    pygame.K_DOWN: (0, 1),
+}
 
 # Cor do medalhão por categoria. É a única pista de tipo que o card dá de
 # relance — a letra identifica QUAL upgrade, a cor diz DE QUE TIPO ele é.
@@ -680,17 +689,19 @@ class UpgradesSelectionScene(Scene):
             if event.key == pygame.K_ESCAPE:
                 self._return_to_menu()
                 return
-            if event.key in (pygame.K_LEFT, pygame.K_RIGHT):
-                self._cycle_tab(-1 if event.key == pygame.K_LEFT else 1)
-                return
-            if event.key in (pygame.K_UP, pygame.K_DOWN):
-                # Teclado rola pelo MESMO roteador da roda do mouse. A cena não
-                # move foco por teclado (isso é do controle e do cursor), então
-                # as setas ficam livres para o gesto que o teclado tem de ter:
-                # rolar o texto que não coube.
-                self._scroll_request(
-                    -1 if event.key == pygame.K_UP else 1, pygame.mouse.get_pos()
-                )
+            direcao = _ARROW_DIRS.get(event.key)
+            if direcao is not None:
+                # Setas movem o FOCO pelo MESMO caminho geométrico do D-pad
+                # (`_apply_nav`), o que inclui os cards do grid.
+                #
+                # Antes elas eram gastas em outra coisa: ←/→ trocavam de aba e
+                # ↑/↓ rolavam texto, e não havia gesto de teclado nenhum para
+                # andar pelos upgrades — dava para chegar num card só de mouse
+                # ou de controle. As abas continuam alcançáveis (são nós de
+                # foco, logo acima do grid) e a rolagem do grid vem de graça,
+                # porque a janela persegue o foco; o texto do card fica com
+                # PageUp/PageDown.
+                self._apply_nav(*direcao)
                 return
             if event.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
                 # Rolam a DESCRIÇÃO quando ela tem mais texto do que cabe;
@@ -707,7 +718,7 @@ class UpgradesSelectionScene(Scene):
                 # ao foco próprio desta cena.
                 self._cycle_focus(-1 if event.mod & pygame.KMOD_SHIFT else 1)
                 return
-            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            if event.key in CONFIRM_KEYS:
                 self._validate_focus()
                 self._activate(self.focus)
                 return

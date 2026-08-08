@@ -20,7 +20,7 @@ from ..core.sound import sound_manager
 from ..core.levels.fixed_levels import TEST_ARENA_ENABLED
 from ..core.world_config import WorldConfig, get_all_worlds, resolve_theme_key
 from ..render.backgrounds import Background, create_background
-from .ui_helpers import UIParticle, draw_bordered_button
+from .ui_helpers import CONFIRM_KEYS, UIParticle, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..render.renderer import Renderer
@@ -558,7 +558,7 @@ class WorldSelectionView:
                 self.last_key_time = current_time
                 sound_manager.play_sound("button_hover")
 
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif event.key in CONFIRM_KEYS:
                 # K_RETURN sintético logo após um A do controle: o handler nativo
                 # do A já resolveu a ação cursor-aware (seta/card/voltar). Ignora
                 # este para não sobrepor com uma seleção de mundo. Enter real do

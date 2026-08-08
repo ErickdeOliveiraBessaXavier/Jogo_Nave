@@ -202,3 +202,99 @@ class TestTextoDoCard:
 def teardown_module():
     set_screen_resolution(1280, 720)
     assert Config.SCREEN_WIDTH == 1280
+
+
+class TestNavegacaoPorTeclado:
+    """As setas movem o FOCO pelo grid, e os dois Enter acionam igual.
+
+    Antes: ←/→ eram gastas trocando de aba e ↑/↓ rolando texto, então não havia
+    gesto de teclado nenhum para andar pelos cards — só mouse ou controle. E o
+    Enter do teclado numérico não era reconhecido em lugar nenhum desta tela.
+    """
+
+    def _tecla(self, cena, key, mod=0):
+        cena.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": key, "mod": mod}))
+
+    def test_seta_para_a_direita_anda_no_grid(self, cena):
+        cena.focus = ("upg", 0)
+        self._tecla(cena, pygame.K_RIGHT)
+        assert cena.focus == ("upg", 1)
+
+    def test_seta_para_a_esquerda_volta(self, cena):
+        cena.focus = ("upg", 1)
+        self._tecla(cena, pygame.K_LEFT)
+        assert cena.focus == ("upg", 0)
+
+    def test_seta_para_baixo_desce_uma_linha_do_grid(self, cena):
+        from game.scenes.upgrades_layout import GRID_COLS
+
+        cena.focus = ("upg", 0)
+        self._tecla(cena, pygame.K_DOWN)
+        assert cena.focus == ("upg", GRID_COLS)
+
+    def test_seta_para_cima_sobe_uma_linha(self, cena):
+        from game.scenes.upgrades_layout import GRID_COLS
+
+        cena.focus = ("upg", GRID_COLS)
+        self._tecla(cena, pygame.K_UP)
+        assert cena.focus == ("upg", 0)
+
+    def test_andar_no_grid_traz_a_celula_para_a_janela(self, cena):
+        """A rolagem segue o foco: descer até a última linha revela o card.
+
+        Desce só enquanto o foco CONTINUA no grid — passando da última linha ele
+        sai para outro elemento da tela, e aí não há célula que valha medir.
+        """
+        cena.focus = ("upg", 0)
+        ultimo = 0
+        for _ in range(8):
+            self._tecla(cena, pygame.K_DOWN)
+            cena.update(1 / 60)
+            if cena.focus[0] != "upg":
+                break
+            ultimo = cena.focus[1]
+        assert ultimo > 0, "as setas não desceram nenhuma linha no grid"
+        assert cena.scroll_target > 0.0, "a janela não seguiu o foco"
+        for _ in range(40):
+            cena.update(1 / 60)
+        assert cena.layout.viewport.contains(cena.layout.cells[ultimo])
+
+    def test_as_setas_alcancam_as_abas_saindo_do_grid(self, cena):
+        """Trocar de aba continua possível: as abas são nós de foco acima do
+        grid, alcançados pela MESMA navegação geométrica do D-pad."""
+        cena.focus = ("upg", 0)
+        regioes = set()
+        for _ in range(4):
+            self._tecla(cena, pygame.K_UP)
+            regioes.add(cena.focus[0])
+        assert "tab" in regioes
+
+    def test_enter_principal_aciona_o_foco(self, cena):
+        cena.focus = ("tab", 1)
+        self._tecla(cena, pygame.K_RETURN)
+        assert cena.active_tab == 1
+
+    def test_enter_do_numerico_faz_o_mesmo(self, cena):
+        """O defeito relatado: `K_KP_ENTER` não era reconhecido."""
+        cena.focus = ("tab", 1)
+        self._tecla(cena, pygame.K_KP_ENTER)
+        assert cena.active_tab == 1
+
+    def test_os_dois_enter_equipam_o_upgrade_em_foco(self, cena):
+        """A ação tem de ser a MESMA, não só 'alguma'."""
+        from game.core.upgrades import UpgradeType
+
+        def equipar_com(tecla):
+            perfil = cena.player_profile
+            perfil.upgrade_loadout = [None] * len(perfil.upgrade_loadout)
+            alvo = cena.layout.visible_upgrades[0]
+            perfil.unlocked_upgrades.add(alvo.type)
+            cena.focus = ("upg", 0)
+            self._tecla(cena, tecla)
+            return perfil.get_equipped_slot(alvo.type)
+
+        principal = equipar_com(pygame.K_RETURN)
+        numerico = equipar_com(pygame.K_KP_ENTER)
+        assert principal is not None, "o Enter principal nem equipou"
+        assert numerico == principal
+        assert isinstance(UpgradeType, type)

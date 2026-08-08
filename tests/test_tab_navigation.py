@@ -282,7 +282,12 @@ def test_quem_navega_por_seta_tambem_confirma_por_enter():
                 and no.name == "arrow_keys_navigate_focus"
             ):
                 declara = True
-        if declara and "K_RETURN" not in fonte:
+        # `CONFIRM_KEYS` (ui_helpers) é a forma preferida — ela inclui o Enter
+        # do teclado NUMÉRICO, que ficava de fora de quem listava só o
+        # `K_RETURN` (ver `tests/test_confirm_keys.py`). O literal continua
+        # aceito aqui porque este teste pergunta "confirma por Enter?", e não
+        # "por qual constante".
+        if declara and "K_RETURN" not in fonte and "CONFIRM_KEYS" not in fonte:
             sem_confirmacao.append(arquivo.name)
 
     assert not sem_confirmacao, (

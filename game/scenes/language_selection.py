@@ -16,7 +16,7 @@ from ..core.config import config as Config
 from ..core.sound import sound_manager
 from ..core.state import Scene
 from ..core.translations import LANGUAGES
-from .ui_helpers import draw_bordered_button
+from .ui_helpers import CONFIRM_KEYS, draw_bordered_button
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -118,7 +118,7 @@ class LanguageSelectionScene(Scene):
                 self._cycle(-1)
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 self._cycle(+1)
-            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+            elif event.key in CONFIRM_KEYS:
                 if not self._select_under_cursor():
                     self._select(self.buttons[0][0])
         elif event.type == pygame.JOYBUTTONDOWN:

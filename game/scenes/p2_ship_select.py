@@ -33,7 +33,7 @@ from ..core.ship_types import (
 )
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import get_fade_scratch
+from .ui_helpers import CONFIRM_KEYS, get_fade_scratch
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -121,7 +121,7 @@ class P2ShipSelectScene(Scene):
                 self._navigate(-1)
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 self._navigate(+1)
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif event.key in CONFIRM_KEYS:
                 self._confirm()
 
     def _handle_button(self, event: pygame.event.Event) -> None:

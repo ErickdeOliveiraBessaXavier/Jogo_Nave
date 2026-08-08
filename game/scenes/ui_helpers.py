@@ -92,6 +92,18 @@ class UIParticle:
 # É o dourado da interface CLAREADO, e não o `CUSTOM_GOLD` puro, porque o
 # dourado puro já é um estado no arsenal ("equipado") — o destaque precisa se
 # distinguir dele sem inventar uma cor fora da paleta.
+# Teclas que ACIONAM o elemento em foco. Fonte única para todas as telas.
+#
+# `K_KP_ENTER` é o Enter do teclado NUMÉRICO: o SDL o entrega como uma tecla
+# diferente do Enter principal, então quem lista só `K_RETURN` simplesmente não
+# responde a ele. Era o caso de todas as telas menos a de idioma — o jogador
+# apertava Enter no numérico e nada acontecia, sem erro nem pista.
+#
+# Constante, e não uma tupla por tela, porque o defeito é de REPETIÇÃO: dez
+# lugares escrevendo a mesma lista à mão divergem no primeiro que alguém
+# esquecer. Varrido por `tests/test_confirm_keys.py`.
+CONFIRM_KEYS: tuple[int, ...] = (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE)
+
 FOCUS_HIGHLIGHT: tuple[int, int, int] = (255, 226, 168)
 
 

@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Sequence
 
 import pygame
-from .ui_helpers import get_fade_scratch, wrap_text
+from .ui_helpers import CONFIRM_KEYS, get_fade_scratch, wrap_text
 
 from ..core import colors
 from ..core.assets import get_font
@@ -70,7 +70,7 @@ class WorldTransitionScene(Scene):
     def handle_event(self, event: pygame.event.Event) -> None:
         """Permite pular a transição."""
         if event.type == pygame.KEYDOWN:
-            if event.key in [pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE]:
+            if event.key in CONFIRM_KEYS or event.key == pygame.K_ESCAPE:
                 self.app.go_back()  # Pular transição
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self.app.go_back()  # Pular com clique

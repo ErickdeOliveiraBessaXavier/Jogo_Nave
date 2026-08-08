@@ -12,6 +12,7 @@ from ..core.preferences import UserPreferences
 from ..core.sound import sound_manager
 from ..core.state import Scene
 from .ui_helpers import (
+    CONFIRM_KEYS,
     get_fade_scratch,
     wrap_text,
     draw_bordered_button,
@@ -448,10 +449,7 @@ class SettingsView:
                 )
                 return True
 
-        if event.type == pygame.KEYDOWN and event.key in (
-            pygame.K_RETURN,
-            pygame.K_SPACE,
-        ):
+        if event.type == pygame.KEYDOWN and event.key in CONFIRM_KEYS:
             # Enter aciona o que as setas/TAB destacaram — mesmo caminho do A do
             # controle, popups inclusive (eles são modais: precisam responder
             # antes, senão o Enter atravessaria para a tela de trás).

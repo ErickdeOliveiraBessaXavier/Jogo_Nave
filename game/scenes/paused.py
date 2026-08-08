@@ -8,7 +8,7 @@ from ..core.config import config as Config
 from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import get_fade_scratch
+from .ui_helpers import CONFIRM_KEYS, get_fade_scratch
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -156,7 +156,7 @@ class PausedScene(Scene):
                 return
             # Enter/Espaço acionam o que as setas destacaram (§19) — sem isto a
             # navegação por teclado chega ao botão e não consegue apertá-lo.
-            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            if event.key in CONFIRM_KEYS:
                 self._activate_at(pygame.mouse.get_pos())
                 return
 

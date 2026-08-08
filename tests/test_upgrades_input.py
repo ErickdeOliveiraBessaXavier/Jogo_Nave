@@ -92,16 +92,38 @@ def test_a_roda_do_mouse_e_lida_como_mousewheel():
     )
 
 
-def test_roda_teclado_e_setas_passam_pelo_mesmo_roteador():
-    """Um único caminho para os três dispositivos.
+def test_a_roda_passa_pelo_roteador_unico_de_rolagem():
+    """A regra "sobre o card rola o texto, fora dele rola o grid" mora em UM
+    lugar (`_scroll_request`); duplicada, os dispositivos divergem no primeiro
+    ajuste."""
+    corpo = corpo_do_metodo("handle_event")
+    assert "_scroll_request(" in corpo
 
-    A regra "sobre o card rola o texto, fora dele rola o grid" tem de existir em
-    UM lugar; duplicada, o mouse e o teclado divergem no primeiro ajuste.
+
+def test_as_setas_movem_o_foco_pelo_mesmo_caminho_do_dpad():
+    """Setas navegam o grid, e pelo MESMO `_apply_nav` do D-pad.
+
+    Antes as setas eram gastas em outra coisa — ←/→ trocavam de aba e ↑/↓
+    chamavam `_scroll_request` —, então não havia gesto de teclado nenhum para
+    andar pelos cards: dava para chegar num upgrade só de mouse ou de controle.
+
+    Compartilhar `_apply_nav` é o que impede teclado e controle de divergirem: a
+    busca geométrica, o som e o `set_cursor_mode("focus")` são os mesmos.
     """
     corpo = corpo_do_metodo("handle_event")
-    assert corpo.count("_scroll_request(") >= 2, (
-        "roda e teclado deveriam chamar o mesmo roteador de rolagem"
-    )
+    assert "_ARROW_DIRS" in corpo, "as setas precisam mapear para uma direção"
+    assert "_apply_nav(" in corpo, "setas e D-pad têm de usar o mesmo caminho"
+
+    fonte = FONTE.read_text(encoding="utf-8")
+    for tecla in ("K_LEFT", "K_RIGHT", "K_UP", "K_DOWN"):
+        assert tecla in fonte, f"{tecla} saiu do mapa de navegação"
+
+
+def test_os_dois_enter_acionam_o_foco():
+    """`K_KP_ENTER` (numérico) não pode ficar de fora — ver
+    `tests/test_confirm_keys.py`, que varre o jogo inteiro."""
+    corpo = corpo_do_metodo("handle_event")
+    assert "CONFIRM_KEYS" in corpo
 
 
 def test_as_setas_do_card_sao_clicaveis():

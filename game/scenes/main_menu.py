@@ -16,6 +16,7 @@ from ..core.sound_config import MusicState
 from ..core.state import Scene
 from ..core.world_config import get_world_for_level_by_id
 from ..entities.effects.explosion_pool import ExplosionPool
+from .ui_helpers import CONFIRM_KEYS
 from ..entities.enemies.space.meteor import Meteor
 from ..systems.cheat_input import CheatBuffer
 
@@ -822,7 +823,7 @@ class MainMenuScene(Scene):
                 self.focus_index = (self.focus_index - 1) % count
                 sound_manager.play_sound("button_hover")
                 self._apply_focus()
-            elif event.key == pygame.K_RETURN:
+            elif event.key in CONFIRM_KEYS:
                 self._activate_focus()
             # ESC não fecha mais o jogo no menu principal (use "Sair").
             self._process_cheat_input(event)

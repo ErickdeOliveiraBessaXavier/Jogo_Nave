@@ -18,7 +18,12 @@ from ..core.config import config as Config
 from ..core.difficulty import DifficultyPreset, DifficultySettings
 from ..core.i18n import t
 from ..core.sound import sound_manager
-from .ui_helpers import UIParticle, draw_bordered_button, wrap_text
+from .ui_helpers import (
+    CONFIRM_KEYS,
+    UIParticle,
+    draw_bordered_button,
+    wrap_text,
+)
 
 if TYPE_CHECKING:
     pass
@@ -201,7 +206,7 @@ class DifficultySelectionView:
             # Enter/Espaço acionam o card que as setas destacaram (§19). As
             # setas em si são navegação e ficam com o app
             # (`arrow_keys_navigate_focus` da MainMenuScene).
-            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            if event.key in CONFIRM_KEYS:
                 return self._activate_at(pygame.mouse.get_pos())
 
         elif event.type == pygame.JOYBUTTONDOWN:

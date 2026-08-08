@@ -13,7 +13,7 @@ from ..core.i18n import fmt_num, t
 from ..core.meta_progression import HighScoreEntry
 from ..core.sound import sound_manager
 from ..core.state import Scene
-from .ui_helpers import draw_bordered_button, get_fade_scratch
+from .ui_helpers import CONFIRM_KEYS, draw_bordered_button, get_fade_scratch
 
 if TYPE_CHECKING:
     from ..app import GameApp
@@ -251,7 +251,7 @@ class InitialsEntryWidget:
         # pelo app.py quando a cena não expõe focusable_rects), então o
         # bloco abaixo cobre teclado E controle DPad simultaneamente.
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            if event.key in CONFIRM_KEYS:
                 sound_manager.play_upgrade_activate()
                 return "submit"
             if event.key == pygame.K_ESCAPE:

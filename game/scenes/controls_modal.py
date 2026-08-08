@@ -10,6 +10,7 @@ from ..core.i18n import t
 from ..core.sound import sound_manager
 from ..core.state import Scene
 from .ui_helpers import (
+    CONFIRM_KEYS,
     FOCUS_HIGHLIGHT,
     draw_bordered_button,
     layout_flow_buttons,
@@ -355,7 +356,7 @@ class ControlsModalScene(Scene):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self._finish()
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif event.key in CONFIRM_KEYS:
                 self._activate_focused()
             elif event.key in (pygame.K_UP, pygame.K_LEFT):
                 self._move_focus(-1)

@@ -19,6 +19,7 @@ from ..core.paths import get_profile_path
 from ..core.state import Scene
 from ..core.upgrades_config import UPGRADE_SLOT_COUNT
 from .ui_helpers import (
+    CONFIRM_KEYS,
     wrap_text,
     draw_bordered_button,
 )
@@ -251,10 +252,7 @@ class StatisticsView:
             self.dialog.handle_event(event)
             return True
 
-        if event.type == pygame.KEYDOWN and event.key in (
-            pygame.K_RETURN,
-            pygame.K_SPACE,
-        ):
+        if event.type == pygame.KEYDOWN and event.key in CONFIRM_KEYS:
             # Enter aciona o que as setas/TAB destacaram — mesmo `_activate_at`
             # do A do controle. Sem isto o teclado navega e não confirma (§19).
             self._activate_at(pygame.mouse.get_pos())
