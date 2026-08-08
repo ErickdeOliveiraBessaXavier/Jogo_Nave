@@ -7,6 +7,7 @@ import pygame
 from ....core.colors import BLACK_HOLE_PARTICLE_COLORS
 from ....core.config import config
 from ....core.sound import sound_manager
+from ..._shared.control_marks import accepts_control
 
 
 class Particle(TypedDict):
@@ -308,7 +309,13 @@ class BlackHole:
             # EntityManager traduz a marca em multiplicador de dt no tick dele.
             # Marcar aqui em vez de mexer na velocidade evita disputar o mesmo
             # campo com EMP/gelo — os três se compõem por multiplicação.
-            if self.is_vortex:
+            #
+            # O `accepts_control` não é redundante com os opt-outs acima: quem
+            # tem `__slots__` sem o campo declarado estoura `AttributeError` na
+            # ESCRITA, e isso derrubou a partida em combate (`SerpentBlock`).
+            # Este era o único escritor de marca de controle sem o guard —
+            # todos os outros passam por `control_marks`.
+            if self.is_vortex and accepts_control(enemy):
                 enemy.vortex_slow_timer = self.VORTEX_SLOW_LINGER
 
             # Logica de Centro (Núcleo)

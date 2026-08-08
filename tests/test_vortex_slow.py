@@ -12,6 +12,8 @@ linger decai até zerar, e o dano por tick entra UMA vez só (o `_apply_vortex_d
 tinha um caminho que debitava a vida duas vezes quando o dano chegava a 1,0).
 """
 
+from game.entities._shared.control_marks import can_be_controlled
+from game.entities.bosses.mountain_serpent_boss import SerpentBlock
 from game.entities.enemies.space.black_hole import BlackHole
 from game.systems.entity_manager import EntityManager
 
@@ -68,6 +70,60 @@ def test_linger_decai_e_zera_sem_ficar_negativo():
     EntityManager._update_vortex_linger(enemy, 999.0)
     assert enemy.vortex_slow_timer == 0.0
     assert EntityManager._vortex_multiplier(enemy) == 1.0
+
+
+# ── Quem pode receber a marca ───────────────────────────────────────────────
+
+
+class _SlottedPiece:
+    """Peça coreografada de boss: `__slots__` SEM o campo da marca.
+
+    Reproduz o `SerpentBlock`. Escrever `vortex_slow_timer` aqui estoura
+    `AttributeError` — foi o crash em combate que motivou o guard.
+    """
+
+    __slots__ = ("x", "y", "w", "h", "dead")
+
+    def __init__(self):
+        self.x = self.y = 0.0
+        self.w = self.h = 10
+        self.dead = False
+
+
+def _active_vortex() -> BlackHole:
+    """Vórtice já crescido: `process_all_enemies` escala os raios por `scale`."""
+    bh = _vortex()
+    bh.state = "active"
+    bh.scale = 1.0
+    return bh
+
+
+def test_peca_com_slots_atravessa_o_campo_sem_estourar():
+    bh = _active_vortex()
+    piece = _SlottedPiece()  # no centro exato do vórtice
+
+    bh.process_all_enemies([piece], 0.016)  # não pode levantar AttributeError
+
+    assert not hasattr(piece, "vortex_slow_timer")
+
+
+def test_inimigo_comum_continua_sendo_marcado():
+    """O guard não pode desligar o efeito para quem sempre o recebeu."""
+    bh = _active_vortex()
+    enemy = _DamageableEnemy()
+
+    bh.process_all_enemies([enemy], 0.016)
+
+    assert enemy.vortex_slow_timer == BlackHole.VORTEX_SLOW_LINGER
+
+
+def test_serpent_block_e_imune_a_lentidao():
+    """A posição do bloco é derivada de `cx`/`cy` pela onda do boss: freá-lo
+    dessincroniza a corrente do relógio do chefe, e a escrita da marca nem
+    caberia nos `__slots__`. O opt-out formal é o `position_locked` (§5)."""
+    assert SerpentBlock.position_locked is True
+    # `__new__` sem `__init__`: os guards só leem class attributes e `__dict__`.
+    assert can_be_controlled(SerpentBlock.__new__(SerpentBlock)) is False
 
 
 # ── Dano ────────────────────────────────────────────────────────────────────

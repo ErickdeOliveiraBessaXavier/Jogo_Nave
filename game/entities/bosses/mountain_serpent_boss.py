@@ -189,6 +189,19 @@ class SerpentBlock:
         "_ascent_speed",
     )
 
+    # Peça coreografada: `x`/`y` são RECALCULADOS de `cx`/`cy` a cada update
+    # (`sync_rect_from_center`), e `cx`/`cy` vêm da onda do boss. Quem escrever
+    # na posição do bloco de fora tem a escrita descartada no frame seguinte —
+    # é o mesmo caso das estruturas ancoradas, então o opt-out formal do
+    # protocolo `Enemy` vale aqui (§5).
+    #
+    # Como `position_locked` também é o guard de `control_marks`, declará-lo dá
+    # ao bloco a imunidade correta a lentidão/freio (vórtice, gelo, Implosão,
+    # Cryo): frear uma peça de coreografia dessincroniza a corrente do relógio
+    # do boss. Antes disso o vórtice tentava marcar o bloco e estourava
+    # `AttributeError` no meio do combate — `__slots__` não aceita campo novo.
+    position_locked: bool = True
+
     # ------------------------------------------------------------------
     # Constantes de gameplay
     # ------------------------------------------------------------------
