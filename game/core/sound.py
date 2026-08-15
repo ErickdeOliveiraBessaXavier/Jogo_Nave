@@ -252,10 +252,10 @@ class SoundManager:
         self.last_shot_time = current_time
 
     @require_audio
-    def play_laser_shot(self):
-        """Toca som do laser do upgrade LASER_SHOT."""
-        if "laser_shot" in self._sounds:
-            self._sounds["laser_shot"].play()
+    def play_orbital_discharge(self):
+        """Toca o som do arco elétrico do upgrade ORBITAL_DISCHARGE."""
+        if "orbital_discharge" in self._sounds:
+            self._sounds["orbital_discharge"].play()
 
     @require_audio
     def play_explosion_asteroid(self):

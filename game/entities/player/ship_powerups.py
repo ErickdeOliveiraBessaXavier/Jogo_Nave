@@ -49,11 +49,11 @@ class ShipPowerups:
         ship.homing_fire_rate_penalty = fire_rate_penalty
         ship.speed = ship.original_speed * speed_penalty
 
-    def activate_orbital_lasers(self) -> None:
+    def activate_orbital_discharge(self) -> None:
         ship = self.ship
-        ship.orbital_lasers_active = True
+        ship.orbital_discharge_active = True
         ship.orbital_angle = 0.0
-        ship.orbital_laser_charges = [
+        ship.orbital_discharge_charges = [
             ship.orbital_charges_per_ball for _ in range(ship.num_orbital_balls)
         ]
         ship.orbital_ball_fade = [0.0 for _ in range(ship.num_orbital_balls)]
@@ -245,19 +245,19 @@ class ShipPowerups:
                 ship.electric_stun_recovery_timer = dur + ship.ELECTRIC_STUN_RECOVERY
                 break
 
-    def update_orbital_lasers(
+    def update_orbital_discharge(
         self, dt: float, entity_manager: Optional["EntityManager"]
     ) -> None:
         ship = self.ship
-        if not ship.orbital_lasers_active:
+        if not ship.orbital_discharge_active:
             return
 
         all_done = all(
             charges <= 0 and fade <= 0.0
-            for charges, fade in zip(ship.orbital_laser_charges, ship.orbital_ball_fade)
+            for charges, fade in zip(ship.orbital_discharge_charges, ship.orbital_ball_fade)
         )
         if all_done:
-            ship.orbital_lasers_active = False
+            ship.orbital_discharge_active = False
             return
 
         ship.orbital_angle += dt * ORBITAL_ROTATION_SPEED
@@ -269,7 +269,7 @@ class ShipPowerups:
             if ship.orbital_ball_shake[i] > 0.0:
                 ship.orbital_ball_shake[i] = max(0.0, ship.orbital_ball_shake[i] - dt)
 
-            if ship.orbital_laser_charges[i] <= 0 and ship.orbital_ball_fade[i] > 0.0:
+            if ship.orbital_discharge_charges[i] <= 0 and ship.orbital_ball_fade[i] > 0.0:
                 ship.orbital_ball_fade[i] = max(0.0, ship.orbital_ball_fade[i] - dt)
 
         if entity_manager is None:
@@ -279,14 +279,14 @@ class ShipPowerups:
         if ship.orbital_global_cooldown > 0.0:
             return
 
-        # Import local para evitar custo no módulo (sound_manager toca laser shot).
+        # Import local para evitar custo no módulo (sound_manager toca a descarga).
         from ...core.sound import sound_manager
 
         attempts = 0
         while attempts < ship.num_orbital_balls:
             i = ship.orbital_current_ball
 
-            if ship.orbital_laser_charges[i] > 0:
+            if ship.orbital_discharge_charges[i] > 0:
                 if ship.ship_image is not None:
                     sprite_w, sprite_h = ship.ship_image.get_size()
                 else:
@@ -305,7 +305,7 @@ class ShipPowerups:
                         and -50 < target[0] < Config.SCREEN_WIDTH + 50
                         and -50 < target[1] < Config.SCREEN_HEIGHT + 50
                     ):
-                        entity_manager.spawn_player_laser(
+                        entity_manager.spawn_orbital_discharge(
                             ball_x,
                             ball_y,
                             target[0],
@@ -314,11 +314,11 @@ class ShipPowerups:
                             ball_index=i,
                             target_entity=nearest_enemy,
                         )
-                        sound_manager.play_laser_shot()
-                        # Tremor de 0.8s (duração do laser).
+                        sound_manager.play_orbital_discharge()
+                        # Tremor de 0.8s (duração do arco).
                         ship.orbital_ball_shake[i] = 0.8
-                        ship.orbital_laser_charges[i] -= 1
-                        if ship.orbital_laser_charges[i] <= 0:
+                        ship.orbital_discharge_charges[i] -= 1
+                        if ship.orbital_discharge_charges[i] <= 0:
                             ship.orbital_ball_fade[i] = 1.5
 
                         ship.orbital_current_ball = (

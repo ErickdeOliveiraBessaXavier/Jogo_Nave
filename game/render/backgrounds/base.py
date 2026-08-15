@@ -72,10 +72,14 @@ class Background(ABC):
         return None
 
     def set_day_night_paused(self, _paused: bool) -> None:
-        """Optional hook to pause/resume day/night cycle.
+        """Hook opcional: congela/retoma o ciclo dia/noite. No-op por padrão.
 
-        Background implementations that don't implement a day/night cycle
-        can ignore this. Provides a stable API for callers that want to
-        request pausing regardless of the concrete background type.
+        Contrato de **estado derivado**, como `set_progress`/`set_allow_spawning`:
+        o `Renderer.background()` reaplica o valor a cada frame a partir da
+        condição que o justifica (o tempo do fundo estar em warp). Não é um
+        par ligar/desligar por evento — quem quiser pausar deve fazer a
+        condição valer, nunca chamar isto uma vez e confiar na borda de
+        desligamento. O `Background` sobrevive à cena que o usa, então uma
+        borda perdida congela o ciclo para o resto da sessão.
         """
         return None

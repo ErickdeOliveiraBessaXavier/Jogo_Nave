@@ -209,8 +209,8 @@ class ShipRenderer:
             self._draw_electric_debuff(surface)
 
         # Desenhar bolas elétricas orbitais
-        if ship.orbital_lasers_active:
-            self._draw_orbital_lasers(surface)
+        if ship.orbital_discharge_active:
+            self._draw_orbital_discharge(surface)
 
         # Desenhar partículas de entrada (acima da nave)
         for p in ship.entry_particles:
@@ -358,14 +358,14 @@ class ShipRenderer:
         rect.top = max(margin, rect.top)
         surface.blit(label, rect)
 
-    def _draw_orbital_lasers(self, surface: pygame.Surface) -> None:
+    def _draw_orbital_discharge(self, surface: pygame.Surface) -> None:
         ship = self.ship
         current_time = ship.draw_time
 
         sprite_w, sprite_h = ship.ship_image_size
 
         for i in range(ship.num_orbital_balls):
-            charges = ship.orbital_laser_charges[i]
+            charges = ship.orbital_discharge_charges[i]
             fade = ship.orbital_ball_fade[i]
             entry = ship.orbital_ball_entry[i]
             shake = ship.orbital_ball_shake[i]

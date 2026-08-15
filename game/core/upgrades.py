@@ -40,7 +40,7 @@ class UpgradeType(Enum):
     HEAL = auto()
     EMP = auto()
     HOMING_SHOT = auto()
-    LASER_SHOT = auto()
+    ORBITAL_DISCHARGE = auto()  # Orbes que descarregam arcos elétricos
     EXPLOSIVE_SHOT = auto()
     GIANT_SHOT = auto()  # Tiros 3x maiores por um tempo
     AIR_STRIKE = auto()  # Ultimate: Bombardeio Aéreo
@@ -158,7 +158,7 @@ class ActiveUpgrade:
         # `update`/`_effect_still_running`), de modo que a recarga venha DEPOIS
         # da duração, não em paralelo. Upgrade instantâneo (duração 0) expira no
         # tick seguinte e o cooldown parte aí; upgrade por munição (explosivo,
-        # laser) segue ativo até a última carga ser gasta, via override de
+        # descarga orbital) segue ativo até a última carga ser gasta, via override de
         # `_effect_still_running`. O `ShieldBurstUpgrade` já fazia isso à mão
         # (cooldown ao consumir o escudo); agora é a regra da classe base.
 
@@ -195,7 +195,7 @@ class ActiveUpgrade:
         """O efeito segue ativo enquanto restar DURAÇÃO (padrão temporal).
 
         Upgrades cujo efeito NÃO é medido em tempo — mas em munição/cargas
-        (tiro explosivo, laser orbital) ou num recurso monitorado — sobrescrevem
+        (tiro explosivo, descarga orbital) ou num recurso monitorado — sobrescrevem
         para consultar o estado real da nave. É isso que mantém a regra do
         `activate`: o cooldown só parte quando o efeito termina DE FATO, e não no
         tick seguinte à ativação só porque a duração nominal é 0.
@@ -634,18 +634,18 @@ class HomingShotUpgrade(ActiveUpgrade):
         )
 
 
-class LaserShotUpgrade(ActiveUpgrade):
+class OrbitalDischargeUpgrade(ActiveUpgrade):
     def on_activate_effect(self, ctx: UpgradeContextProtocol) -> None:
         ship = self._ctx_ship(ctx)
         if ship:
-            ship.activate_orbital_lasers(self.get_effective_duration(ctx))
+            ship.activate_orbital_discharge(self.get_effective_duration(ctx))
 
     def _effect_still_running(self, ctx: Optional[UpgradeContextProtocol]) -> bool:
         # Efeito medido em cargas dos orbes, não em tempo (base_duration 0): o
         # cooldown só parte quando a última descarga é consumida e a nave zera
-        # `orbital_lasers_active`.
+        # `orbital_discharge_active`.
         ship = self._ctx_ship(ctx)
-        return bool(getattr(ship, "orbital_lasers_active", False))
+        return bool(getattr(ship, "orbital_discharge_active", False))
 
 
 class ExplosiveShotUpgrade(ActiveUpgrade):
@@ -777,7 +777,7 @@ def upgrade_factory(upgrade_type: UpgradeType) -> ActiveUpgrade:
         UpgradeType.HEAL: HealUpgrade,
         UpgradeType.EMP: EMPUpgrade,
         UpgradeType.HOMING_SHOT: HomingShotUpgrade,
-        UpgradeType.LASER_SHOT: LaserShotUpgrade,
+        UpgradeType.ORBITAL_DISCHARGE: OrbitalDischargeUpgrade,
         UpgradeType.EXPLOSIVE_SHOT: ExplosiveShotUpgrade,
         UpgradeType.GIANT_SHOT: GiantShotUpgrade,
         UpgradeType.BLINK_DASH: BlinkDashUpgrade,
@@ -857,11 +857,11 @@ UPGRADES_META: Dict[UpgradeType, UpgradeMeta] = {
         2,
         UpgradeRole.DAMAGE,
     ),
-    UpgradeType.LASER_SHOT: UpgradeMeta(
-        UpgradeType.LASER_SHOT,
-        "LASER",
-        "Orbes laser disparam em sequência.",
-        "laser_shot",
+    UpgradeType.ORBITAL_DISCHARGE: UpgradeMeta(
+        UpgradeType.ORBITAL_DISCHARGE,
+        "DESC",
+        "Orbes descarregam raios em sequência.",
+        "orbital_discharge",
         UpgradeCategory.OFFENSIVE,
         80,
         0,
@@ -1125,7 +1125,7 @@ def get_upgrade_icon(upgrade_name: str, icon_id: str | None = None) -> str:
         "heal": "H",
         "emp": "E",
         "homing_shot": "T",
-        "laser_shot": "X",
+        "orbital_discharge": "X",
         "explosive_shot": "V",
         "giant_shot": "M",  # Maior — "3" era sobra do "3x maiores" e lia como número
         "air_strike": "A",

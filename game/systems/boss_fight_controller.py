@@ -45,9 +45,14 @@ class BossFightController:
 
     Comunicação com PlayingScene:
     - `screen_shake_request(duration, intensity)` → seta shake na cena
-    - `background_getter()` → retorna background atual do renderer
     - `start()` / `end()` → chamados pela cena no momento certo
     - `update_warning()` → retorna True quando boss deve ser spawnado
+
+    O controlador NÃO toca no background. A iluminação congelada durante o
+    boss fight é consequência do warp do parallax e é derivada por frame no
+    `Renderer.background()` — pausar daqui exigia uma borda de desligamento
+    que se perdia quando o jogador morria no meio da luta (o `Background`
+    sobrevive à cena).
     """
 
     def __init__(
@@ -55,12 +60,10 @@ class BossFightController:
         entity_manager: EntityManager,
         event_bus: EventBus,
         screen_shake_request: Callable[[float, int], None],
-        background_getter: Callable[[], Any | None],
     ) -> None:
         self._em = entity_manager
         self._bus = event_bus
         self._shake = screen_shake_request
-        self._get_bg = background_getter
 
         # Boss fight
         self.active: bool = False
@@ -131,7 +134,6 @@ class BossFightController:
 
         self._spawn_boss(level_config, enemy_health_multiplier)
         self._cache_boss_type()
-        self._set_day_night_paused(True)
         self._emit_boss_music()
 
     def end(
@@ -209,7 +211,6 @@ class BossFightController:
         self.boss_type = None
         self.music_fade_started = False
         self.boss_music_started = False
-        self._set_day_night_paused(False)
         self._bus.emit(events.MusicStateChange(state=MusicState.GAME, fade_ms=0))
 
         boss_score = Config.BOSS_DEFEAT_SCORE
@@ -386,11 +387,6 @@ class BossFightController:
             events.MusicStateChange(state=MusicState.BOSS, key=key, fade_ms=0)
         )
         self.boss_music_started = True
-
-    def _set_day_night_paused(self, paused: bool) -> None:
-        bg = self._get_bg()
-        if bg is not None:
-            bg.set_day_night_paused(paused)
 
     def _explode_entities(self, entities: list[Any]) -> None:
         for entity in entities:

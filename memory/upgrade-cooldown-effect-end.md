@@ -17,13 +17,14 @@ cooldown parte no tick em que esse hook vira False.
 **munição/cargas**, não em tempo, têm `base_duration=0`. Sem override, o hook
 default vê `duration_left==0` já no 1º tick e **dispara o cooldown na ativação**,
 enquanto o jogador ainda gasta as balas. Foi o bug reportado no **tiro explosivo**
-(`EXPLOSIVE_SHOT`) e no **laser orbital** (`LASER_SHOT`).
+(`EXPLOSIVE_SHOT`) e na **Descarga Orbital** (`ORBITAL_DISCHARGE`, ex-`LASER_SHOT`).
 
 Correção: cada um sobrescreve `_effect_still_running` para consultar o estado
 REAL da nave:
 - `ExplosiveShotUpgrade` → `ship.explosive_shots_active` (cai em
   `consume_explosive_shot` ao gastar a 15ª bala).
-- `LaserShotUpgrade` → `ship.orbital_lasers_active` (cai ao descarregar os orbes).
+- `OrbitalDischargeUpgrade` → `ship.orbital_discharge_active` (cai ao descarregar
+  os orbes).
 
 É o mesmo princípio que o `ShieldBurstUpgrade` já aplicava à mão (cooldown ao
 consumir o escudo, monitorando `ship.has_shield`).
@@ -34,4 +35,4 @@ Se for genuinamente instantâneo (Heal) ou fire-and-forget (Air Strike, Cannon
 Tower), o default está certo — cooldown parte no tick seguinte.
 
 Testes: `tests/test_upgrade_cooldown.py` (casos temporal, instantâneo, explosivo
-por munição, laser por cargas).
+por munição, descarga orbital por cargas).

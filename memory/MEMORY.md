@@ -10,11 +10,12 @@ Versionado junto com o repositório.
 - [scene-decomposition-pattern](scene-decomposition-pattern.md) — extrair fluxos da PlayingScene em sistemas próprios (RevivalSystem/UpgradeSelector); regra do grep-completo ao migrar estado (input handler lê estado cru e quebra com testes verdes).
 - [playing-scene-extraction-roadmap](playing-scene-extraction-roadmap.md) — revisão jul/2026: testes de pipeline feitos, cutscene extraída; etapas B/atmosfera, C/P2, D/colisões (última) pendentes + achados da revisão.
 - [fire-timer-cadence-architecture](fire-timer-cadence-architecture.md) — cadência de disparo por FireTimer/carry_interval; `timer = INTERVALO` é proibido (descarta a sobra do frame); UM relógio por cadência (dois gates batem); compensação sub-frame por velocidade RELATIVA. Lista o que NÃO migrar.
+- [derived-state-vs-event-edge](derived-state-vs-event-edge.md) — estado de objeto que sobrevive à cena (Background no Renderer) é derivado por frame, nunca par ligar/desligar; a borda perdida congelou o ciclo dia/noite depois de morrer no boss fight.
 - [targeting-via-target-point](targeting-via-target-point.md) — mira/seleção de inimigo usa target_point + is_targetable (systems/targeting.py), nunca x+w/2; x+w/2 quebra no boss Serpente (bug recorrente).
 - [enemy-health-multiplier-propagation](enemy-health-multiplier-propagation.md) — entidades emergentes recebem health_multiplier via construtor, como aggressiveness_multiplier; multiplicador que não chega na entidade é no-op.
 - [music-transitions-main-thread](music-transitions-main-thread.md) — crossfade de música roda na thread principal; pygame não é thread-safe (worker thread = access violation).
 - [visual-quality-system](visual-quality-system.md) — singleton visual_quality escala efeitos cosméticos por nível Alto/Médio/Baixo; estender efeito = one-liner vq.particles()/gates.
-- [upgrade-cooldown-effect-end](upgrade-cooldown-effect-end.md) — cooldown de upgrade só parte quando o efeito termina; efeito por munição/cargas (base_duration=0) precisa sobrescrever `_effect_still_running` (explosivo/laser), senão o cooldown parte na ativação.
+- [upgrade-cooldown-effect-end](upgrade-cooldown-effect-end.md) — cooldown de upgrade só parte quando o efeito termina; efeito por munição/cargas (base_duration=0) precisa sobrescrever `_effect_still_running` (explosivo/descarga orbital), senão o cooldown parte na ativação.
 - [cryo-bomb-cycle](cryo-bomb-cycle.md) — Cryo Shot fecha em bomba de gelo (cargas → cristalizar → estouro → fragmentos); boss cristaliza e detona mas nunca é freado, e os cacos são `Bullet` com `ice_shard`.
 
 ## Balanceamento e progressão

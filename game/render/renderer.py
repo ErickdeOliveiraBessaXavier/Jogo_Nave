@@ -204,10 +204,27 @@ class Renderer:
     ):
         # Fluxo único: todo tema é um Background. Os hooks abaixo são no-op na
         # base e só fazem efeito onde importam (spawn de celestiais no starfield,
-        # progresso na atmosfera) — sem if/else nem isinstance (§5).
+        # progresso na atmosfera, ciclo dia/noite nas cordilheiras) — sem
+        # if/else nem isinstance (§5).
+        #
+        # O ciclo dia/noite mede tempo de RELÓGIO, não distância percorrida: uma
+        # transição dura ~10 min e a rotação do sol precisa acompanhar a sessão,
+        # não o parallax. Sempre que o fundo entra em warp (boss fight, cutscene
+        # de entrada/saída de mundo) o mesmo `speed_multiplier` que acelera as
+        # camadas atropelaria o ciclo — um anoitecer inteiro em segundos. Por
+        # isso o relógio do ciclo PARA enquanto o tempo está deformado, em vez
+        # de correr junto.
+        #
+        # A pausa é derivada aqui, por frame, e não ligada/desligada por evento:
+        # o `Background` sobrevive à `PlayingScene` (mora no renderer, e
+        # `set_world_theme` não recria o tema igual), então um par
+        # ligar/desligar que perdesse a borda de desligamento — morrer no meio
+        # de um boss fight e recomeçar a fase — deixava o ciclo congelado para
+        # sempre. Estado derivado não tem borda para perder.
         bg = self.current_background
         bg.set_allow_spawning(draw_celestials)
         bg.set_progress(atmosphere_progress)
+        bg.set_day_night_paused(speed_multiplier != 1.0)
         bg.update(dt, speed_multiplier)
 
         scratch = self._bg_lowres_scratch

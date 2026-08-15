@@ -101,3 +101,82 @@ def test_crash_no_meio_da_escrita_preserva_perfil_antigo(profile_path, monkeypat
     q = _profile(profile_path)
     q.load()
     assert getattr(q, PROBE) == 777
+
+
+# ── Renomeação de upgrade: o perfil antigo não pode perder o desbloqueio ─────
+# O perfil serializa `UpgradeType.name`. Renomear um membro do enum faz o
+# `UpgradeType[nome]` da carga levantar KeyError, e o caminho de erro **descarta
+# o item em silêncio** — o slot do loadout volta vazio e o upgrade some da lista
+# de desbloqueados, sem nada explicando ao jogador. O alias de leitura
+# (`_UPGRADE_NAME_ALIASES`) é o que impede isso; estes testes são o que impede o
+# alias de sair junto numa "limpeza de código legado".
+
+
+def _perfil_antigo(path, nome_gravado):
+    """Perfil válido, como uma versão anterior do jogo o gravaria."""
+    path.write_text(
+        json.dumps(
+            {
+                "level_stats": {},
+                "unlocked_upgrades": [nome_gravado],
+                "upgrade_loadout": [nome_gravado, None, None],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_alias_traduz_nome_antigo_para_o_novo():
+    from game.core.meta_progression import _upgrade_type_from_saved
+    from game.core.upgrades import UpgradeType
+
+    assert _upgrade_type_from_saved("LASER_SHOT") is UpgradeType.ORBITAL_DISCHARGE
+    # Nome atual continua funcionando pelo caminho normal.
+    assert (
+        _upgrade_type_from_saved("ORBITAL_DISCHARGE") is UpgradeType.ORBITAL_DISCHARGE
+    )
+
+
+def test_alias_nao_aceita_nome_inexistente():
+    """O alias não pode virar um "aceita qualquer coisa"."""
+    from game.core.meta_progression import _upgrade_type_from_saved
+
+    with pytest.raises(KeyError):
+        _upgrade_type_from_saved("UPGRADE_QUE_NUNCA_EXISTIU")
+
+
+def test_upgrade_renomeado_mantem_slot_do_loadout(profile_path):
+    from game.core.upgrades import UpgradeType
+
+    _perfil_antigo(profile_path, "LASER_SHOT")
+    p = _profile(profile_path)
+    p.load()
+    assert p.upgrade_loadout[0] is UpgradeType.ORBITAL_DISCHARGE
+
+
+def test_upgrade_renomeado_mantem_desbloqueio(profile_path):
+    from game.core.upgrades import UpgradeType
+
+    _perfil_antigo(profile_path, "LASER_SHOT")
+    p = _profile(profile_path)
+    p.load()
+    assert UpgradeType.ORBITAL_DISCHARGE in p.unlocked_upgrades
+
+
+def test_save_regrava_com_o_nome_novo(profile_path):
+    """O perfil se converte sozinho: o alias só vale na leitura."""
+    _perfil_antigo(profile_path, "LASER_SHOT")
+    p = _profile(profile_path)
+    p.load()
+    p.save()
+    gravado = json.loads(profile_path.read_text(encoding="utf-8"))
+    assert "ORBITAL_DISCHARGE" in gravado["unlocked_upgrades"]
+    assert "LASER_SHOT" not in gravado["unlocked_upgrades"]
+    assert gravado["upgrade_loadout"][0] == "ORBITAL_DISCHARGE"
+
+
+def test_nome_realmente_inexistente_esvazia_o_slot(profile_path):
+    _perfil_antigo(profile_path, "UPGRADE_QUE_NUNCA_EXISTIU")
+    p = _profile(profile_path)
+    p.load()  # não deve levantar
+    assert p.upgrade_loadout[0] is None

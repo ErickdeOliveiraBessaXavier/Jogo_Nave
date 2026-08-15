@@ -29,6 +29,22 @@ from .upgrades_config import (
 logger = logging.getLogger(__name__)
 
 
+# Upgrades renomeados: nome antigo gravado no perfil → nome atual do enum.
+# O perfil serializa `UpgradeType.name`, então renomear um membro faria o
+# `UpgradeType[nome]` da carga levantar KeyError e o jogador PERDER o
+# desbloqueio (e o slot do loadout) em silêncio — o pior tipo de falha de
+# persistência (§15). O alias vale só na LEITURA; a gravação sempre usa o nome
+# novo, então o perfil se converte sozinho no primeiro save.
+_UPGRADE_NAME_ALIASES: Dict[str, str] = {
+    "LASER_SHOT": "ORBITAL_DISCHARGE",
+}
+
+
+def _upgrade_type_from_saved(name: str) -> UpgradeType:
+    """`UpgradeType` a partir do nome gravado, honrando renomeações."""
+    return UpgradeType[_UPGRADE_NAME_ALIASES.get(name, name)]
+
+
 class PerformanceState(Enum):
     """Estados de performance do jogador."""
 
@@ -1430,7 +1446,7 @@ class PlayerProfile:
                 up_parsed: set[UpgradeType] = set()
                 for name in cast(List[Any], unlocked_raw):
                     try:
-                        up_parsed.add(UpgradeType[name])
+                        up_parsed.add(_upgrade_type_from_saved(name))
                     except KeyError:
                         logger.warning("Skipping unknown upgrade: %s", name)
                 parsed["unlocked_upgrades"] = (
@@ -1449,7 +1465,7 @@ class PlayerProfile:
                         slots.append(None)
                         continue
                     try:
-                        slots.append(UpgradeType[item])
+                        slots.append(_upgrade_type_from_saved(item))
                     except KeyError:
                         slots.append(None)
                         logger.warning("Skipping unknown upgrade: %s", item)

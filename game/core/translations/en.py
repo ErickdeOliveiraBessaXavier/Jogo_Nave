@@ -304,7 +304,7 @@ EN: dict[str, str] = {
     "upgrade.heal.desc": "Restores 1 life.",
     "upgrade.emp.desc": "Wave that slows enemies.",
     "upgrade.homing_shot.desc": "Homing shots with reduced fire rate.",
-    "upgrade.laser_shot.desc": "Laser orbs fire in sequence.",
+    "upgrade.orbital_discharge.desc": "Orbs discharge arcs in sequence.",
     "upgrade.explosive_shot.desc": "Next shots explode in an area.",
     "upgrade.giant_shot.desc": "Shots 3x larger for a while.",
     "upgrade.blink_dash.desc": "Short invulnerable dash.",

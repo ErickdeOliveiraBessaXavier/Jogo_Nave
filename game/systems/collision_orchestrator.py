@@ -296,8 +296,8 @@ class CollisionOrchestrator:
         score_events.extend(acid_events)
 
         laser_gain, laser_destroyed, laser_events = (
-            self.collisions.player_lasers_vs_enemies(
-                self.entity_manager.player_lasers,
+            self.collisions.orbital_discharges_vs_enemies(
+                self.entity_manager.orbital_discharges,
                 enemies_view,
                 self.entity_manager.floating_scores,
                 self.entity_manager,
@@ -314,7 +314,7 @@ class CollisionOrchestrator:
             self.collisions.player_shots_vs_orbital_orbs(
                 self.entity_manager.orbital_orbs,
                 all_player_projectiles,
-                self.entity_manager.player_lasers,
+                self.entity_manager.orbital_discharges,
                 self.entity_manager,
             )
 
@@ -604,8 +604,8 @@ class CollisionOrchestrator:
             self.entity_manager.floating_scores,
             self.entity_manager,
         )
-        score_gain += self.collisions.player_lasers_vs_boss(
-            self.entity_manager.player_lasers,
+        score_gain += self.collisions.orbital_discharges_vs_boss(
+            self.entity_manager.orbital_discharges,
             boss,  # type: ignore[arg-type]
             self.entity_manager.floating_scores,
             self.entity_manager,

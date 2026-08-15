@@ -8,7 +8,7 @@ from game.core.upgrades import (
     UPGRADES_META,
     ActiveUpgrade,
     ExplosiveShotUpgrade,
-    LaserShotUpgrade,
+    OrbitalDischargeUpgrade,
     UpgradeCategory,
     UpgradeMeta,
     UpgradeType,
@@ -115,10 +115,10 @@ class _FakeExplosiveShip:
 
 class _FakeLaserShip:
     def __init__(self) -> None:
-        self.orbital_lasers_active = False
+        self.orbital_discharge_active = False
 
-    def activate_orbital_lasers(self, _duration: float) -> None:
-        self.orbital_lasers_active = True
+    def activate_orbital_discharge(self, _duration: float) -> None:
+        self.orbital_discharge_active = True
 
 
 def test_explosive_shot_cooldown_so_parte_quando_municao_acaba():
@@ -152,8 +152,8 @@ def test_explosive_shot_cooldown_so_parte_quando_municao_acaba():
     assert upg.cooldown_left > 0.0
 
 
-def test_laser_shot_cooldown_espera_cargas_dos_orbes():
-    upg = LaserShotUpgrade(UPGRADES_META[UpgradeType.LASER_SHOT])
+def test_orbital_discharge_cooldown_espera_cargas_dos_orbes():
+    upg = OrbitalDischargeUpgrade(UPGRADES_META[UpgradeType.ORBITAL_DISCHARGE])
     ship = _FakeLaserShip()
     ctx = _Ctx()
     ctx.ship = ship
@@ -169,7 +169,7 @@ def test_laser_shot_cooldown_espera_cargas_dos_orbes():
     assert upg.cooldown_left == 0.0
 
     # Orbes descarregam → efeito termina → cooldown parte.
-    ship.orbital_lasers_active = False
+    ship.orbital_discharge_active = False
     upg.update(0.016, ctx)
     assert not upg.active
     assert upg.cooldown_left == upg.get_effective_cooldown(ctx)

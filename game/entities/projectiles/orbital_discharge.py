@@ -14,6 +14,7 @@ from typing import (
 import pygame
 
 from ...core import colors, upgrades_config
+from ...systems.targeting import enemy_center
 from ..effects.particle_types import DeathParticle
 
 if TYPE_CHECKING:
@@ -39,11 +40,17 @@ PARTICLE_SIZE_DECAY: Final[float] = 5.0
 MIN_POSITION_CHANGE: Final[float] = 1.0
 
 
-class PlayerLaser:
-    """Laser disparado pelo jogador que atravessa múltiplos inimigos."""
+class OrbitalDischarge:
+    """Arco elétrico descarregado por um orbe do upgrade ORBITAL_DISCHARGE.
+
+    Liga o orbe ao inimigo mirado com um raio em zigue-zague que atravessa
+    todos os alvos na linha (cada um levando dano uma única vez, via
+    `hit_enemies`). Rastreia o alvo enquanto ele for alvejável e é re-mirado
+    pelo `EntityManager` quando deixa de ser.
+    """
 
     # Gameplay
-    DAMAGE: Final[int] = upgrades_config.LASER_SHOT_DAMAGE
+    DAMAGE: Final[int] = upgrades_config.ORBITAL_DISCHARGE_DAMAGE
     MAX_WIDTH: Final[int] = 10
     LIFETIME: Final[float] = 0.8
 
@@ -107,7 +114,7 @@ class PlayerLaser:
         self._generate_lightning_points()
 
     def _update_origin_position(self) -> None:
-        """Atualiza a posição de origem do laser para seguir a bolinha orbital."""
+        """Atualiza a origem da descarga para seguir o orbe que a disparou."""
         if self.ship is not None and self.ball_index >= 0:
             # Cache de valores para evitar recálculos
             angle = self.ship.orbital_angle + (
@@ -122,44 +129,50 @@ class PlayerLaser:
             self.x = self.ship.x + half_w + cos_angle * self.ship.orbital_radius
             self.y = self.ship.y + half_h + sin_angle * self.ship.orbital_radius
 
-    def _update_target_position(self) -> None:
-        """Atualiza a posição do alvo se houver uma entidade alvo para rastreamento dinâmico."""
-        if self.target_entity is None:
+    def retarget(self, entity: Optional[Any]) -> None:
+        """Passa a rastrear `entity` (ou nenhum alvo, se `None`/inválido).
+
+        Chamado pelo `EntityManager` quando o alvo atual deixa de ser alvejável.
+        Sem alvo novo válido o feixe cai no comportamento padrão: mantém o
+        último ponto e termina o tempo de vida ali, em vez de saltar para um
+        inimigo fora de alcance.
+        """
+        center = enemy_center(entity) if entity is not None else None
+        if center is None:
+            self.target_entity = None
             return
 
-        try:
-            # Verificar se o alvo está morto - parar de rastrear
-            if hasattr(self.target_entity, "dead") and self.target_entity.dead:
-                self.target_entity = None
-                return
+        self.target_entity = entity
+        self.target_x, self.target_y = center
+        self._generate_lightning_points()
+        self.lightning_regen_timer = 0.0
 
-            old_target_x, old_target_y = self.target_x, self.target_y
+    def _update_target_position(self) -> None:
+        """Atualiza a posição do alvo se houver uma entidade alvo para rastreamento dinâmico."""
+        entity = self.target_entity
+        if entity is None:
+            return
 
-            # Otimização: usar hasattr uma única vez
-            entity = self.target_entity
-            if hasattr(entity, "rect"):
-                rect = entity.rect
-                self.target_x = float(rect.centerx)
-                self.target_y = float(rect.centery)
-            elif hasattr(entity, "w") and hasattr(entity, "h"):
-                self.target_x = entity.x + entity.w * 0.5
-                self.target_y = entity.y + entity.h * 0.5
-            elif hasattr(entity, "radius"):
-                self.target_x = entity.x
-                self.target_y = entity.y
-            else:
-                self.target_entity = None
-                return
-
-            # Otimização: usar diferença ao quadrado para evitar abs()
-            dx_sq = (self.target_x - old_target_x) ** 2
-            dy_sq = (self.target_y - old_target_y) ** 2
-
-            if dx_sq > MIN_POSITION_CHANGE or dy_sq > MIN_POSITION_CHANGE:
-                self._generate_lightning_points()
-                self.lightning_regen_timer = 0.0
-        except (AttributeError, TypeError):
+        # `enemy_center` combina `is_targetable` + `target_point` — a MESMA
+        # regra que escolheu o alvo. Devolve None quando o inimigo morreu, está
+        # invulnerável ou já explodiu mas ainda não foi removido (a janela de
+        # outro do RockGlider), e aí o feixe larga o alvo em vez de seguir um
+        # cadáver. Checar só `dead` era o que deixava a mira presa.
+        center = enemy_center(entity)
+        if center is None:
             self.target_entity = None
+            return
+
+        old_target_x, old_target_y = self.target_x, self.target_y
+        self.target_x, self.target_y = center
+
+        # Otimização: usar diferença ao quadrado para evitar abs()
+        dx_sq = (self.target_x - old_target_x) ** 2
+        dy_sq = (self.target_y - old_target_y) ** 2
+
+        if dx_sq > MIN_POSITION_CHANGE or dy_sq > MIN_POSITION_CHANGE:
+            self._generate_lightning_points()
+            self.lightning_regen_timer = 0.0
 
     def _generate_lightning_points(self) -> None:
         """Gera pontos para criar efeito de raio zigzag."""
@@ -200,7 +213,7 @@ class PlayerLaser:
         self.lightning_points = points
 
     def get_collision_line(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        """Retorna a linha do laser para cálculo de colisão."""
+        """Retorna a linha do arco para cálculo de colisão."""
         return (self.x, self.y), (self.target_x, self.target_y)
 
     def update(self, dt: float) -> None:
@@ -240,7 +253,7 @@ class PlayerLaser:
                 self.dead = True
 
     def _update_width(self) -> None:
-        """Atualiza a largura do laser com suavização."""
+        """Atualiza a largura do arco com suavização."""
         if self.timer < self.expand_time:
             progress = self.timer / self.expand_time
             # Expandir de 30% até 100% da largura máxima
@@ -257,7 +270,7 @@ class PlayerLaser:
         self.w = max(0, self.w)
 
     def _start_death_animation(self) -> None:
-        """Inicia a animação de morte do laser."""
+        """Inicia a animação de dissipação do arco."""
         self.state = "dying"
         self.w = 0
 

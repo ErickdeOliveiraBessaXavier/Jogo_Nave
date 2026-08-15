@@ -273,12 +273,12 @@ class Ship:
         # `original_speed` reflete a velocidade base após profile (sem penalidades).
         self.original_speed: float = self.speed
 
-        # Orbital lasers system (from upgrades)
-        self.orbital_lasers_active: bool = False
+        # Descarga Orbital: orbes que disparam arcos (upgrade ORBITAL_DISCHARGE)
+        self.orbital_discharge_active: bool = False
         self.orbital_angle: float = 0.0  # Ângulo de rotação das bolas
         self.orbital_current_ball: int = 0  # Índice da bola que vai disparar próxima
         self.orbital_global_cooldown: float = 0.0  # Cooldown global entre disparos
-        self.orbital_laser_charges: list[int] = [
+        self.orbital_discharge_charges: list[int] = [
             0,
             0,
             0,
@@ -598,8 +598,8 @@ class Ship:
     ) -> None:
         self._powerups.activate_homing_shots(duration, speed_penalty, fire_rate_penalty)
 
-    def activate_orbital_lasers(self, _duration: float) -> None:
-        self._powerups.activate_orbital_lasers()
+    def activate_orbital_discharge(self, _duration: float) -> None:
+        self._powerups.activate_orbital_discharge()
 
     def activate_explosive_shots(self, charges: int) -> None:
         self._powerups.activate_explosive_shots(charges)
@@ -905,7 +905,7 @@ class Ship:
                 self.profile.charge_shot_max_time,
                 self.charge_shot_timer + dt,
             )
-        self._powerups.update_orbital_lasers(dt, entity_manager)
+        self._powerups.update_orbital_discharge(dt, entity_manager)
         self._update_particles(dt, is_side_scroll)
 
     def move(

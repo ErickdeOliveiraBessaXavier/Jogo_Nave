@@ -4,13 +4,14 @@ Solte aqui um PNG por upgrade, nomeado com o **`icon_id`** dele (o mesmo campo
 de `UPGRADES_META`, em `game/core/upgrades.py`):
 
 ```
-shield_burst.png    heal.png       emp.png          homing_shot.png
-laser_shot.png      explosive_shot.png             giant_shot.png
-air_strike.png      black_hole.png cannon_tower.png blink_dash.png
-gravity_bomb.png    chain_lightning.png            orbital_shield.png
-plasma_beam.png     wingman.png    berserk.png      link.png
-implosion_shot.png  critical_core.png              cryo_shot.png
-shockwave.png       corrosive_ammo.png
+shield_burst.png       heal.png            emp.png
+homing_shot.png        orbital_discharge.png
+explosive_shot.png     giant_shot.png      air_strike.png
+black_hole.png         cannon_tower.png    blink_dash.png
+gravity_bomb.png       chain_lightning.png orbital_shield.png
+plasma_beam.png        wingman.png         berserk.png
+link.png               implosion_shot.png  critical_core.png
+cryo_shot.png          shockwave.png       corrosive_ammo.png
 ```
 
 O arquivo é descoberto sozinho — **não há mapa para registrar em lugar nenhum**

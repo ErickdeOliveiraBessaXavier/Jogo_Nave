@@ -85,7 +85,7 @@ from ..entities.bosses.mountain_serpent_boss import (
     SerpentBlock,
     SerpentRockBullet,
 )
-from ..entities.projectiles.player_laser import PlayerLaser
+from ..entities.projectiles.orbital_discharge import OrbitalDischarge
 from ..entities.pickups.powerup import PowerUp
 from ..entities.enemies.mountain.rock_glider_pool import RockGliderPool
 from ..entities.bosses.slime_boss import SlimeBoss
@@ -113,7 +113,17 @@ from .collision_protocols import Removable
 from .entity_context import EnemyUpdateContext
 from .fusion_governor import FusionGovernor
 from .hit_result import MeteorSpec
-from .targeting import enemy_center, is_on_screen, is_targetable
+from .targeting import (
+    enemy_center,
+    find_nearest_enemy,
+    is_on_screen,
+    is_targetable,
+)
+
+# Salto máximo de uma descarga orbital ao re-mirar quando o alvo morre no
+# meio do arco. Fração da largura de projeto (§12) para o salto ler como o
+# MESMO disparo em qualquer resolução: mais longe que isso parece outro tiro.
+_DISCHARGE_RETARGET_RANGE_FRACTION: float = 0.33
 
 if TYPE_CHECKING:
     from ..entities.player.ship import Ship
@@ -141,7 +151,7 @@ class EntityManager:
         self.alien_bullets: list[AlienBullet] = []
         self.serpent_bullets: list[SerpentRockBullet] = []
         self.boss_lasers: list[Union[BossLaser, SpikeBossLaser]] = []
-        self.player_lasers: list[PlayerLaser] = []
+        self.orbital_discharges: list[OrbitalDischarge] = []
         self.cacador_lasers: list[BossLaser] = []
         self.boss_squares: list[BossSquare] = []
         self.slime_drips: list[SlimeDrip] = []
@@ -722,7 +732,7 @@ class EntityManager:
             + len(self.energy_orbs)
             + len(self.orbital_orbs)
             + len(self.neon_bolts)
-            + len(self.player_lasers)
+            + len(self.orbital_discharges)
             + len(self.mini_ship_bullets)
             + len(self.eye_lasers)
             + len(self.boss_lasers)
@@ -809,7 +819,7 @@ class EntityManager:
         _add(self.energy_orbs)
         _add(self.orbital_orbs)
         _add(self.neon_bolts)
-        _add(self.player_lasers)
+        _add(self.orbital_discharges)
         _add(self.mini_ship_bullets)
         _add(self.eye_lasers)
         _add(self.boss_lasers)
@@ -1041,18 +1051,18 @@ class EntityManager:
         self.cannon_mines.append(mine)
         tower.register_mine(mine)
 
-    def spawn_player_laser(
+    def spawn_orbital_discharge(
         self,
         x: float,
         y: float,
         tx: float,
         ty: float,
-        damage: int = PlayerLaser.DAMAGE,
+        damage: int = OrbitalDischarge.DAMAGE,
         ship: Optional["Ship"] = None,
         ball_index: int = -1,
         target_entity: Any | None = None,
-    ) -> PlayerLaser:
-        laser = PlayerLaser(
+    ) -> OrbitalDischarge:
+        discharge = OrbitalDischarge(
             x,
             y,
             tx,
@@ -1062,8 +1072,8 @@ class EntityManager:
             ball_index=ball_index,
             target_entity=target_entity,
         )
-        self.player_lasers.append(laser)
-        return laser
+        self.orbital_discharges.append(discharge)
+        return discharge
 
     def spawn_cacador_laser(
         self,
@@ -1495,7 +1505,8 @@ class EntityManager:
                         p.vy = vy * k
 
     def _update_player_projectiles(self, dt: float) -> None:
-        """Projéteis do jogador: bullets (com homing), homing dedicado, mini-ships, lasers."""
+        """Projéteis do jogador: bullets (com homing), homing dedicado, mini-ships,
+        descargas orbitais."""
         # Antes de mover, redistribui os alvos dos teleguiados (evita que todos
         # convirjam no mesmo inimigo) e zera o alvo quando não há hostil em tela
         # (a bala fica pairando até o próximo entrar — ver Bullet._update_homing).
@@ -1524,9 +1535,14 @@ class EntityManager:
         for b in self.mini_ship_bullets:
             b.update(dt)
 
-        for b in self.player_lasers:
-            if b.target_entity and getattr(b.target_entity, "dead", False):
-                b.target_entity = None
+        for b in self.orbital_discharges:
+            # Alvo que deixou de ser alvejável (morreu, ficou invulnerável ou
+            # entrou na janela de outro): o feixe procura outro alvo válido por
+            # perto antes de desistir. `is_targetable` em vez de só `dead` —
+            # senão a mira fica presa no cadáver que ainda não foi removido.
+            if b.target_entity is not None and not is_targetable(b.target_entity):
+                reach = Config.SCREEN_WIDTH * _DISCHARGE_RETARGET_RANGE_FRACTION
+                b.retarget(find_nearest_enemy(b.x, b.y, self, reach * reach))
             b.update(dt)
         for b in self.cacador_lasers:
             b.update(dt)
@@ -2037,7 +2053,7 @@ class EntityManager:
             self.alien_bullets,
             self.energy_orbs,
             self.orbital_orbs,
-            self.player_lasers,
+            self.orbital_discharges,
             self.mini_ship_bullets,
             self.eye_lasers,
             self.neon_bolts,
@@ -2379,7 +2395,7 @@ class EntityManager:
         self._filter_dead_inplace(self.orbital_orbs)
         self._filter_dead_inplace(self.electric_fields)
         self._filter_dead_inplace(self.boss_lasers)
-        self._filter_dead_inplace(self.player_lasers)
+        self._filter_dead_inplace(self.orbital_discharges)
         self._filter_dead_inplace(self.cacador_lasers)
         self._filter_dead_inplace(self.homing_bullets)
         self._filter_dead_inplace(self.boss_squares)

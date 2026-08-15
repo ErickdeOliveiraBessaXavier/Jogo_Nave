@@ -34,7 +34,7 @@ class SoundType(Enum):
 
     # Tiros
     SHOT = "shot"
-    LASER_SHOT = "laser_shot"  # Som do laser do upgrade LASER_SHOT
+    ORBITAL_DISCHARGE = "orbital_discharge"  # Arco elétrico dos orbes
 
     # Boss Laser
     BOSS_LASER_CHARGING = "boss_laser_charging"
@@ -149,7 +149,7 @@ SFX_REQUIRED: FrozenSet[str] = frozenset({
     # Power-ups / aprimoramentos
     "powerup", "upgrade_activate",
     # Armas
-    "laser_shot", "boss_laser_charging", "boss_laser_fire",
+    "orbital_discharge", "boss_laser_charging", "boss_laser_fire",
     # Impactos
     "explosion_alien", "explosion_boss", "explosion_ship", "boss_damage",
     "shield_activate", "shield_break", "gem_birth", "gem_death",

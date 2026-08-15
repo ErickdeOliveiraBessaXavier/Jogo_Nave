@@ -825,6 +825,18 @@ class RockGlider(Meteor):
         size_bonus = int(size_factor * Config.SIZE_BONUS_MULTIPLIER)
         return max(1, Config.BASE_POINTS + size_bonus)
 
+    def can_take_damage(self) -> bool:
+        """False durante a janela de outro — o glider já foi destruído.
+
+        Quando pedra e bot caem, `_fully_destroyed` liga na hora (hitboxes
+        zerados, `w`/`h` em 0, `rect` colapsado num ponto), mas `dead` só cai
+        0,35s depois, no fim do outro. Nessa janela o glider é invisível e
+        indestrutível — e, sem este contrato, `is_targetable` só olhava `dead`
+        e o dava como alvo válido: o laser orbital travava no cadáver e mirava
+        o canto do rect colapsado (ver memory `targeting-via-target-point`).
+        """
+        return not self._fully_destroyed and not self._collision_disabled
+
     def collision_circle(self) -> tuple[float, float, float]:
         r = self.rect
         return r.centerx, r.centery, max(r.width, r.height) / 2

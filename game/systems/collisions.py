@@ -41,7 +41,7 @@ from ..entities.effects.ice_poison_zone import IcePoisonZone
 from ..entities.enemies.space.orbital_energy_orb import OrbitalEnergyOrb
 from ..entities.effects.mine_explosion import MineExplosion
 from ..entities.projectiles.mini_ship_bullet import MiniShipBullet
-from ..entities.projectiles.player_laser import PlayerLaser
+from ..entities.projectiles.orbital_discharge import OrbitalDischarge
 from ..entities.pickups.powerup import PowerUp
 from ..entities.player.ship import Ship
 from ..entities.effects.slime_drip import SlimeDrip
@@ -151,7 +151,7 @@ class Collisions:
         """Notifica a nave que disparou o projétil sobre o kill.
 
         Usa duck typing: tenta `owner_ship` (Bullet, MiniShipBullet, BossLaser),
-        `source_ship` (HomingBullet) e `ship` (PlayerLaser) nessa ordem. Sem
+        `source_ship` (HomingBullet) e `ship` (OrbitalDischarge) nessa ordem. Sem
         owner_ship rastreável (ex.: AoE de mina), kill não é atribuído — combo
         do Reverberador não conta para "spray and pray".
         """
@@ -2047,7 +2047,7 @@ class Collisions:
         self,
         orbs: list[OrbitalEnergyOrb],
         projectiles: Sequence[Any],
-        player_lasers: Sequence[PlayerLaser],
+        orbital_discharges: Sequence[OrbitalDischarge],
         entity_manager: "EntityManager",
     ) -> int:
         """Tiros da nave destroem os orbes da Torreta Orbital antes que cheguem.
@@ -2080,7 +2080,7 @@ class Collisions:
                 continue
 
             ocx, ocy, orr = orb.collision_circle()
-            for laser in player_lasers:
+            for laser in orbital_discharges:
                 if laser.dead or laser.state != "alive" or laser.w <= 0:
                     continue
                 (ax, ay), (bx, by) = laser.get_collision_line()
@@ -2453,20 +2453,20 @@ class Collisions:
 
         return False
 
-    def player_lasers_vs_enemies(
+    def orbital_discharges_vs_enemies(
         self,
-        player_lasers: list[PlayerLaser],
+        orbital_discharges: list[OrbitalDischarge],
         enemies: Sequence[Enemy],
         _floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
         enemy_grid: "SpatialGrid[Any] | None" = None,
     ) -> tuple[int, int, list[ScoreEvent]]:
-        """Colisão dos lasers do jogador com inimigos (atravessa múltiplos alvos)."""
+        """Colisão das descargas orbitais com inimigos (atravessam múltiplos alvos)."""
         score_gain: int = 0
         destroyed_count: int = 0
         score_events: list[ScoreEvent] = []
 
-        for laser in player_lasers:
+        for laser in orbital_discharges:
             if laser.w <= 0:  # Laser ainda não expandiu ou já retraiu
                 continue
 
@@ -2524,18 +2524,18 @@ class Collisions:
                             score_events.append(ScoreEvent(cx, cy, result.points))
         return score_gain, destroyed_count, score_events
 
-    def player_lasers_vs_boss(
+    def orbital_discharges_vs_boss(
         self,
-        player_lasers: list[PlayerLaser],
+        orbital_discharges: list[OrbitalDischarge],
         boss: Damageable,
         floating_scores: list[FloatingScore],
         entity_manager: "EntityManager",
     ) -> int:
-        """Colisão dos lasers do jogador com o boss.
+        """Colisão das descargas orbitais com o boss.
 
         Usa pixel-perfect collision se o boss possuir uma máscara definida.
         """
-        if not player_lasers:
+        if not orbital_discharges:
             return 0
         if not boss or boss.dead:
             return 0
@@ -2549,7 +2549,7 @@ class Collisions:
 
         mask_data = self._get_enemy_collision_mask_data(boss)
 
-        for laser in player_lasers:
+        for laser in orbital_discharges:
             if laser.w <= 0:
                 continue
 
@@ -2704,7 +2704,7 @@ class Collisions:
             return 0
         if not boss or boss.dead:
             return 0
-        # Boss em INTRO/TELEPORT/ENTERING: pular (ver `player_lasers_vs_boss`).
+        # Boss em INTRO/TELEPORT/ENTERING: pular (ver `orbital_discharges_vs_boss`).
         can_damage_fn = getattr(boss, "can_take_damage", None)
         if callable(can_damage_fn) and not can_damage_fn():
             return 0

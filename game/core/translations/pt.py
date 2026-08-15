@@ -317,7 +317,7 @@ PT: dict[str, str] = {
     "upgrade.heal.desc": "Restaura 1 vida.",
     "upgrade.emp.desc": "Onda que desacelera inimigos.",
     "upgrade.homing_shot.desc": "Tiros teleguiados com cadência reduzida.",
-    "upgrade.laser_shot.desc": "Orbes laser disparam em sequência.",
+    "upgrade.orbital_discharge.desc": "Orbes descarregam raios em sequência.",
     "upgrade.explosive_shot.desc": "Próximos tiros explodem em área.",
     "upgrade.giant_shot.desc": "Tiros 3x maiores por um tempo.",
     "upgrade.blink_dash.desc": "Dash curto invulnerável.",

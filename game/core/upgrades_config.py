@@ -80,7 +80,7 @@ DEFAULT_UNLOCKED: List[UpgradeType] = [
     UpgradeType.HEAL,
     UpgradeType.EMP,
     UpgradeType.HOMING_SHOT,
-    UpgradeType.LASER_SHOT,
+    UpgradeType.ORBITAL_DISCHARGE,
     UpgradeType.EXPLOSIVE_SHOT,
     UpgradeType.GIANT_SHOT,
     UpgradeType.AIR_STRIKE,
@@ -115,8 +115,8 @@ HOMING_FIRE_RATE_PENALTY: float = (
 )
 HOMING_DAMAGE_MULTIPLIER: float = 1.5  # Tiros teleguiados causam 50% mais dano direto
 
-# Parâmetros de balanceamento do Laser Shot
-LASER_SHOT_DAMAGE: int = 80  # Dano do laser disparado pelas orbes
+# Parâmetros de balanceamento da Descarga Orbital
+ORBITAL_DISCHARGE_DAMAGE: int = 80  # Dano do arco descarregado por cada orbe
 
 # Parâmetros de balanceamento do Tiro Explosivo
 EXPLOSIVE_BULLET_DAMAGE: int = 30  # Dano aplicado a cada inimigo na área

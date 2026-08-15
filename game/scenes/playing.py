@@ -433,9 +433,6 @@ class PlayingScene(Scene):
         self.impact_flash_duration = duration
         self.impact_flash_alpha = alpha
 
-    def _get_background(self) -> Any | None:
-        return getattr(self.r, "current_background", None)
-
     def _init_systems(self) -> None:
         """Instancia sistemas de jogo (EntityManager, spawners, colisões)."""
         # Semente de variedade por-partida: sorteada UMA vez por sessão de jogo,
@@ -468,7 +465,6 @@ class PlayingScene(Scene):
             entity_manager=self.entity_manager,
             event_bus=self.app.event_bus,
             screen_shake_request=self.request_screen_shake,
-            background_getter=self._get_background,
         )
 
         # Instanciar EffectsSystem que escuta eventos do jogo

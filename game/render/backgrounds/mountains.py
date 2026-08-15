@@ -225,7 +225,9 @@ class MountainsBackground(Background):
         )
         self._day_duration: float = 180.0  # dia (3 min intervalo)
         self._current_progress: float = 0.0
-        self._pause_day_night_cycle: bool = False  # Pausar ciclo enquanto boss ativo
+        # Congela o relógio do ciclo enquanto o fundo está em warp (boss fight,
+        # cutscene de mundo). Derivado por frame — ver `set_day_night_paused`.
+        self._pause_day_night_cycle: bool = False
 
         # Quanto o sol desce verticalmente quando vai do meio-dia à noite.
         self._sun_dive_distance: int = int(self.height * 0.22)
@@ -330,12 +332,13 @@ class MountainsBackground(Background):
         self._day_duration = max(0.0, day_duration)
 
     def set_day_night_paused(self, _paused: bool) -> None:
-        """Pausa ou retoma o ciclo dia/noite.
+        """Congela ou retoma o relógio do ciclo dia/noite.
 
-        Útil para manter a iluminação constante durante combates de boss.
+        Reaplicado por frame pelo `Renderer.background()` — ver o contrato de
+        estado derivado em `Background.set_day_night_paused`.
 
         Args:
-            paused: True para pausar, False para retomar.
+            _paused: True congela a iluminação onde está, False retoma.
         """
         self._pause_day_night_cycle = _paused
 
@@ -786,7 +789,9 @@ class MountainsBackground(Background):
         for cloud in self.clouds_front:
             cloud.reset(is_first_time=True)
 
-        # Reseta o ciclo dia/noite
+        # Reseta o ciclo dia/noite — inclusive a pausa, para que um `reset()`
+        # devolva mesmo o estado inicial e não herde um congelamento antigo.
         self._phase = "day"
         self._phase_elapsed_time = 0.0
         self._current_progress = 0.0
+        self._pause_day_night_cycle = False
