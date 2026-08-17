@@ -83,7 +83,19 @@ if ($LASTEXITCODE -ne 0) {
 # ---------------- push pro canal html5 ----------------
 $alvo = "$ItchUser/$ItchGame`:$Canal"
 Write-Host ">> Enviando '$Canal' ($tag) para $alvo ..." -ForegroundColor Cyan
-& $butler push $Bundle $alvo --userversion $tag
+# --ignore staging.tar.gz: o pygbag gera DOIS empacotamentos do mesmo jogo,
+# ~69 MB cada, e no itch só um é usado. O `index.html` escolhe pelo host:
+#
+#   if platform.window.location.host.find('.itch.zone')>0:  -> staging.apk
+#   else:                                                    -> staging.tar.gz
+#
+# Servido pelo itch, o host SEMPRE casa `.itch.zone`, então o `.tar.gz` nunca é
+# baixado por jogador nenhum — são ~69 MB de upload e armazenamento mortos por
+# release. Ele continua sendo gerado e continua no bundle local, que é onde
+# serve: é o ramo `else`, usado ao testar o bundle estático fora do itch
+# (`python -m http.server -d web\staging\build\web`). Por isso a exclusão mora
+# AQUI, no publish, e não no build.
+& $butler push $Bundle $alvo --userversion $tag --ignore staging.tar.gz
 if ($LASTEXITCODE -ne 0) { Write-Host "Push de '$Canal' falhou." -ForegroundColor Red; exit 1 }
 
 Write-Host "`n>> Concluido. Web publicada: $tag (canal $Canal)" -ForegroundColor Green
