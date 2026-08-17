@@ -249,8 +249,10 @@ class MountainsBackground(Background):
         # Criar elementos
         self._create_sky_gradients()
         self._create_layers()
-        self._create_stars()
+        # O sol vem ANTES das estrelas: `_create_stars` precisa do `sun_rect`
+        # para não semear estrela dentro do disco (ver lá o porquê).
         self._create_sun()
+        self._create_stars()
         self._create_clouds()
 
     @staticmethod
@@ -506,9 +508,34 @@ class MountainsBackground(Background):
 
         return grad_surf
 
+    # Folga além do raio do disco, para nenhuma estrela encostar na borda do
+    # brilho do sol (que é o que denuncia a sobreposição primeiro).
+    _STAR_SUN_MARGIN: int = 8
+
     def _create_stars(self) -> None:
-        """Gera estrelas com distribuição pré-calculada."""
+        """Gera estrelas com distribuição pré-calculada.
+
+        **Nenhuma estrela nasce dentro do disco do sol.** O sol é desenhado com
+        alpha decrescente ao longo do pôr do sol, então tudo que estiver atrás
+        dele vai APARECENDO através dele conforme ele apaga — e estrelas
+        surgindo de dentro do sol é o tipo de coisa que se lê como defeito, não
+        como céu.
+
+        A zona excluída é pequena: as estrelas ocupam `y ∈ [0, height*0.5]` e o
+        sol está centrado exatamente em `height*0.5`, então só a METADE DE CIMA
+        dele invade a área semeada. E como ele mergulha para BAIXO ao apagar
+        (`_sun_dive_distance`), a sobreposição só diminui com o tempo — a
+        posição de repouso é o pior caso, e é essa que basta excluir.
+        """
         star_area_height = self.height * 0.5
+
+        # Disco a evitar, em coordenadas do fundo.
+        sun_cx = sun_cy = None
+        sun_r_sq = 0.0
+        if self.sun_rect is not None:
+            sun_cx, sun_cy = self.sun_rect.center
+            sun_r = self.sun_rect.width / 2 + self._STAR_SUN_MARGIN
+            sun_r_sq = sun_r * sun_r
 
         # Surfaces pré-renderizadas por tamanho e nível de alpha.
         self._star_surf_cache: Dict[int, List[pygame.Surface]] = {}
@@ -523,10 +550,28 @@ class MountainsBackground(Background):
 
         for _ in range(self.NUM_STARS):
             size = 2 if random.random() < 0.8 else 4
+
+            # Amostragem com rejeição. O disco cobre uma fração mínima da área
+            # semeada, então o laço quase sempre acerta de primeira; o teto de
+            # tentativas existe só para nunca travar aqui. Esgotá-lo aceita a
+            # posição — uma estrela solitária sob o sol não é o defeito que
+            # este código veio corrigir (o defeito é o CAMPO inteiro
+            # transparecendo).
+            x = random.random() * self.width
+            y = random.random() * star_area_height
+            if sun_cx is not None:
+                for _tentativa in range(8):
+                    dx = x - sun_cx
+                    dy = y - sun_cy
+                    if (dx * dx) + (dy * dy) >= sun_r_sq:
+                        break
+                    x = random.random() * self.width
+                    y = random.random() * star_area_height
+
             self.stars.append(
                 {
-                    "x": random.random() * self.width,
-                    "y": random.random() * star_area_height,
+                    "x": x,
+                    "y": y,
                     "size": size,
                     # Bind direto da lista de variants p/ evitar dict lookup por frame.
                     "variants": self._star_surf_cache[size],
@@ -739,17 +784,25 @@ class MountainsBackground(Background):
         # Desenhar estrelas (brilho escalado em _draw_stars conforme o progresso)
         self._draw_stars(surface)
 
-        # Desenhar nuvens de fundo
-        for cloud in self.clouds_back:
-            cloud.draw(surface)
-
-        # Desenhar sol: fade out + desliza para baixo conforme escurece.
+        # Sol ANTES das nuvens: fade out + desliza para baixo conforme escurece.
+        #
+        # A ordem importa e já esteve errada. Com o sol depois de `clouds_back`,
+        # as nuvens daquela camada passavam POR TRÁS dele — algo que não
+        # acontece no céu de ninguém (o sol está a 150 milhões de km; toda nuvem
+        # está na frente). O split back/front das nuvens é profundidade em
+        # relação às MONTANHAS, não ao sol: `clouds_back` fica atrás das
+        # cordilheiras e `clouds_front` na frente delas, e as duas seguem
+        # passando na frente do sol.
         if self.sun_surface and self.sun_rect:
             sun_alpha = int((1.0 - display_progress) * 255)
             if sun_alpha > 0:
                 self.sun_surface.set_alpha(sun_alpha)
                 offset_y = int(display_progress * self._sun_dive_distance)
                 surface.blit(self.sun_surface, self.sun_rect.move(0, offset_y))
+
+        # Desenhar nuvens de fundo
+        for cloud in self.clouds_back:
+            cloud.draw(surface)
 
         # Desenhar camadas de montanhas (parallax). Cada layer é dividida em
         # top SRCALPHA (silhueta jagged) + bot opaco (faixa cheia abaixo do

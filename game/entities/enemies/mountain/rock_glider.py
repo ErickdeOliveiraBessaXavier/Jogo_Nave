@@ -43,6 +43,22 @@ class RockGlider(Meteor):
     ]
     RING_PHASE_OFFSETS: tuple[float, float, float] = (0.0, 1.0 / 3.0, 2.0 / 3.0)
 
+    # Anéis de propulsor: 3 fases × 2 bocais = 6 `draw.rect` POR GLIDER, POR
+    # FRAME. O RockGlider é o swarm base do tema (CLAUDE.md §11: o mais
+    # frequente), então com 20 em tela isso era 120 travessias Python→C só de
+    # anel — medido em 1,64 ms/frame, 18% do frame inteiro, contra 3,12 ms de
+    # TODAS as entidades juntas. Era o que fazia o gameplay engasgar num tema
+    # cujo menu, com o mesmo fundo, roda liso.
+    #
+    # O ciclo é função só da fase, então ele é pré-rasterizado em N passos e o
+    # draw vira 1 blit — mesmo padrão que o `_eye_surface_cache` já usa aqui.
+    RING_SPEED: float = 2.3
+    RING_MAX_DROP: int = 10
+    # 12 passos a 2,3 ciclos/s = 36 ms por passo (~2 frames a 60fps, ~1 a 30fps
+    # no web). Em anéis de no máximo 8×3 px a quantização não é percebida, e o
+    # cache fica pequeno o bastante para caber por instância do pool.
+    RING_ANIM_STEPS: int = 12
+
     @classmethod
     def _random_fragment_palette_color(cls) -> tuple[int, int, int]:
         base = random.choice(cls.STONE_FRAGMENT_COLORS)
@@ -493,6 +509,63 @@ class RockGlider(Meteor):
                     self._build_eye_surface(scan_offset, blinking)
                 )
 
+        # Cache do ciclo dos anéis de propulsor (ver RING_ANIM_STEPS). Construído
+        # AQUI, junto da geometria dos bocais, porque é dela que ele depende:
+        # este método roda de novo quando o glider muda de tamanho, e o cache
+        # precisa acompanhar.
+        self._thruster_surface_cache = [
+            self._build_thruster_surface(step) for step in range(self.RING_ANIM_STEPS)
+        ]
+
+    def _build_thruster_surface(self, step: int) -> tuple[pygame.Surface, int, int]:
+        """Rasteriza os 6 anéis de um passo do ciclo (ver `draw`).
+
+        Devolve a surface e o offset dela em relação a ``(int(x), int(y))`` do
+        glider — as mesmas coordenadas locais que o `draw` usava para desenhar
+        os anéis direto na tela.
+        """
+        left_cx = self._thruster_left_center_x
+        right_cx = self._thruster_right_center_x
+
+        # Limites do desenho: o anel mais largo tem 8 px (centrado, ±4) e o mais
+        # baixo cai RING_MAX_DROP + altura. 1 px de folga de cada lado.
+        origin_x = min(left_cx, right_cx) - 5
+        origin_y = self._nozzle_base_y + 1
+        width = abs(right_cx - left_cx) + 11
+        height = self.RING_MAX_DROP + 6
+
+        surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        base_phase = step / self.RING_ANIM_STEPS
+
+        for cx_ring, side_phase in ((left_cx, 0.0), (right_cx, 0.5)):
+            for phase_offset in self.RING_PHASE_OFFSETS:
+                phase = (base_phase + phase_offset + side_phase) % 1.0
+                inv = 1.0 - phase
+                ring_w = max(2, int(8 * inv))
+                ring_h = max(1, int(3 * inv))
+                ring_y = self._nozzle_base_y + 2 + int(phase * self.RING_MAX_DROP)
+
+                if phase < 0.2:
+                    ring_color = self.color_thruster_hot
+                elif phase < 0.55:
+                    ring_color = self.color_thruster_mid
+                else:
+                    ring_color = self.color_thruster_cool
+
+                pygame.draw.rect(
+                    surf,
+                    ring_color,
+                    (
+                        cx_ring - ring_w // 2 - origin_x,
+                        ring_y - origin_y,
+                        ring_w,
+                        ring_h,
+                    ),
+                    1,
+                )
+
+        return surf, origin_x, origin_y
+
     def _build_eye_surface(
         self, scan_offset: int, blinking: bool
     ) -> tuple[pygame.Surface, int, int]:
@@ -768,36 +841,13 @@ class RockGlider(Meteor):
             ]
             screen.blit(eye_surf, (int(self.x) + eye_ox, int(self.y) + eye_oy))
 
-            max_drop = 10
-            ring_speed = 2.3
-            nozzle_y = int(self.y) + self._nozzle_base_y
-            base_phase = self._time * ring_speed
-            ix = int(self.x)
-
-            for cx_ring, side_phase in (
-                (ix + self._thruster_left_center_x, 0.0),
-                (ix + self._thruster_right_center_x, 0.5),
-            ):
-                for phase_offset in self.RING_PHASE_OFFSETS:
-                    phase = (base_phase + phase_offset + side_phase) % 1.0
-                    inv = 1.0 - phase
-                    ring_w = max(2, int(8 * inv))
-                    ring_h = max(1, int(3 * inv))
-                    ring_y = nozzle_y + 2 + int(phase * max_drop)
-
-                    if phase < 0.2:
-                        ring_color = self.color_thruster_hot
-                    elif phase < 0.55:
-                        ring_color = self.color_thruster_mid
-                    else:
-                        ring_color = self.color_thruster_cool
-
-                    pygame.draw.rect(
-                        screen,
-                        ring_color,
-                        (cx_ring - ring_w // 2, ring_y, ring_w, ring_h),
-                        1,
-                    )
+            # 6 `draw.rect` viraram 1 blit num passo pré-rasterizado do ciclo
+            # (ver RING_ANIM_STEPS). O ciclo depende só da fase, então o passo
+            # é escolhido por quantização do tempo.
+            steps = self.RING_ANIM_STEPS
+            step = int((self._time * self.RING_SPEED % 1.0) * steps) % steps
+            ring_surf, ring_ox, ring_oy = self._thruster_surface_cache[step]
+            screen.blit(ring_surf, (int(self.x) + ring_ox, int(self.y) + ring_oy))
 
     def set_hp(self, rock_hp: int, bot_hp: int) -> None:
         self._rock_hp = rock_hp

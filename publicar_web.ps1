@@ -69,6 +69,17 @@ if (-not (Test-Path "$Bundle\index.html")) {
     exit 1
 }
 
+# Confere o RESULTADO antes de subir 90 MB. Vale sobretudo para -SoPush, que
+# pode estar enviando um bundle antigo, de antes do self-host do runtime: esse
+# bundle busca ~21 MB em pygame-web.github.io e NAO CARREGA NO FIREFOX (os
+# arquivos grandes do CDN cortam no meio do download). Falhar aqui custa
+# segundos; publicar assim custa uma release quebrada para metade dos jogadores.
+& "$PSScriptRoot\web_selfhost_runtime.ps1" -Verificar
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "      Conserto: .\web_selfhost_runtime.ps1  (ou rode sem -SoPush)" -ForegroundColor Yellow
+    exit 1
+}
+
 # ---------------- push pro canal html5 ----------------
 $alvo = "$ItchUser/$ItchGame`:$Canal"
 Write-Host ">> Enviando '$Canal' ($tag) para $alvo ..." -ForegroundColor Cyan

@@ -1,11 +1,38 @@
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, cast
 
+from .device import is_touch_primary
 from .sound_config import VOLUME_CONFIG
 
 logger = logging.getLogger(__name__)
+
+# Build web (WASM). Vários defaults divergem do desktop — ver os pontos de uso.
+IS_WEB = sys.platform == "emscripten"
+
+# Qualidade visual inicial. No web o frame é o MESMO do desktop, mas cada
+# travessia Python→C custa muito mais no interpretador WASM, e o render é ~93%
+# do frame. Alto → Médio corta 33% do render (7,91 → 5,32 ms/frame).
+#
+# BAIXO no web por decisão de produto. A medição de Médio→Baixo numa fase leve
+# deu ~1% (5,32 → 5,26 ms), mas ela subestima o caso que importa: Baixo derruba
+# CONTAGEM de partículas e desliga afterimages, glow pesado, luzes dinâmicas e
+# explosões complexas — tudo que escala com a INTENSIDADE do combate, não com a
+# fase vazia que o probe mediu. É justamente no pico de combate que o web não
+# tem folga. Continua sendo DEFAULT, não trava: Configurações segue oferecendo
+# Médio e Alto.
+_DEFAULT_VISUAL_QUALITY = "low" if IS_WEB else "high"
+
+# Resolução LÓGICA inicial. No web o pygbag escala o canvas para o tamanho de
+# exibição, então baixar a resolução lógica corta fillrate direto — 1024×576 tem
+# 64% dos pixels de 720p. É o único ajuste aqui que reduz custo por PIXEL em vez
+# de por chamada. A UI acompanha via `ui_scale` (CLAUDE.md §12).
+#
+# No web esta é a resolução FIXA: `settings.py` não oferece outras (trocar exige
+# reinício, que no navegador não existe) e as preferências não persistem lá.
+_DEFAULT_RESOLUTION = (1024, 576) if IS_WEB else (1280, 720)
 
 
 class UserPreferences:
@@ -15,15 +42,16 @@ class UserPreferences:
         self.file_path = file_path
 
         # Valores padrão
-        self.resolution: Tuple[int, int] = (1280, 720)
+        self.resolution: Tuple[int, int] = _DEFAULT_RESOLUTION
         self.fullscreen: bool = True
 
         # Idioma da interface: "pt" | "en". String vazia = ainda não escolhido
         # → o 1º boot mostra a tela de seleção de idioma.
         self.language: str = ""
 
-        # Qualidade visual: "high" | "medium" | "low" (default: high).
-        self.visual_quality: str = "high"
+        # Qualidade visual: "high" | "medium" | "low".
+        # Default: Alto no desktop, Médio no web (ver _DEFAULT_VISUAL_QUALITY).
+        self.visual_quality: str = _DEFAULT_VISUAL_QUALITY
 
         # Pixelização (pós-processamento): "light" | "medium" | "strong".
         # Sempre ativa (sem "off"); piso nativo = "light".
@@ -48,24 +76,29 @@ class UserPreferences:
 
         # Controles
         #
-        # No WEB os QUATRO nascem LIGADOS, porque o build web É o build do
-        # celular e lá nenhum deles é opcional:
-        #   - `mouse_control`/`virtual_joystick`: sem um dos dois a nave não sai
-        #     do lugar — teclado não existe;
-        #   - `auto_fire`: manter um botão apertado ocuparia o único ponteiro,
-        #     que é o mesmo que pilota;
+        # Os controles de TOQUE nascem ligados no CELULAR, não em "web".
+        # A premissa antiga era `web == celular`, e ela errava no caso mais
+        # comum de todos: alguém abrindo o link num navegador de PC ganhava
+        # joystick virtual e alvos de toque por cima de um jogo que ali se joga
+        # com teclado — poluindo a tela e sugerindo uma interface que não é a
+        # daquele aparelho. Quem decide agora é `is_touch_primary()`, que
+        # pergunta ao navegador se o ponteiro PRIMÁRIO é o dedo (ver
+        # `core/device.py`).
+        #
+        # No celular nenhum dos dois é opcional:
+        #   - `virtual_joystick`: sem ele (ou sem `mouse_control`) a nave não
+        #     sai do lugar — teclado não existe;
         #   - `touch_mode`: alvos tocáveis no HUD (coluna de upgrades, pausa,
         #     girar). Sem ele, upgrades e pausa ficam inalcançáveis.
-        #
-        # Nascer desligado significava abrir Configurações ANTES de conseguir
-        # jogar — e quem chega por um link não faz isso, fecha a aba.
+        # Nascer desligado ali significava abrir Configurações ANTES de
+        # conseguir jogar — e quem chega por um link não faz isso, fecha a aba.
         #
         # Como preferência não persiste no web (`save` é no-op em emscripten,
         # MEMFS volátil), "padrão" e "sempre ligado" são a mesma coisa na
         # prática: toda sessão recomeça daqui. Continuam sendo DEFAULT e não
-        # trava — os toggles seguem lá para quem abrir a build web num
-        # navegador de PC e preferir mouse e gatilho.
+        # trava — os toggles seguem na tela para quem quiser o contrário.
         _web = _sys.platform == "emscripten"
+        _touch = is_touch_primary()
         # `mouse_control` fica DESMARCADO no web: quem move a nave no celular e o
         # joystick. Os dois marcados era redundancia com um anulando o outro — a
         # `PlayingScene` desliga o `mouse_control` enquanto o joystick existe,
@@ -81,7 +114,7 @@ class UserPreferences:
         # mancha de ~1cm e cobre a nave inteira) e o HUD ganha alvos tocáveis,
         # saindo de baixo do polegar que pilota. É um interruptor só porque
         # para o jogador é uma decisão só — "estou no celular".
-        self.touch_mode: bool = _web
+        self.touch_mode: bool = _touch
         # JOYSTICK VIRTUAL: direcional analógico no canto inferior esquerdo, no
         # lugar da mira absoluta do `mouse_control`.
         #
@@ -90,7 +123,7 @@ class UserPreferences:
         # são mutuamente exclusivos — ligado o joystick, o offset nem chega a
         # rodar (ele só existe no caminho do `mouse_control`, que o joystick
         # desliga em `PlayingScene`).
-        self.virtual_joystick: bool = _web
+        self.virtual_joystick: bool = _touch
         self.show_controls_modal: bool = True
         # False até o modal de controles fechar pela 1ª vez. Enquanto False, o
         # modal roda em modo "onboarding": esconde o checkbox "não mostrar mais"
@@ -280,10 +313,10 @@ class UserPreferences:
 
     def reset(self):
         """Redefine para os padrões de fábrica."""
-        self.resolution = (1280, 720)
+        self.resolution = _DEFAULT_RESOLUTION
         self.fullscreen = True
         self.language = ""
-        self.visual_quality = "high"
+        self.visual_quality = _DEFAULT_VISUAL_QUALITY
         self.pixelization = "light"
         self.retro_background = True
         import sys as _sys
@@ -297,10 +330,11 @@ class UserPreferences:
         # conseguir mover a nave, sem teclado para desfazer e sem persistência
         # para o próximo boot corrigir — dentro da própria tela de opções.
         _web = _sys.platform == "emscripten"
+        _touch = is_touch_primary()
         self.mouse_control = False
         self.auto_fire = _web
-        self.touch_mode = _web
-        self.virtual_joystick = _web
+        self.touch_mode = _touch
+        self.virtual_joystick = _touch
         self.show_controls_modal = True
         self.controls_modal_seen = False
         self.controls_configured = False

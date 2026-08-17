@@ -140,50 +140,76 @@ class TestEscopo:
 
 
 class TestDefaultsDoWeb:
-    """No web os QUATRO controles de celular nascem ligados.
+    """Os controles de TOQUE nascem ligados no CELULAR, nao em "web".
 
-    O build web E o build do celular, e la nenhum deles e opcional: sem
-    ponteiro ou joystick a nave nao anda (teclado nao existe), sem tiro
-    automatico um botao apertado ocuparia o unico ponteiro — o mesmo que
-    pilota —, e sem o modo toque os upgrades e a pausa ficam inalcancaveis.
+    A premissa antiga era `web == celular` e ela errava no caso mais comum de
+    todos: quem abre o link num navegador de PC ganhava joystick virtual e
+    alvos de toque por cima de um jogo que ali se joga com teclado. Quem decide
+    e `is_touch_primary()` — o ponteiro primario do aparelho e o dedo?
 
-    Nascer desligado significava abrir Configuracoes ANTES de conseguir jogar.
-    Quem chega por um link nao faz isso: fecha a aba.
+    No celular nenhum dos dois e opcional: sem joystick (ou ponteiro) a nave
+    nao anda, e sem o modo toque os upgrades e a pausa ficam inalcancaveis.
+    Nascer desligado ali significava abrir Configuracoes ANTES de conseguir
+    jogar, e quem chega por um link nao faz isso: fecha a aba.
 
     Como preferencia nao persiste no web (`save` e no-op em emscripten), estes
     defaults sao o que o jogador recebe em TODA sessao.
     """
 
-    # `mouse_control` NAO entra: no web quem move a nave e o joystick, e ele
-    # nasce desmarcado de proposito (ver `test_mouse_control_sai_do_padrao`).
-    CONTROLES = ("auto_fire", "touch_mode", "virtual_joystick")
+    # Ligados pelo TOQUE. `mouse_control` NAO entra: no celular quem move a nave
+    # e o joystick, e ele nasce desmarcado de proposito (ver
+    # `test_mouse_control_sai_do_padrao_do_web`).
+    CONTROLES_DE_TOQUE = ("touch_mode", "virtual_joystick")
 
     @staticmethod
-    def _prefs(tmp_path: Path, platform: str) -> UserPreferences:
-        # `UserPreferences` le `sys.platform` dentro do `__init__`.
-        with patch("sys.platform", platform):
-            return UserPreferences(tmp_path / f"{platform}.json")
+    def _prefs(tmp_path: Path, platform: str, touch: bool = False) -> UserPreferences:
+        # `UserPreferences` le `sys.platform` e chama `is_touch_primary()`
+        # dentro do `__init__`. O patch do segundo e no nome JA IMPORTADO em
+        # `preferences` (from .device import ...), nao em `device`.
+        with patch("sys.platform", platform), patch(
+            "game.core.preferences.is_touch_primary", return_value=touch
+        ):
+            return UserPreferences(tmp_path / f"{platform}-{touch}.json")
 
-    @pytest.mark.parametrize("campo", CONTROLES)
-    def test_no_web_nascem_ligados(self, tmp_path: Path, campo):
-        assert getattr(self._prefs(tmp_path, "emscripten"), campo) is True
+    @pytest.mark.parametrize("campo", CONTROLES_DE_TOQUE)
+    def test_no_celular_nascem_ligados(self, tmp_path: Path, campo):
+        assert getattr(self._prefs(tmp_path, "emscripten", touch=True), campo) is True
 
-    @pytest.mark.parametrize("campo", CONTROLES)
-    def test_no_desktop_nascem_desligados(self, tmp_path: Path, campo):
-        """Teclado e o controle padrao do desktop — ligar mouse, tiro
-        automatico e joystick de tela por conta propria mudaria o jogo debaixo
-        de quem ja joga."""
+    @pytest.mark.parametrize("campo", CONTROLES_DE_TOQUE)
+    def test_no_navegador_de_pc_nascem_desligados(self, tmp_path: Path, campo):
+        """A regressao que este arquivo passou a existir para travar.
+
+        Web NAO implica celular. Num navegador de desktop ha teclado e mouse:
+        joystick de tela e alvos de toque so ocupam area util e sugerem uma
+        interface que nao e a daquele aparelho.
+        """
+        assert getattr(self._prefs(tmp_path, "emscripten", touch=False), campo) is False
+
+    @pytest.mark.parametrize("campo", CONTROLES_DE_TOQUE)
+    def test_no_desktop_nativo_nascem_desligados(self, tmp_path: Path, campo):
+        """Teclado e o controle padrao do desktop — ligar joystick de tela por
+        conta propria mudaria o jogo debaixo de quem ja joga."""
         assert getattr(self._prefs(tmp_path, "win32"), campo) is False
 
-    @pytest.mark.parametrize("campo", CONTROLES)
-    def test_restaurar_padroes_no_web_nao_trava_o_jogador(self, tmp_path: Path, campo):
+    def test_auto_fire_continua_por_plataforma(self, tmp_path: Path):
+        """`auto_fire` NAO e controle de toque: e conveniencia de web em geral
+        (inclusive no navegador de PC), entao segue o `sys.platform`."""
+        assert self._prefs(tmp_path, "emscripten", touch=False).auto_fire is True
+        assert self._prefs(tmp_path, "win32").auto_fire is False
+
+    @pytest.mark.parametrize("campo", CONTROLES_DE_TOQUE)
+    def test_restaurar_padroes_no_celular_nao_trava_o_jogador(
+        self, tmp_path: Path, campo
+    ):
         """A armadilha: um reset que desligasse tudo deixaria o jogador de
         celular sem mover a nave, sem teclado para desfazer e sem persistencia
         para o proximo boot corrigir — dentro da propria tela de opcoes."""
-        prefs = self._prefs(tmp_path, "emscripten")
+        prefs = self._prefs(tmp_path, "emscripten", touch=True)
         setattr(prefs, campo, False)
 
-        with patch("sys.platform", "emscripten"):
+        with patch("sys.platform", "emscripten"), patch(
+            "game.core.preferences.is_touch_primary", return_value=True
+        ):
             prefs.reset()
 
         assert getattr(prefs, campo) is True

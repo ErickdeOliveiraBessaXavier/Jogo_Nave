@@ -88,6 +88,9 @@ class Renderer:
         self._bg_lowres_built: Optional[bool] = None
 
         # === NOVO: Sistema de medição de FPS ===
+        # Relógio de parede do medidor (ver `update_fps`). ``None`` = ainda não
+        # há frame anterior para medir o intervalo.
+        self._last_frame_clock: Optional[float] = None
         self.fps_counter = 0
         self.fps_timer = 0.0
         self.current_fps = 0.0
@@ -621,8 +624,40 @@ class Renderer:
             txt_surf, (box_x + self._s(30), box_y + (box_h - txt_surf.get_height()) // 2)
         )
 
-    def update_fps(self, dt: float):
-        """Atualiza o contador de FPS e calcula métricas de performance."""
+    # Intervalo acima do qual o "frame" não é um frame: troca de cena, pausa,
+    # aba em segundo plano. O painel só é desenhado em gameplay, então ao voltar
+    # da pausa o primeiro intervalo carrega todo o tempo parado. Contá-lo
+    # envenenaria `max_frame_time` pela janela inteira de 60 frames com um pico
+    # que não veio de renderizar nada.
+    _FRAME_TIME_OUTLIER = 1.0
+
+    def update_fps(self):
+        """Atualiza o contador de FPS e calcula métricas de performance.
+
+        Mede o **relógio de parede**, não o ``dt`` do jogo. O ``dt`` chega aqui
+        clampado em ``_MAX_FRAME_DT`` (1/30) pelo ``app.run`` — o clamp existe
+        para um frame longo não teleportar a física (CLAUDE.md §14), mas
+        alimentando o medidor ele o **satura**: com o frame real acima de
+        33,3 ms todo ``dt`` vale exatamente 1/30, ``fps_counter / fps_timer`` dá
+        exatamente 30, e o painel exibia ``FPS: 30`` rodando a 30, a 18 ou a 8
+        fps reais. O número era um PISO, não uma medida — e o mesmo valia para
+        avg/max frame time, presos em 33,3 ms, que é justo onde começa o pico
+        que se quer encontrar.
+
+        Ler o relógio aqui é exceção deliberada ao §3 (render não lê tempo
+        direto): a regra existe para animação, que precisa parar com o jogo;
+        este medidor precisa do contrário — enxergar exatamente as travadas que
+        o clamp esconde.
+        """
+        now = time.perf_counter()
+        last = self._last_frame_clock
+        self._last_frame_clock = now
+        if last is None:
+            return
+        dt = now - last
+        if dt > self._FRAME_TIME_OUTLIER:
+            return
+
         self.fps_counter += 1
         self.fps_timer += dt
 

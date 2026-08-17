@@ -147,8 +147,23 @@ $pygbagArgs = @("--disable-sound-format-error", "--ume_block=0")
 if ($Build) {
     Write-Host ">> pygbag --build (empacota p/ WebAssembly)..." -ForegroundColor Cyan
     & $py -m pygbag @pygbagArgs --build "$stage\main.py"
+    if ($LASTEXITCODE -ne 0) { Write-Host "ERRO no pygbag --build ($LASTEXITCODE)" -ForegroundColor Red; exit 1 }
+
+    # O pygbag deixa o index.html buscando ~21 MB de runtime em
+    # pygame-web.github.io a cada load, e no Firefox os arquivos grandes desse
+    # CDN cortam no meio ("NetworkError for: .../cpython312/main.data"). Sem
+    # este passo a build sai quebrada no Firefox e dependente de um terceiro.
+    # O motivo completo esta no cabecalho do script.
+    & "$PSScriptRoot\web_selfhost_runtime.ps1"
+    if ($LASTEXITCODE -ne 0) { Write-Host "ERRO no self-host do runtime web." -ForegroundColor Red; exit 1 }
 }
 elseif ($Serve) {
+    # -Serve NAO recebe o self-host do runtime: o servidor do pygbag regenera o
+    # index.html a cada start, entao o patch seria sobrescrito. Nao faz falta
+    # aqui - o corte de download e do Firefox contra o CDN, e em localhost os
+    # arquivos grandes chegam inteiros. Para testar o bundle self-hosted de
+    # verdade: .\build_web.ps1 -Build  e depois
+    # python -m http.server 8000 -d web\staging\build\web
     Write-Host ">> pygbag (servidor local em http://localhost:8000)..." -ForegroundColor Cyan
     & $py -m pygbag @pygbagArgs --port 8000 "$stage\main.py"
 }

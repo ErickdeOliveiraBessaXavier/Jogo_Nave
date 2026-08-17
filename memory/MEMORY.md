@@ -15,6 +15,7 @@ Versionado junto com o repositório.
 - [enemy-health-multiplier-propagation](enemy-health-multiplier-propagation.md) — entidades emergentes recebem health_multiplier via construtor, como aggressiveness_multiplier; multiplicador que não chega na entidade é no-op.
 - [music-transitions-main-thread](music-transitions-main-thread.md) — crossfade de música roda na thread principal; pygame não é thread-safe (worker thread = access violation).
 - [visual-quality-system](visual-quality-system.md) — singleton visual_quality escala efeitos cosméticos por nível Alto/Médio/Baixo; estender efeito = one-liner vq.particles()/gates.
+- [render-is-the-frame-budget](render-is-the-frame-budget.md) — render é 93% do frame e o fundo 50% do render; o contador do F3 saturava em 30 (dt clampado); web abre em Médio (-33%); como perfilar sem cair no driver dummy nem no guard de cena-topo.
 - [upgrade-cooldown-effect-end](upgrade-cooldown-effect-end.md) — cooldown de upgrade só parte quando o efeito termina; efeito por munição/cargas (base_duration=0) precisa sobrescrever `_effect_still_running` (explosivo/descarga orbital), senão o cooldown parte na ativação.
 - [cryo-bomb-cycle](cryo-bomb-cycle.md) — Cryo Shot fecha em bomba de gelo (cargas → cristalizar → estouro → fragmentos); boss cristaliza e detona mas nunca é freado, e os cacos são `Bullet` com `ice_shard`.
 
@@ -54,3 +55,4 @@ Versionado junto com o repositório.
 
 - [itch-publishing-workflow](itch-publishing-workflow.md) — publicação no itch.io via butler (3 canais: Windows/Linux/Web), versão única em VERSION.
 - [web-no-save-persistence](web-no-save-persistence.md) — web não persiste save (MEMFS volátil no emscripten); persistência real é pendente.
+- [web-cdn-runtime-firefox](web-cdn-runtime-firefox.md) — RESOLVIDO: o runtime (~21 MB) cortava no Firefox ao vir do pygame-web.github.io; agora é self-hosted no bundle por web_selfhost_runtime.ps1 (build_web.ps1 -Build). COOP/COEP e browserfs.min.js descartados.

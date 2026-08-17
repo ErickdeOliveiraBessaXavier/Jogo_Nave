@@ -18,7 +18,7 @@ import pygame
 from ..core import colors
 from ..core.assets import BASE_DIR, get_font, get_image
 from ..core.config import config as Config
-from ..core.i18n import t
+from ..core.i18n import i18n, t
 from ..core.difficulty import DifficultyPreset
 from ..core.upgrades import get_upgrade_icon
 
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from ..entities.player.ship import Ship
     from ..systems.entity_manager import EntityManager
 from .hud_layout import (
+    UpgradeHudLayout,
     container_corners,
     joystick_center,
     joystick_knob_radius,
@@ -162,6 +163,13 @@ class GameRenderer:
         # (mudam só com a resolução) para não alocar 4 Rects por frame.
         self._time_stop_strips: tuple[pygame.Rect, ...] = ()
         self._time_stop_labels: dict[str, pygame.Surface] = {}
+        # Fileira de slots de upgrade VAZIOS: peça inerte, rasterizada uma vez e
+        # revalidada por chave (ver `_render_empty_upgrade_slots`).
+        self._empty_slots_cache_key: tuple[Any, ...] | None = None
+        self._empty_slots_cache: tuple[pygame.Surface, tuple[int, int]] = (
+            pygame.Surface((1, 1), pygame.SRCALPHA),
+            (0, 0),
+        )
 
         # Escala de UI relativa ao design base (1280×720). Como todas as
         # resoluções ofertadas são 16:9, um único fator (largura) cobre os dois
@@ -307,7 +315,9 @@ class GameRenderer:
                     self.game_surface.blit(overlay, (0, 0))
                 archmage.draw(self.game_surface)
 
-        self.r.update_fps(dt)
+        # Sem argumento de propósito: o medidor lê o relógio de parede. O `dt`
+        # daqui vem clampado em 1/30 e saturava o contador em exatamente 30.
+        self.r.update_fps()
 
         # 6. Novo HUD Organizado
         self._render_unified_hud(frame, self.game_surface)
@@ -1571,10 +1581,61 @@ class GameRenderer:
         if n <= 0:
             return
 
-        font_small = get_font(max(8, int(12 * self.ui_scale)))
-        layout = upgrade_hud_layout(n, self.ui_scale, frame.touch_mode)
+        # Esta peça é INERTE por definição (ver docstring): nada aqui depende do
+        # frame — só de quantos slots existem, da escala, do modo toque, das
+        # teclas e do idioma. Redesenhá-la a cada frame custava, medido no
+        # nível 1, 0,19 ms e ~10 travessias Python→C (2n `draw.rect`, n+1
+        # `font.render`, n+2 `blit`) para produzir sempre a MESMA imagem.
+        #
+        # No desktop isso se perde no ruído; no WASM cada travessia custa
+        # múltiplas vezes mais, e o render já é ~93% do frame. Cacheada, a peça
+        # inteira vira 1 blit.
+        cache_key = (
+            n,
+            self.ui_scale,
+            frame.touch_mode,
+            tuple(frame.upgrade_keybindings),
+            i18n.language,
+        )
+        if self._empty_slots_cache_key != cache_key:
+            self._empty_slots_cache_key = cache_key
+            # Layout e fonte só no miss: nem eles precisam ser resolvidos por frame.
+            self._empty_slots_cache = self._build_empty_upgrade_slots(
+                frame,
+                upgrade_hud_layout(n, self.ui_scale, frame.touch_mode),
+                get_font(max(8, int(12 * self.ui_scale))),
+            )
+
+        cached, origin = self._empty_slots_cache
+        surface.blit(cached, origin)
+
+    def _build_empty_upgrade_slots(
+        self, frame: RenderFrame, layout: UpgradeHudLayout, font_small: pygame.font.Font
+    ) -> tuple[pygame.Surface, tuple[int, int]]:
+        """Rasteriza a fileira de slots vazios uma vez (ver `_render_empty_upgrade_slots`).
+
+        Devolve a surface e o canto onde ela deve ser colada. A surface cobre a
+        união do container com o rótulo acima dele — desenhar tudo em coordenadas
+        relativas a esse canto é o que permite o blit único.
+        """
         container_rect = layout.container
         container_w, container_h = container_rect.width, container_rect.height
+
+        label = font_small.render(t("hud.upgrades_empty"), True, colors.WHITE)
+        label.set_alpha(110)
+        label_top = container_rect.top - self._s(14)
+        label_left = container_rect.centerx - label.get_width() // 2
+
+        # União do container com o rótulo: o rótulo sobe acima do container e
+        # pode ser mais largo que ele.
+        origin_x = min(container_rect.left, label_left)
+        origin_y = min(container_rect.top, label_top)
+        total_w = max(container_rect.right, label_left + label.get_width()) - origin_x
+        total_h = container_rect.bottom - origin_y
+
+        canvas = pygame.Surface((total_w, total_h), pygame.SRCALPHA)
+        cx = container_rect.left - origin_x
+        cy = container_rect.top - origin_y
 
         # Fundo mais discreto que o da fileira cheia (alpha 160): o estado vazio
         # não deve competir com a leitura do combate.
@@ -1585,11 +1646,12 @@ class GameRenderer:
             (0, 0, container_w, container_h),
             **container_corners(self.ui_scale, floating=frame.touch_mode),
         )
-        surface.blit(overlay, container_rect.topleft)
+        canvas.blit(overlay, (cx, cy))
 
         slot_radius_px = slot_radius(self.ui_scale)
         for display_index, slot_rect in enumerate(layout.slots):
-            slot_x, slot_y = slot_rect.topleft
+            slot_x = slot_rect.left - origin_x
+            slot_y = slot_rect.top - origin_y
             slot_w, slot_h = slot_rect.width, slot_rect.height
 
             slot_surface = pygame.Surface((slot_w, slot_h), pygame.SRCALPHA)
@@ -1615,20 +1677,14 @@ class GameRenderer:
             key_surf.set_alpha(120)
             slot_surface.blit(key_surf, (self._s(4), self._s(2)))
 
-            surface.blit(slot_surface, (slot_x, slot_y))
+            canvas.blit(slot_surface, (slot_x, slot_y))
 
         # Nome do sistema acima da fileira, na MESMA palavra do botão do menu
         # principal (`menu.upgrades`): é o que transforma "duas caixas vazias"
         # em "ah, é aquilo do menu".
-        label = font_small.render(t("hud.upgrades_empty"), True, colors.WHITE)
-        label.set_alpha(110)
-        surface.blit(
-            label,
-            (
-                container_rect.centerx - label.get_width() // 2,
-                container_rect.top - self._s(14),
-            ),
-        )
+        canvas.blit(label, (label_left - origin_x, label_top - origin_y))
+
+        return canvas, (origin_x, origin_y)
 
     def _render_upgrades_hud(self, frame: RenderFrame, surface: pygame.Surface) -> None:
         """Exibe os slots de upgrades ativos centralizados na parte inferior."""

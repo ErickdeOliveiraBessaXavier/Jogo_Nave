@@ -24,6 +24,41 @@ class Star:
     # Duração do fade de encerramento (dissolver) quando não coletada a tempo.
     FADE_OUT_DURATION: float = 0.35
 
+    # Passos de rotação do ícone. 36 passos = 10°: a 180°/s (o máximo sorteado
+    # em `rotation_speed`) são 18 trocas por segundo, acima do que o olho
+    # distingue de um giro contínuo num ícone de ~17 px.
+    _ROT_STEPS: int = 36
+
+    # Cache COMPARTILHADO do ícone já escalado e girado, por (tamanho, passo).
+    # Toda estrela parte do MESMO `icon_star.png`, então a chave não precisa
+    # identificar a imagem. `inner_size` assume poucos valores (a pulsação varia
+    # 1.0–1.2 sobre um tamanho fixo), então na prática são ~6 tamanhos × 36
+    # passos.
+    #
+    # Sem isto, cada estrela pagava `transform.scale` + `transform.rotate` POR
+    # FRAME — render por software, o tipo de operação que o WASM cobra caro (a
+    # mesma classe de custo do `_PixelGridFont`).
+    _icon_cache: dict[tuple[int, int], pygame.Surface] = {}
+    _ICON_CACHE_MAX: int = 512
+
+    @classmethod
+    def _icon_for(cls, base: pygame.Surface, size: int, rotation: float) -> pygame.Surface:
+        """Ícone escalado e girado, memoizado por (tamanho, passo de rotação)."""
+        steps = cls._ROT_STEPS
+        step = int(rotation / 360.0 * steps) % steps
+        key = (size, step)
+        img = cls._icon_cache.get(key)
+        if img is None:
+            scaled = pygame.transform.scale(base, (size, size))
+            img = pygame.transform.rotate(scaled, -step * (360.0 / steps))
+            # Teto simples: o conjunto de chaves é pequeno e estável, então
+            # estourar significa que alguma premissa mudou — limpar tudo é
+            # preferível a crescer sem limite no heap do WASM.
+            if len(cls._icon_cache) >= cls._ICON_CACHE_MAX:
+                cls._icon_cache.clear()
+            cls._icon_cache[key] = img
+        return img
+
     def __init__(self, x: float, y: float):
         """
         Inicializa uma estrela.
@@ -42,7 +77,6 @@ class Star:
         # Carregar imagem
         icon_path = BASE_DIR / "assets" / "images" / "icons" / "icon_star.png"
         self.base_image = get_image(icon_path)
-        self.current_image = self.base_image
 
         self.dead: bool = False
 
@@ -110,8 +144,10 @@ class Star:
             pygame.math.Vector2(1, 0).rotate(self.animation_timer * 57.3).x
         )
 
-        # Atualizar imagem com rotação (sem escala na estrela)
-        self.current_image = pygame.transform.rotate(self.base_image, -self.rotation)
+        # NÃO rotacionar aqui. Existia um `transform.rotate` da imagem inteira
+        # neste ponto, guardado em `self.current_image` — atributo que NINGUÉM
+        # lia (o `draw` monta o ícone por conta própria). Era um rotate por
+        # estrela, por frame, com o resultado descartado.
 
         # Remove se sair da tela
         margin = 100
@@ -152,9 +188,8 @@ class Star:
         pygame.draw.ellipse(surface, (255, 255, 255), pulse_rect, 2)
 
         # Desenhar a imagem da estrela centralizada dentro do fundo
-        inner_size = int(pulse_size * 0.7)
-        star_img = pygame.transform.scale(self.base_image, (inner_size, inner_size))
-        star_img = pygame.transform.rotate(star_img, -self.rotation)
+        inner_size = max(1, int(pulse_size * 0.7))
+        star_img = self._icon_for(self.base_image, inner_size, self.rotation)
         img_rect = star_img.get_rect(center=pulse_rect.center)
         surface.blit(star_img, img_rect)
 

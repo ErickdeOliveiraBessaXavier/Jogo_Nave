@@ -8,7 +8,7 @@ from ..core.colors import BLACK, CUSTOM_GOLD, CUSTOM_PURPLE
 from ..core.i18n import t
 from ..core.meta_progression import PlayerProfile
 from ..core.paths import get_preferences_path, get_profile_path
-from ..core.preferences import UserPreferences
+from ..core.preferences import IS_WEB, UserPreferences
 from ..core.sound import sound_manager
 from ..core.state import Scene
 from .ui_helpers import (
@@ -87,8 +87,17 @@ class SettingsView:
         }
         self.dragging_slider: str | None = None
 
-        # Resoluções disponíveis (mantendo 16:9)
+        # Resoluções disponíveis (mantendo 16:9).
+        #
+        # No WEB a lista tem UM item, e não é preguiça: trocar a resolução exige
+        # reiniciar o jogo (a lógica é fixada no boot por `set_screen_resolution`),
+        # e no navegador não existe reinício. Oferecer as dez seria oferecer nove
+        # botões que não fazem nada até um F5 — e as preferências nem persistem
+        # lá (MEMFS volátil), então o valor voltaria ao default de qualquer forma.
+        # Melhor mostrar a resolução em uso e nenhuma escolha falsa.
         self.available_resolutions = [
+            (1024, 576, "576p"),
+        ] if IS_WEB else [
             (1024, 576, "576p"),
             (1280, 720, "720p"),
             (1366, 768, "768p"),
@@ -126,7 +135,9 @@ class SettingsView:
 
         # Carregar resolução salva das preferências
         saved_res = self.preferences.resolution
-        self.selected_resolution_index = 1  # default
+        # `min` com o fim da lista: no web ela tem UM item, e o antigo `= 1`
+        # cru seria índice inválido sempre que a resolução salva não casasse.
+        self.selected_resolution_index = min(1, len(self.available_resolutions) - 1)
         for i, (w, h, _) in enumerate(self.available_resolutions):
             if w == saved_res[0] and h == saved_res[1]:
                 self.selected_resolution_index = i

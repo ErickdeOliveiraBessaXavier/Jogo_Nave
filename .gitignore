@@ -164,3 +164,6 @@ web/assets/
 web/build/
 web/dist/
 web/staging/
+# Espelho local do runtime CPython/WASM (~21 MB baixados do pygame-web.github.io
+# por web_selfhost_runtime.ps1). Cache de build, nao fonte.
+web/cdn_cache/

@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 
@@ -31,11 +32,22 @@ class _PixelGridFont(pygame.font.Font):
     # o texto on-grid casar com a quantidade de AA dos tamanhos off-grid vizinhos.
     _SOFTEN_FRAC = 0.97
 
+    # Teto do cache POR INSTÂNCIA de fonte. A UI repete um punhado de rótulos
+    # fixos; o que varia (score, contadores) rotaciona por poucos valores. 256
+    # cobre isso com folga e limita a memória — importante no WASM, onde o heap
+    # é finito e o `get_font` mantém até 64 fontes vivas.
+    _SOFTEN_CACHE_MAX = 256
+
     def __init__(self, path: str, size: int) -> None:
         super().__init__(path, size)
         self._grid_size = size
+        # Cache POR INSTÂNCIA (e não global chaveado por `id(self)`): o `get_font`
+        # é um `lru_cache` que despeja fontes, e um `id()` reciclado pelo GC
+        # devolveria a surface da fonte ERRADA. Aqui o cache morre junto com a
+        # fonte, sem chave ambígua possível.
+        self._soften_cache: "OrderedDict[tuple, pygame.Surface]" = OrderedDict()
 
-    def render(self, text, antialias, color, *args, **kwargs):  # type: ignore[override]
+    def _render_softened(self, text, antialias, color, *args, **kwargs):
         surf = super().render(text, antialias, color, *args, **kwargs)
         # Só o caso cristalino (on-grid + AA pedido) precisa de suavização; texto
         # off-grid já vem suave e aliased (antialias=False) deve permanecer duro.
@@ -47,6 +59,48 @@ class _PixelGridFont(pygame.font.Font):
                     surf, (max(1, round(w * frac)), max(1, round(h * frac)))
                 )
                 surf = pygame.transform.smoothscale(small, (w, h))
+        return surf
+
+    def render(self, text, antialias, color, *args, **kwargs):  # type: ignore[override]
+        """Como `Font.render`, memoizando o resultado JÁ suavizado.
+
+        O par de `smoothscale` do `_render_softened` roda para todo texto
+        on-grid, e a UI redesenha os mesmos rótulos a cada frame. Medido na tela
+        de Configurações: 76 `smoothscale` por frame, num frame de 9,33 ms —
+        mais caro que o frame de gameplay inteiro.
+
+        O cache de texto do web (`web/main.py`) NÃO cobria isso: ele substitui
+        `pygame.font.Font.render`, mas esta subclasse sobrescreve `render`, então
+        a chamada entra aqui e só o `super().render()` lá dentro via cache. A
+        rasterização do glifo era reaproveitada; os dois `smoothscale` rodavam
+        sempre. Memoizar no nível certo é aqui.
+
+        **A surface devolvida é COMPARTILHADA** entre chamadas iguais. O padrão
+        do código é `surf = render(...); surf.set_alpha(a); blit(surf)` — o alpha
+        é escrito imediatamente antes de cada blit, então compartilhar é seguro.
+        Quem guardar a surface para mutar depois precisa copiá-la. É a mesma
+        semântica que o cache do web já impõe a todo o texto off-grid.
+        """
+        # Caminho com `background` ou outros extras: raro e com espaço de chaves
+        # aberto — não cacheia, para o cache não virar depósito.
+        if args or kwargs:
+            return self._render_softened(text, antialias, color, *args, **kwargs)
+
+        try:
+            key = (text, bool(antialias), tuple(color))
+        except TypeError:  # cor não iterável (int de índice de paleta, etc.)
+            return self._render_softened(text, antialias, color)
+
+        cache = self._soften_cache
+        surf = cache.get(key)
+        if surf is not None:
+            cache.move_to_end(key)
+            return surf
+
+        surf = self._render_softened(text, antialias, color)
+        cache[key] = surf
+        if len(cache) > self._SOFTEN_CACHE_MAX:
+            cache.popitem(last=False)  # LRU: descarta o menos usado recentemente
         return surf
 
 
