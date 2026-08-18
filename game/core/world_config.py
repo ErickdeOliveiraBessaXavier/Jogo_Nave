@@ -197,6 +197,7 @@ def _get_boss_roadmap() -> dict[int, tuple[BossSlot, ...]]:
     from ..entities.enemies.city.metropolis_overlord_boss import (
         MetropolisOverlordBoss,
     )
+    from ..entities.enemies.city.triad_boss import TriadBoss
     from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
     from ..entities.bosses.slime_boss import SlimeBoss
     from ..entities.bosses.spike_boss import SpikeBoss
@@ -218,7 +219,7 @@ def _get_boss_roadmap() -> dict[int, tuple[BossSlot, ...]]:
             BossSlot(
                 30, "Metropolis Overlord", "implemented", MetropolisOverlordBoss
             ),
-            BossSlot(34, "City Boss 2", "placeholder", GiantMeteorBoss),
+            BossSlot(34, "A Tríade", "implemented", TriadBoss),
             BossSlot(37, "City Boss 3", "placeholder", SlimeBoss),
             BossSlot(40, "City Boss 4 (final)", "placeholder", GiantMeteorBoss),
         ),

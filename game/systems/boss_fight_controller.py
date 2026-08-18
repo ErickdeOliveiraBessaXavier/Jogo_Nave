@@ -319,6 +319,7 @@ class BossFightController:
         from ..entities.enemies.city.metropolis_overlord_boss import (
             MetropolisOverlordBoss,
         )
+        from ..entities.enemies.city.triad_boss import TriadBoss
         from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.bosses.stone_golem_boss import StoneGolemBoss
 
@@ -354,6 +355,13 @@ class BossFightController:
             boss = MetropolisOverlordBoss(
                 Config.SCREEN_WIDTH / 2 - MetropolisOverlordBoss.WIDTH / 2,
                 60,
+                difficulty_multiplier=enemy_health_multiplier,
+                aggressiveness_multiplier=agg,
+                event_bus=self._bus,
+            )
+            self._em.boss = boss
+        elif boss_type == TriadBoss:
+            boss = TriadBoss(
                 difficulty_multiplier=enemy_health_multiplier,
                 aggressiveness_multiplier=agg,
                 event_bus=self._bus,

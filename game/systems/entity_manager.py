@@ -53,6 +53,7 @@ from ..entities.enemies.city.metropolis_overlord_boss import (
     MetropolisOverlordBoss,
 )
 from ..entities.enemies.city.neon_bolt import NeonBolt
+from ..entities.enemies.city.triad_boss import TriadBoss
 from ..entities.enemies.city.splitter_debris import SplitterDebris
 from ..entities.enemies.city.carrier_debris import CarrierDebris
 from ..entities.enemies.city.cargo_carrier import CargoCarrier
@@ -228,6 +229,7 @@ class EntityManager:
             MountainSerpentBoss,
             CloudArchmageBoss,
             MetropolisOverlordBoss,
+            TriadBoss,
             None,
         ] = None
 
