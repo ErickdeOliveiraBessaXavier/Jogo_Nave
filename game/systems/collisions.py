@@ -414,8 +414,18 @@ class Collisions:
         if dx * dx + dy * dy > damage_radius * damage_radius:
             return 0
 
+        # O ponto do hit é onde a EXPLOSÃO ocorreu, não o centro do círculo do
+        # boss. Passar `cx, cy` descartava a única informação real que este
+        # caminho tem — e num chefe que roteia dano por posição isso teleporta o
+        # dano: na Tríade, `collision_circle()` aponta para a cabeça lateral
+        # atacável, então TODA explosão era creditada a ela, mesmo a que
+        # estourava no tronco. Para os demais bosses `cx, cy` e a origem caem no
+        # mesmo corpo; muda só o ponto onde a explosão visual nasce (para o
+        # lugar certo).
         scaled = int(damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-        result = self._apply_hit(boss, scaled, cx, cy, entity_manager, floating_scores)
+        result = self._apply_hit(
+            boss, scaled, source_x, source_y, entity_manager, floating_scores
+        )
         hit_set.add(boss_id)
         return result.points
 
@@ -454,11 +464,19 @@ class Collisions:
                 * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
                 * getattr(proj, "boss_damage_mult", 1.0)
             )
+            # CENTRO do projétil, não o canto: `proj.x/y` é o topo-esquerdo
+            # (`rect.update(int(self.x), int(self.y), w, h)`), então passar isso
+            # desloca o ponto de impacto em (w/2, h/2) — 2×4px numa bala comum,
+            # 5×8px sob Giant Shot. Os outros bosses ignoram a posição (ela só
+            # posicionava a explosão), mas um chefe que ROTEIA dano por ponto de
+            # impacto lê o desvio como "acertei outra parte": na Tríade, tiro
+            # mirado na cabeça central era creditado à cabeça lateral de cima.
+            hit_cx, hit_cy = proj.rect.center
             result = self._apply_hit(
                 boss,
                 damage,
-                proj.x,
-                proj.y,
+                float(hit_cx),
+                float(hit_cy),
                 entity_manager,
                 floating_scores,
                 impact=impact_for_projectile(proj),
@@ -2613,8 +2631,12 @@ class Collisions:
                 damage = int(
                     laser.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER
                 )
-                cx_hit: float = float(boss.rect.centerx)
-                cy_hit: float = float(boss.rect.centery)
+                # Sem ponto de contato rastreado, o mais honesto é o centro
+                # do alvo ATACÁVEL (`collision_circle`, que por convenção segue
+                # a parte vulnerável — ver MountainSerpentBoss). `rect.center`
+                # cai no corpo, que num chefe com partes pode ser justamente a
+                # região intangível: o dano virava MISS e a arma não funcionava.
+                cx_hit, cy_hit, _ = boss.collision_circle()
                 result = self._apply_hit(
                     boss, damage, cx_hit, cy_hit, entity_manager, floating_scores
                 )
@@ -2772,8 +2794,9 @@ class Collisions:
 
             laser.hit_enemies.add(boss_id)
             damage = int(laser.damage * config_instance.BOSS_UPGRADE_DAMAGE_MULTIPLIER)
-            cx_hit: float = float(boss.rect.centerx)
-            cy_hit: float = float(boss.rect.centery)
+            # Mesmo motivo do `orbital_discharges_vs_boss`: alvo atacável, não
+            # o centro do rect (que pode ser a parte intangível do chefe).
+            cx_hit, cy_hit, _ = boss.collision_circle()
             result = self._apply_hit(
                 boss, damage, cx_hit, cy_hit, entity_manager, _floating_scores
             )

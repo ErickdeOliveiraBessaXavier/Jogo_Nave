@@ -1244,12 +1244,22 @@ class GameRenderer:
             pygame.draw.rect(surface, color, (x, y, fill_w, h), border_radius=h // 2)
 
     def _draw_enemy_hitboxes(self, em: EntityManager, surface: pygame.Surface) -> None:
-        """Overlay de hitboxes para depuração visual."""
-        enemies_in_view = em.enemy_spatial_grid.query(
-            0, 0, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT
+        """Overlay de hitboxes para depuração visual (F7).
+
+        Inclui o BOSS. Ele não vive na grade espacial de inimigos — é um slot
+        próprio (`em.boss`) —, então percorrer só a grade deixava justamente o
+        alvo mais complexo da tela de fora. Chefe com hitbox por máscara ou com
+        partes múltiplas (Tríade) é onde este overlay mais vale.
+        """
+        targets: list[Any] = list(
+            em.enemy_spatial_grid.query(0, 0, Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
         )
+        boss = em.boss
+        if boss is not None and not getattr(boss, "dead", False):
+            targets.append(boss)
+
         seen: set[int] = set()
-        for enemy in enemies_in_view:
+        for enemy in targets:
             eid = id(enemy)
             if eid in seen or getattr(enemy, "dead", False):
                 continue
@@ -1266,12 +1276,16 @@ class GameRenderer:
                     mask, offset = raw
                     mask_w, mask_h = mask.get_size()
                     if mask_w > 0 and mask_h > 0:
-                        outline_surf = pygame.Surface((mask_w, mask_h), pygame.SRCALPHA)
-                        for px, py in mask.outline():
-                            pygame.draw.circle(
-                                outline_surf, (255, 120, 0, 220), (px, py), 1
-                            )
-                        surface.blit(outline_surf, offset)
+                        # PREENCHIMENTO, não contorno: `Mask.outline()` devolve o
+                        # contorno de UM componente conectado só, então máscara
+                        # de várias partes (as duas Vozes + o corpo da Tríade)
+                        # aparecia pela metade — justamente o caso em que olhar a
+                        # hitbox importa. O preenchimento mostra a área inteira.
+                        fill = mask.to_surface(
+                            setcolor=(255, 120, 0, 255), unsetcolor=(0, 0, 0, 0)
+                        ).convert_alpha()
+                        fill.set_alpha(90)
+                        surface.blit(fill, offset)
                         has_mask = True
 
             if not has_mask:

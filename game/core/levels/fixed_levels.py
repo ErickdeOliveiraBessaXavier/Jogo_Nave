@@ -32,9 +32,10 @@ from ...entities.enemies.city.city_drone import CityDrone  # noqa: F401
 from ...entities.enemies.city.cyber_captor import CyberCaptor  # noqa: F401
 from ...entities.enemies.city.cyber_tank import CyberTank  # noqa: F401
 from ...entities.enemies.city.jammer_node import JammerNode  # noqa: F401
-from ...entities.enemies.city.metropolis_overlord_boss import (
-    MetropolisOverlordBoss,
+from ...entities.enemies.city.metropolis_overlord_boss import (  # noqa: F401
+    MetropolisOverlordBoss,  # arena de teste: alternativa de chefe da Cidade
 )
+from ...entities.enemies.city.triad_boss import TriadBoss  # noqa: F401  (arena de teste)
 from ...entities.enemies.city.mirror_pylon import MirrorPylon  # noqa: F401
 from ...entities.enemies.city.mortar_drone import MortarDrone  # noqa: F401
 from ...entities.enemies.city.neon_sniper import NeonSniper  # noqa: F401
@@ -516,7 +517,7 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
 # a arena deixa essa lacuna explícita: sem preenchimento com inimigos de outros
 # temas, mostra só o que o tema realmente tem hoje.
 
-TEST_ARENA_ENABLED: bool = False
+TEST_ARENA_ENABLED: bool = True
 
 THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
     # ── MONTANHAS — linhagem própria completa ────────────────────────────────
@@ -558,7 +559,7 @@ THEME_TEST_LEVELS: dict[WorldTheme, LevelConfig] = {
             # MirrorPylon: 2.0,
         },
         enemies_to_clear=1,
-        boss_type=MetropolisOverlordBoss,  # boss nativo da Cidade (em teste)
+        boss_type=TriadBoss,  # A Tríade (nível 34) — trocar aqui p/ testar outro chefe da Cidade
         mines_enabled=True,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_square"],

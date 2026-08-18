@@ -30,6 +30,7 @@ classe é o único ponto que lê um e empurra para o outro.
 from __future__ import annotations
 
 import math
+import random
 from typing import TYPE_CHECKING, List
 
 import pygame
@@ -40,6 +41,7 @@ from ....core.events import EventBus
 from ...bosses.boss_hit_mixin import BossHitMixin
 from . import triad_pixel_map as pmap
 from .triad_head import TriadHead
+from .triad_orb import OrbBehavior, TriadOrb, make_lob
 from .triad_resonance import LEFT, RIGHT, HeadState, ResonanceEvent, ResonanceGate
 
 if TYPE_CHECKING:
@@ -52,6 +54,33 @@ if TYPE_CHECKING:
 # não precisar de reescrita quando elas chegarem.
 _ENTERING = "entering"
 _ACTIVE = "active"
+
+# ── Ciclo de ATAQUE da Fase 1 ("O Coro") ──────────────────────────────────────
+# Uma cabeça de cada vez, sempre. É a fase que ensina o vocabulário, e ela só
+# ensina se cada ataque puder ser observado isolado.
+_ACT_BREATHER = "breather"  # respiro: todas cianas, nada acontece
+_ACT_WINDUP = "windup"      # a cabeça da vez fica LARANJA — o telégrafo
+
+# Wind-up CONSTANTE nas três fases (§7 do plano): o jogador calibra o tempo de
+# reação uma vez e ele vale até o fim. Só a recuperação encurta com a fase.
+_WINDUP_TIME = 0.5
+_BREATHER_PHASE1 = 1.2
+# Piso do respiro: nem a agressividade máxima pode colar dois ataques.
+_BREATHER_FLOOR = 0.45
+
+# Ataques da Fase 1.
+_ATK_CADENCIA = "cadencia"   # leque de 3 teleguiadas fracas (lateral)
+_ATK_CHUVA = "chuva"         # arco para cima, queda irregular (lateral)
+_ATK_PULSO = "pulso"         # anel radial com UMA brecha (Coroa)
+
+_CADENCIA_COUNT = 3
+_CADENCIA_SPREAD = 0.34      # rad entre as pontas do leque
+_CHUVA_COUNT = 4
+_PULSO_SLOTS = 16            # direções do anel
+_PULSO_GAP = 3               # slots consecutivos vazios = a brecha
+
+_CROWN_ACTOR = -1            # "quem age" quando é a cabeça principal
+_MAX_LIVE_ORBS = 40          # trava de segurança do teto de esferas
 
 # ── Cadência de flutuação ─────────────────────────────────────────────────────
 _DRIFT_SPEED = 0.35  # rad/s da deriva lateral
@@ -111,11 +140,17 @@ class TriadBoss(BossHitMixin):
         # Sprite da Coroa (cabeça principal + tronco + halo — uma peça só na arte).
         self._crown = pmap.load_part("crown")
         self._crown_attacking: bool = False
+        # Um índice de frame para as três partes: elas são uma criatura só.
+        self._frame_index: int = 0
+        self._mask_cache: dict[tuple, pygame.mask.Mask] = {}
 
         side_hp = max(1, int(self.max_health * self.SIDE_HP_FRACTION))
+        # A âncora de cada Voz é DERIVADA do sprite (`part_anchor`), não digitada:
+        # a cabeça lateral é um gancho e qualquer ponto "óbvio" — centro do bbox,
+        # centroide da silhueta, centroide do blob — cai no vazio de dentro dele.
         self.heads: List[TriadHead] = [
-            TriadHead(LEFT, "left", side_hp, pmap.LEFT_HEAD_CENTER, pmap.SIDE_HEAD_RADIUS),
-            TriadHead(RIGHT, "right", side_hp, pmap.RIGHT_HEAD_CENTER, pmap.SIDE_HEAD_RADIUS),
+            TriadHead(LEFT, "left", side_hp, pmap.part_anchor("left"), pmap.SIDE_HEAD_RADIUS),
+            TriadHead(RIGHT, "right", side_hp, pmap.part_anchor("right"), pmap.SIDE_HEAD_RADIUS),
         ]
 
         # Pace inverso à dificuldade, como no Archmage: Casual espera mais pela
@@ -126,6 +161,24 @@ class TriadBoss(BossHitMixin):
         self.gate = ResonanceGate(regen_delay=6.0 * pace)
 
         self._ui_scale: float = Config.SCREEN_WIDTH / 1280.0
+
+        # ── Ciclo de ataque (Fase 1) ──────────────────────────────────
+        self._act_state: str = _ACT_BREATHER
+        self._act_timer: float = _BREATHER_PHASE1
+        self._actor: int = _CROWN_ACTOR
+        self._attack: str = _ATK_PULSO
+        self._last_actor: int | None = None
+        self._last_side_attack: str = _ATK_CHUVA
+        # Esferas que ESTE boss soltou e ainda vivem. Serve ao teto de
+        # segurança agora e à Convergência da Fase 3 depois (ela recolhe as
+        # esferas soltas da arena). Lista com teto, então rebuild por
+        # compreensão é aceitável aqui (§6).
+        self._orbs: List[TriadOrb] = []
+        # Agressividade encurta o RESPIRO, nunca o wind-up: o telégrafo é
+        # contrato com o jogador, não botão de dificuldade.
+        self._breather: float = max(
+            _BREATHER_FLOOR, _BREATHER_PHASE1 / max(0.5, aggressiveness_multiplier)
+        )
 
     # ── Geometria ────────────────────────────────────────────────────────────
     @property
@@ -170,7 +223,12 @@ class TriadBoss(BossHitMixin):
         return circles
 
     def get_ship_contact_hitboxes(self) -> List[pygame.Rect]:
-        """Rects para o pré-filtro AABB; a validação fina usa `collision_circles`."""
+        """Rects por parte, para consumidores que pedem retângulo.
+
+        Não é mais o caminho da colisão de tiro: com `get_collision_mask_data`
+        presente, o `_rect_collides_with_enemy` resolve tudo por máscara e nem
+        chega aqui.
+        """
         cx, cy, r = self._crown_circle()
         ir = int(r)
         rects = [pygame.Rect(int(cx - ir), int(cy - ir), ir * 2, ir * 2)]
@@ -178,6 +236,87 @@ class TriadBoss(BossHitMixin):
             if head.damageable:
                 rects.append(head.contact_rect())
         return rects
+
+    # ── Área de dano por PIXEL ───────────────────────────────────────────────
+    def _blit_origin(self) -> tuple[int, int]:
+        return (int(self.x) + pmap.BLIT_OFFSET_X, int(self.y) + pmap.BLIT_OFFSET_Y)
+
+    def _mask_key(self) -> tuple:
+        """Identidade do conjunto de máscaras em cena, para o cache.
+
+        Espaço de chaves minúsculo (frames × cabeças presentes × flags de
+        ataque), então o cache satura em poucos segundos de luta e nunca mais
+        recombina — daí não precisar de despejo.
+        """
+        return (
+            self._frame_index,
+            self._crown_attacking,
+            *[
+                (h.damageable, h.attacking, h.body_state)
+                for h in self.heads
+            ],
+        )
+
+    def _combined_mask(self) -> pygame.mask.Mask | None:
+        """União das máscaras das partes em cena — a área de dano do boss.
+
+        A Coroa entra MESMO intangível: é o que faz o tiro parar nela e o "MISS"
+        aparecer em vez de o projétil atravessar em silêncio. Cabeça no DOWN não
+        entra, então o soquete vazio é atravessável.
+        """
+        key = self._mask_key()
+        cached = self._mask_cache.get(key)
+        if cached is not None:
+            return cached
+
+        crown_mask = self._crown.mask(self._frame_index, self._crown_attacking)
+        if crown_mask is None:
+            return None
+        combined = crown_mask.copy()
+        for head in self.heads:
+            head_mask = head.current_mask()
+            if head_mask is not None:
+                # Todas as partes vivem na MESMA tela de 64×64 escalada, então a
+                # união é offset (0, 0) — nenhum alinhamento a calcular.
+                combined.draw(head_mask, (0, 0))
+
+        self._mask_cache[key] = combined
+        return combined
+
+    def get_collision_mask_data(self) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
+        """Contrato de colisão por pixel (`collision_physics.get_enemy_collision_mask_data`).
+
+        Devolver isto faz o `_rect_collides_with_enemy` usar a silhueta REAL do
+        PNG e ignorar rect/círculos: o tiro só acerta onde há pixel desenhado.
+        Vale para projéteis do jogador e para o contato da nave.
+        """
+        mask = self._combined_mask()
+        if mask is None:
+            return None
+        return mask, self._blit_origin()
+
+    def _part_at(self, px: float, py: float) -> "TriadHead | TriadBoss | None":
+        """Qual parte tem PIXEL desenhado no ponto do impacto.
+
+        As laterais são testadas primeiro: elas e o tronco se sobrepõem em 2
+        pixels na arte, e nesse empate a Voz deve ganhar (é o alvo obrigatório).
+        Devolve None quando o ponto não cai em pixel nenhum — caso do dano em
+        área, que aplica o hit no centro de um círculo e não numa silhueta.
+        """
+        ox, oy = self._blit_origin()
+        lx, ly = int(px - ox), int(py - oy)
+        size = pmap.FRAME * pmap.PIXEL_SCALE
+        if not (0 <= lx < size and 0 <= ly < size):
+            return None
+
+        for head in self.heads:
+            head_mask = head.current_mask()
+            if head_mask is not None and head_mask.get_at((lx, ly)):
+                return head
+        crown_mask = self._crown.mask(self._frame_index, self._crown_attacking)
+        if crown_mask is not None and crown_mask.get_at((lx, ly)):
+            return self
+        return None
 
     # ── Dano ─────────────────────────────────────────────────────────────────
     def can_take_damage(self) -> bool:
@@ -194,23 +333,70 @@ class TriadBoss(BossHitMixin):
         if not self.can_take_damage() or damage <= 0:
             return NO_HIT
 
-        # 1) Tiro que entrou na Coroa com o portão fechado: MISS explícito.
-        #    Testado ANTES do roteamento porque é uma resposta sobre o ponto de
-        #    impacto, não sobre qual parte está mais perto.
-        if not self.gate.crown_vulnerable and self._inside_crown(hit_x, hit_y):
-            self._trigger_miss(hit_x, hit_y)
-            return NO_HIT
-
-        target = self._nearest_damageable(hit_x, hit_y)
+        # Roteamento por PIXEL: quem levou o tiro é a parte que tem conteúdo
+        # desenhado no ponto de impacto. O fallback por proximidade cobre o dano
+        # em área, que não tem ponto de impacto real — ele aplica o hit no centro
+        # do `collision_circle`, que pode cair num pixel vazio.
+        target = self._part_at(hit_x, hit_y)
+        if target is None:
+            target = self._fallback_target(hit_x, hit_y)
         if target is None:
             return NO_HIT
+
         if target is self:
+            if not self.gate.crown_vulnerable:
+                self._trigger_miss(hit_x, hit_y)
+                return NO_HIT
             return self._damage_crown(damage)
         return self._damage_head(target, damage)
 
-    def _inside_crown(self, px: float, py: float) -> bool:
-        cx, cy, r = self._crown_circle()
-        return (px - cx) ** 2 + (py - cy) ** 2 <= r * r
+    def _fallback_target(self, px: float, py: float) -> "TriadHead | TriadBoss | None":
+        """Quem responde quando o impacto não caiu sobre parte nenhuma.
+
+        DENTRO do corpo → é a Coroa. O tronco é desenho de LINHA e quase todo
+        oco: o projétil encosta num traço (a colisão vale, é a máscara que manda)
+        mas o centro dele cai num vão. Sem esta regra o tiro caía no "parte
+        atacável mais próxima" e era creditado a uma Voz — tiro na base do torso,
+        em y 52, virava dano numa cabeça que termina em y 37. Era o sintoma
+        relatado em playtest, e o mais difícil de ver: só acontece nos VÃOS.
+
+        A comparação é entre DISTÂNCIAS A SUPERFÍCIES, não a pontos:
+
+          * o corpo é o `rect` inteiro — distância 0 em qualquer lugar dentro
+            dele, e a distância à borda fora dele;
+          * cada Voz é o CÍRCULO dela — distância ao centro menos o raio.
+
+        Medir a Coroa por um ponto (o centro da cabeça dela) era o furo: um tiro
+        na ponta de baixo do losango fica a ~35px do centro da Coroa e a ~24px do
+        centro de uma Voz, então a Voz "ganhava" um impacto que aconteceu no
+        torso. Pior, o jogador atira DE BAIXO: quando a ponta do projétil toca a
+        base do corpo, o centro dele ainda está um pixel ABAIXO do rect — ou
+        seja, o ponto mais atingido da luta inteira caía sempre fora e era
+        creditado a uma cabeça.
+        """
+        r = self.rect
+        dx = max(r.left - px, 0.0, px - r.right)
+        dy = max(r.top - py, 0.0, py - r.bottom)
+        dist_body = math.hypot(dx, dy)
+        if dist_body <= 0.0:
+            # DENTRO do corpo e sem parte sob o ponto: é vão do traço, e vão de
+            # traço é da Coroa, sem disputa. Deixar as Vozes competirem aqui
+            # devolveria o bug por outra porta — o círculo de uma Voz cobre o
+            # oco entre o rosto e o filamento, que é território do corpo.
+            return self
+
+        best: "TriadHead | None" = None
+        best_d = float("inf")
+        for head in self.heads:
+            if not head.damageable:
+                continue
+            d = math.hypot(px - head.center_x, py - head.center_y) - head.radius
+            if d < best_d:
+                best, best_d = head, d
+
+        if best is not None and best_d < dist_body:
+            return best
+        return self
 
     def _nearest_damageable(self, px: float, py: float) -> "TriadHead | TriadBoss | None":
         """Parte atacável de centro mais próximo do impacto.
@@ -306,14 +492,18 @@ class TriadBoss(BossHitMixin):
     def update_boss(self, dt: float, ctx: "BossUpdateContext") -> "BossUpdateResult":
         from ....systems.boss_context import BossUpdateResult
 
-        self.update(dt)
-        # Ainda sem emissões: esta etapa é o esqueleto + o portão (etapas 1-2 do
-        # plano). Os ataques entram nas etapas 3-7 e preenchem este resultado.
-        return BossUpdateResult()
+        py = ctx.player_y if ctx.player_y is not None else Config.SCREEN_HEIGHT * 0.8
+        spawned = self.update(dt, (ctx.player_x, py))
+        result = BossUpdateResult()
+        if spawned:
+            result.spawned_enemies = list(spawned)
+        return result
 
-    def update(self, dt: float) -> None:
+    def update(
+        self, dt: float, player_pos: tuple[float, float] | None = None
+    ) -> List[TriadOrb]:
         if self.dead:
-            return
+            return []
 
         self._time += dt
         self._hit_flash = max(0.0, self._hit_flash - dt)
@@ -326,8 +516,19 @@ class TriadBoss(BossHitMixin):
 
         self._update_gate(dt)
 
+        self._frame_index = int(self._time * pmap.ANIM_FPS)
         for head in self.heads:
-            head.update(dt, self.x, self.y, self.gate.remat_progress(head.slot))
+            head.update(
+                dt,
+                self.x,
+                self.y,
+                self.gate.remat_progress(head.slot),
+                self._frame_index,
+            )
+
+        if self._state != _ACTIVE or player_pos is None:
+            return []
+        return self._update_attack_cycle(dt, player_pos)
 
     def _update_entering(self, dt: float) -> None:
         self.x += (self._home_x - self.x) * _ENTER_SPEED * dt
@@ -368,6 +569,151 @@ class TriadBoss(BossHitMixin):
             else:
                 head.enter_down()
 
+    # ── Ciclo de ataque — Fase 1, "O Coro" ───────────────────────────────────
+    def _update_attack_cycle(
+        self, dt: float, player_pos: tuple[float, float]
+    ) -> List[TriadOrb]:
+        """Respiro → wind-up (laranja) → disparo → respiro. Uma cabeça por vez.
+
+        FSM com sentinela, não cadência periódica: cada estado tem duração
+        própria e o próximo é escolhido no fim. O §14 lista esse caso como um
+        dos que NÃO migram para `FireTimer`. A sobra do frame é carregada para o
+        estado seguinte mesmo assim — descartá-la faria o ciclo render um número
+        inteiro de frames em vez do tempo configurado.
+        """
+        self._act_timer -= dt
+        if self._act_timer > 0.0:
+            return []
+
+        sobra = -self._act_timer  # quanto o timer passou de zero neste frame
+
+        if self._act_state == _ACT_BREATHER:
+            self._begin_windup()
+            self._act_timer = _WINDUP_TIME - sobra
+            return []
+
+        # Fim do wind-up: a cabeça laranja cumpre o que prometeu.
+        orbs = self._fire_current_attack(player_pos)
+        self._clear_telegraph()
+        self._act_state = _ACT_BREATHER
+        self._act_timer = self._breather - sobra
+        return orbs
+
+    def _begin_windup(self) -> None:
+        """Escolhe quem age e acende o LARANJA. Laranja nunca mente (§7)."""
+        self._actor = self._pick_actor()
+        self._attack = self._pick_attack(self._actor)
+        self._act_state = _ACT_WINDUP
+        if self._actor == _CROWN_ACTOR:
+            self._crown_attacking = True
+        else:
+            self.heads[self._actor].attacking = True
+
+    def _clear_telegraph(self) -> None:
+        self._crown_attacking = False
+        for head in self.heads:
+            head.attacking = False
+
+    def _pick_actor(self) -> int:
+        """Round-robin entre quem PODE agir, sem repetir o ator anterior.
+
+        Cabeça derrubada ou em brasa não ataca — ela não está lá. Com as duas
+        fora, a Coroa fica sozinha em cena e age em todo turno, o que é a leitura
+        certa: é o momento em que ela está exposta e pressionando sozinha.
+        """
+        candidatos = [h.slot for h in self.heads if self.gate.is_solid(h.slot)]
+        candidatos.append(_CROWN_ACTOR)
+        if len(candidatos) > 1 and self._last_actor in candidatos:
+            candidatos.remove(self._last_actor)
+        escolhido = candidatos[0] if len(candidatos) == 1 else random.choice(candidatos)
+        self._last_actor = escolhido
+        return escolhido
+
+    def _pick_attack(self, actor: int) -> str:
+        if actor == _CROWN_ACTOR:
+            return _ATK_PULSO
+        # As duas laterais alternam Cadência e Chuva: uma é pressão direta e a
+        # outra é controle de área, então alternar mantém as duas na memória do
+        # jogador em vez de deixar uma virar a "padrão".
+        self._last_side_attack = (
+            _ATK_CHUVA if self._last_side_attack == _ATK_CADENCIA else _ATK_CADENCIA
+        )
+        return self._last_side_attack
+
+    # ── Emissões ─────────────────────────────────────────────────────────────
+    def _fire_current_attack(self, player_pos: tuple[float, float]) -> List[TriadOrb]:
+        self._prune_orbs()
+        livres = _MAX_LIVE_ORBS - len(self._orbs)
+        if livres <= 0:
+            return []
+
+        if self._attack == _ATK_PULSO:
+            orbs = self._fire_pulso()
+        elif self._attack == _ATK_CADENCIA:
+            orbs = self._fire_cadencia(player_pos)
+        else:
+            orbs = self._fire_chuva()
+
+        orbs = orbs[:livres]
+        self._orbs.extend(orbs)
+        return orbs
+
+    def _prune_orbs(self) -> None:
+        self._orbs = [o for o in self._orbs if not o.dead]
+
+    def _actor_origin(self) -> tuple[float, float]:
+        if self._actor == _CROWN_ACTOR:
+            cx, cy = pmap.CORE_CENTER  # as esferas nascem do núcleo do peito
+            return self.x + cx, self.y + cy
+        head = self.heads[self._actor]
+        return head.center_x, head.center_y
+
+    def _fire_cadencia(self, player_pos: tuple[float, float]) -> List[TriadOrb]:
+        """Leque de 3 teleguiadas fracas. Pressão direta, dodge simples."""
+        ox, oy = self._actor_origin()
+        base = math.atan2(player_pos[1] - oy, player_pos[0] - ox)
+        orbs: List[TriadOrb] = []
+        for i in range(_CADENCIA_COUNT):
+            desvio = (i - (_CADENCIA_COUNT - 1) / 2.0) * _CADENCIA_SPREAD
+            orbs.append(
+                TriadOrb(ox, oy, OrbBehavior.SEEKER, angle=base + desvio, color=self._palette())
+            )
+        return orbs
+
+    def _fire_chuva(self) -> List[TriadOrb]:
+        """Arco para cima e queda irregular — controle de área.
+
+        A deriva aponta para o CENTRO da arena (não para o jogador): a Chuva nega
+        espaço, não persegue. Perseguir seria a Cadência de novo, com outra
+        aparência.
+        """
+        ox, oy = self._actor_origin()
+        rumo = 1.0 if ox < Config.SCREEN_WIDTH / 2 else -1.0
+        return [make_lob(ox, oy, rumo, self._palette()) for _ in range(_CHUVA_COUNT)]
+
+    def _fire_pulso(self) -> List[TriadOrb]:
+        """Anel radial com UMA brecha. Leitura puramente posicional.
+
+        A brecha é sorteada dentro do hemisfério INFERIOR: o jogador está
+        embaixo, e uma brecha no topo seria uma brecha que não existe para ele.
+        """
+        ox, oy = self._actor_origin()
+        passo = math.tau / _PULSO_SLOTS
+        # Slots cuja direção aponta para baixo (y cresce para baixo na tela).
+        inferiores = [i for i in range(_PULSO_SLOTS) if math.sin(i * passo) > 0.25]
+        inicio_brecha = random.choice(inferiores) if inferiores else 0
+        brecha = {(inicio_brecha + k) % _PULSO_SLOTS for k in range(_PULSO_GAP)}
+        cor = self._palette()
+        return [
+            TriadOrb(ox, oy, OrbBehavior.RING, angle=i * passo, color=cor)
+            for i in range(_PULSO_SLOTS)
+            if i not in brecha
+        ]
+
+    def _palette(self) -> tuple[int, int, int]:
+        """Cor das esferas. Vira laranja quando o boss vira (Fase 3)."""
+        return pmap.CYAN
+
     def _emit_shake(self, duration: float, intensity: int) -> None:
         if self._bus is None:
             return
@@ -381,15 +727,19 @@ class TriadBoss(BossHitMixin):
         if self.dead:
             return
 
-        origin = (
-            int(self.x) + pmap.BLIT_OFFSET_X,
-            int(self.y) + pmap.BLIT_OFFSET_Y,
-        )
+        origin = self._blit_origin()
 
-        # Coroa primeiro: as laterais se sobrepõem a ela na arte montada.
+        # ORDEM DE CAMADAS: tronco/Coroa primeiro (embaixo), depois as laterais.
+        # Medido: as partes só se sobrepõem em 2 pixels, e as duas ordens
+        # reproduzem o `Imagem_Boss_Completo_Exemplo.png` com ZERO divergência
+        # visível — a arte foi desenhada para não depender de empilhamento. A
+        # ordem fica fixa aqui mesmo assim, porque as fases seguintes deslocam as
+        # cabeças (a Sentença manda as laterais para as bordas) e aí a
+        # sobreposição passa a existir de verdade.
         white = self._hit_flash > 0.0
-        index = int(self._time * 6.0)
-        crown_frame = self._crown.frame(index, self._crown_attacking, white=white)
+        crown_frame = self._crown.frame(
+            self._frame_index, self._crown_attacking, white=white
+        )
         if crown_frame is not None:
             surface.blit(crown_frame, origin)
 

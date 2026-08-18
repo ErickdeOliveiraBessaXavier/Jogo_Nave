@@ -34,7 +34,6 @@ class TriadHead:
     EMBER_HP_FRACTION: float = 0.25
 
     _HIT_FLASH_TIME: float = 0.08
-    _ANIM_FPS: float = 6.0
 
     def __init__(
         self,
@@ -62,7 +61,10 @@ class TriadHead:
         self.attacking: bool = False
 
         self._sprites = pmap.load_part(part_key)
-        self._anim_time: float = 0.0
+        # Índice de frame vem do BOSS, não de um relógio próprio: as três
+        # cabeças são uma criatura só e precisam respirar em sincronia. Com
+        # relógios independentes elas dessincronizam e o conjunto tremula.
+        self._frame_index: int = 0
         self._hit_flash: float = 0.0
         # 1.0 = sólida e opaca; abaixo disso é brasa remontando.
         self._alpha_scale: float = 1.0
@@ -113,6 +115,17 @@ class TriadHead:
     def collision_circle(self) -> tuple[float, float, float]:
         return self.center_x, self.center_y, self.radius
 
+    def current_mask(self) -> "pygame.mask.Mask | None":
+        """Máscara do frame que está na tela, ou None se a cabeça não é alvo.
+
+        É a área de dano da Voz: só os pixels desenhados do PNG. Uma cabeça no
+        DOWN devolve None e some da máscara combinada do boss — tiro naquele
+        soquete atravessa, que é o comportamento certo.
+        """
+        if not self._damageable:
+            return None
+        return self._sprites.mask(self._frame_index, self.attacking)
+
     def contact_rect(self) -> pygame.Rect:
         """Rect para o pré-filtro AABB; a validação fina é o círculo acima."""
         r = int(self.radius)
@@ -137,11 +150,16 @@ class TriadHead:
 
     # ── Tick e render ────────────────────────────────────────────────────────
     def update(
-        self, dt: float, boss_x: float, boss_y: float, remat_progress: float
+        self,
+        dt: float,
+        boss_x: float,
+        boss_y: float,
+        remat_progress: float,
+        frame_index: int,
     ) -> None:
         self.center_x = boss_x + self.offset_x
         self.center_y = boss_y + self.offset_y
-        self._anim_time += dt
+        self._frame_index = frame_index
         self._hit_flash = max(0.0, self._hit_flash - dt)
         if self.body_state is HeadState.REMAT:
             # Brasa montando: o alpha É a barra de progresso da remontagem, e é
@@ -159,8 +177,7 @@ class TriadHead:
         if not self._visible:
             return
         white = self._hit_flash > 0.0
-        index = int(self._anim_time * self._ANIM_FPS)
-        frame = self._sprites.frame(index, self.attacking, white=white)
+        frame = self._sprites.frame(self._frame_index, self.attacking, white=white)
         if frame is None:
             return
         if self._alpha_scale >= 1.0:
