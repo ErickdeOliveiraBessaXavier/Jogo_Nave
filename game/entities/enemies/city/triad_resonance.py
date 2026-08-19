@@ -217,6 +217,25 @@ class ResonanceGate:
 
         return events
 
+    def restore_all(self) -> None:
+        """Devolve as duas Vozes ao SOLID na hora — a Sentença remontando o boss.
+
+        Conta como retorno normal (`_returns` avança, a fração decai): a
+        transição não pode zerar a convergência da luta, senão cada Sentença
+        devolveria duas cabeças cheias e o jogador andaria para trás.
+        """
+        if self._disabled:
+            return
+        for i in _SLOTS:
+            self._return_hp[i] = self._compute_return_fraction(self._returns[i])
+            self._returns[i] += 1
+            self._state[i] = HeadState.SOLID
+            self._remat_t[i] = 0.0
+        self._delay_left = 0.0
+        self._window_left = 0.0
+        self._clock_armed = False
+        self._was_open = False
+
     # ── Fase 3: o portão cai de vez ──────────────────────────────────────────
     def disable(self) -> None:
         """Desliga o portão: a Coroa passa a ser sempre atacável (Fase 3).

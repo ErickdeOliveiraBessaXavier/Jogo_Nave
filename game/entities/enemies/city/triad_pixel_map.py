@@ -23,6 +23,8 @@ velocidades e efeitos transitórios.
 
 from __future__ import annotations
 
+import colorsys
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
@@ -363,3 +365,225 @@ def part_anchor(part: str) -> tuple[float, float]:
     anchor = _rel(sx, sy)
     _anchor_cache[part] = anchor
     return anchor
+
+
+# ── Orientação e boca: para a cabeça poder MIRAR ──────────────────────────────
+# A Sentença tira as Vozes do corpo e as faz disparar em qualquer direção. Duas
+# coisas passam a precisar de resposta, e nenhuma delas pode sair do tamanho da
+# IMAGEM — o PNG é uma tela de 64×64 com o desenho ocupando 15×24 num canto:
+#
+#   * **para onde a cabeça olha em repouso** (`part_facing`), para saber quanto
+#     girar o sprite e o rosto acabar apontado para o feixe;
+#   * **de onde o feixe sai** (`part_muzzle`), que é a FRENTE DO ROSTO e não o
+#     centro da imagem — a diferença é de ~20px, e é ela que faz o feixe nascer
+#     na boca em vez de no vazio ao lado da cabeça.
+#
+# As duas são DERIVADAS da arte. O rosto de uma Voz é a coluna EXTERNA da
+# silhueta (ver `HEAD_DAMAGE_RECTS`), então a Voz olha para FORA do corpo: a
+# esquerda para −x, a direita para +x. É isso que `part_facing` mede — não um
+# número digitado que envelhece no primeiro repaint.
+
+_FULL: int = FRAME * PIXEL_SCALE
+
+# Passo de quantização do giro. Pixel art girada por `transform.rotate` já é
+# chunky; 7,5° é fino o bastante para o rosto acompanhar o feixe sem o cache
+# explodir (48 entradas por parte no pior caso, contra centenas por ângulo cru).
+ROT_STEPS: int = 48
+
+
+def part_facing(part: str) -> float:
+    """Ângulo (rad, y para baixo) para onde a parte olha no sprite em repouso.
+
+    Derivado: o rosto é a metade EXTERNA da silhueta, então a Voz olha para o
+    lado oposto ao centro do corpo. Medir em vez de digitar mantém isto correto
+    se a arte for espelhada ou redesenhada.
+    """
+    ax, _ = part_anchor(part)
+    centro = CONTENT_W * PIXEL_SCALE / 2.0
+    return math.pi if ax <= centro else 0.0
+
+
+_muzzle_cache: Dict[str, tuple[float, float]] = {}
+
+# Quanto a boca fica ABAIXO da âncora, como fração da distância da âncora até o
+# queixo. A âncora cai na altura do olho (é o centroide do blob do rosto), e um
+# feixe saindo dali lê como "sai da testa". 0,55 põe a emissão entre o olho e o
+# queixo, que é onde a boca está desenhada.
+#
+# É o único número escolhido a olho neste módulo, e é escolhido em FRAÇÃO do
+# rosto justamente para sobreviver a um repaint: o queixo é medido na máscara, e
+# se a arte mudar de tamanho a boca acompanha.
+MOUTH_DROP: float = 0.55
+
+
+def _march(mask: "pygame.mask.Mask", px: float, py: float, dx: float, dy: float) -> float:
+    """Distância de (px, py) até o último pixel ACESO na direção (dx, dy)."""
+    ultimo = 0.0
+    dist = 0.0
+    while dist < float(_FULL):
+        dist += 1.0
+        ix, iy = int(px + dx * dist), int(py + dy * dist)
+        if not (0 <= ix < _FULL and 0 <= iy < _FULL):
+            break
+        if mask.get_at((ix, iy)):
+            ultimo = dist
+    return ultimo
+
+
+def part_muzzle(part: str) -> tuple[float, float]:
+    """Deslocamento da âncora até a BOCA, no sprite sem girar.
+
+    Dois passos, os dois medidos na máscara do rosto:
+
+    1. **Desce** da âncora (que fica na altura do olho) rumo ao queixo, parando
+       em `MOUTH_DROP` do caminho — é ali que a boca está desenhada. Sem esta
+       descida o feixe sai do meio da cabeça e parece atravessá-la em vez de ser
+       cuspido por ela.
+    2. **Avança** dali na direção do olhar até sair da área desenhada; o último
+       ponto aceso é a frente do rosto.
+
+    Usar a âncora crua deixaria o feixe nascendo no meio da cabeça, e usar o
+    centro da imagem o deixaria nascendo no espaço negativo do PNG, a dezenas de
+    pixels do desenho. O vetor devolvido gira junto com a mira (ver `TriadCaster.
+    muzzle`), então a boca continua sendo a boca em qualquer ângulo.
+    """
+    cached = _muzzle_cache.get(part)
+    if cached is not None:
+        return cached
+
+    sprites = load_part(part)
+    mask = sprites.mask(0, attacking=False)
+    ax, ay = part_anchor(part)
+    if mask is None or mask.count() == 0:
+        _muzzle_cache[part] = (0.0, 0.0)
+        return 0.0, 0.0
+
+    ang = part_facing(part)
+    dx, dy = math.cos(ang), math.sin(ang)
+    # A máscara vive na tela cheia de 64×64 escalada; a âncora é relativa ao
+    # canto da caixa de conteúdo. Converte antes de caminhar.
+    px = ax + CONTENT_X0 * PIXEL_SCALE
+    py = ay + CONTENT_Y0 * PIXEL_SCALE
+
+    queixo = _march(mask, px, py, 0.0, 1.0)
+    desce = queixo * MOUTH_DROP
+    frente = _march(mask, px, py + desce, dx, dy)
+    # Meio pixel de arte além do último aceso: o feixe encosta na borda do
+    # desenho em vez de nascer um pixel para dentro dele.
+    avanco = frente + PIXEL_SCALE * 0.5
+    muzzle = (dx * avanco, desce + dy * avanco)
+    _muzzle_cache[part] = muzzle
+    return muzzle
+
+
+def rotate_offset(vx: float, vy: float, delta: float) -> tuple[float, float]:
+    """Gira um vetor no espaço da TELA (y para baixo)."""
+    c, s = math.cos(delta), math.sin(delta)
+    return vx * c - vy * s, vx * s + vy * c
+
+
+@dataclass(frozen=True)
+class _Cropped:
+    """Recorte do desenho, sem o espaço negativo do PNG, mais a âncora dentro dele.
+
+    Girar a tela de 64×64 inteira produziria uma surface de 453×453 quase toda
+    transparente **por ângulo cacheado** — ~800 KB cada. O recorte é ~75×120 e
+    cai para ~80 KB, e é o que torna o cache de giro viável.
+    """
+
+    surface: pygame.Surface
+    anchor_x: float
+    anchor_y: float
+
+
+_crop_cache: Dict[tuple[str, bool], _Cropped] = {}
+
+
+def cropped_part(part: str, attacking: bool = True) -> _Cropped | None:
+    key = (part, attacking)
+    cached = _crop_cache.get(key)
+    if cached is not None:
+        return cached
+
+    sprites = load_part(part)
+    frame = sprites.frame(0, attacking)
+    if frame is None:
+        return None
+    caixa = pygame.mask.from_surface(frame).get_bounding_rects()
+    if not caixa:
+        return None
+    uniao = caixa[0].unionall(caixa[1:]) if len(caixa) > 1 else caixa[0]
+    recorte = frame.subsurface(uniao).copy()
+    ax, ay = part_anchor(part)
+    croppedout = _Cropped(
+        recorte,
+        ax + CONTENT_X0 * PIXEL_SCALE - uniao.x,
+        ay + CONTENT_Y0 * PIXEL_SCALE - uniao.y,
+    )
+    _crop_cache[key] = croppedout
+    return croppedout
+
+
+_rot_cache: Dict[tuple[str, bool, int], tuple[pygame.Surface, float, float]] = {}
+
+
+def aimed_part(
+    part: str, aim: float, attacking: bool = True
+) -> tuple[pygame.Surface, float, float] | None:
+    """Sprite girado para olhar em `aim`, com o offset que fixa a ÂNCORA.
+
+    Devolve `(surface, ox, oy)`: blitar em `(âncora_x + ox, âncora_y + oy)` põe o
+    ponto de ancoragem da arte exatamente sobre a âncora do mundo, em qualquer
+    ângulo. Sem isso a cabeça "escorrega" enquanto gira, porque `transform.rotate`
+    preserva o CENTRO da imagem — e o centro da imagem não é o centro do desenho.
+    """
+    base = cropped_part(part, attacking)
+    if base is None:
+        return None
+    delta = aim - part_facing(part)
+    passo = int(round(delta / math.tau * ROT_STEPS)) % ROT_STEPS
+    key = (part, attacking, passo)
+    cached = _rot_cache.get(key)
+    if cached is not None:
+        return cached
+
+    quantizado = passo * math.tau / ROT_STEPS
+    # `transform.rotate` gira no sentido anti-horário da TELA, que é o horário
+    # do nosso referencial de y para baixo — daí o sinal negativo.
+    girado = pygame.transform.rotate(base.surface, -math.degrees(quantizado))
+    largura, altura = base.surface.get_size()
+    vx = base.anchor_x - largura / 2.0
+    vy = base.anchor_y - altura / 2.0
+    rx, ry = rotate_offset(vx, vy, quantizado)
+    nova_l, nova_a = girado.get_size()
+    resultado = (girado, -(nova_l / 2.0 + rx), -(nova_a / 2.0 + ry))
+    _rot_cache[key] = resultado
+    return resultado
+
+
+# ── Variação de matiz por ataque ──────────────────────────────────────────────
+# Cada ataque ganha o SEU ciano — e, na Fase 3, o seu laranja. A ideia é que o
+# jogador reconheça a salva pelo tom antes de reconhecer pelo movimento, o que dá
+# meio segundo a mais de leitura quando duas coisas acontecem juntas.
+#
+# O deslocamento é de MATIZ apenas, e curto (±20° no máximo). Mexer em saturação
+# ou brilho brigaria com dois contratos já estabelecidos: o alpha comunica estado
+# (brasa remontando, esfera nascendo) e a troca ciano↔laranja é o telégrafo do
+# wind-up. Só o matiz sobra livre — e ele basta, porque o olho separa
+# verde-azulado de azul-arroxeado num piscar mesmo em objetos pequenos.
+_tint_cache: Dict[tuple, tuple[int, int, int]] = {}
+
+
+def tinted(base: tuple[int, int, int], hue_shift: float) -> tuple[int, int, int]:
+    """`base` com o matiz deslocado de `hue_shift` (volta em 1,0), saturação e
+    brilho intactos. Memoizado: a tabela de deslocamentos é fixa e pequena."""
+    if not hue_shift:
+        return base
+    key = (base, round(hue_shift, 4))
+    cor = _tint_cache.get(key)
+    if cor is None:
+        h, ll, ss = colorsys.rgb_to_hls(*(c / 255.0 for c in base))
+        r, g, b = colorsys.hls_to_rgb((h + hue_shift) % 1.0, ll, ss)
+        cor = (int(round(r * 255)), int(round(g * 255)), int(round(b * 255)))
+        _tint_cache[key] = cor
+    return cor

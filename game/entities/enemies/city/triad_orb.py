@@ -62,9 +62,42 @@ _SEEKER_SPEED = 190.0
 _SEEKER_TURN_RATE = 1.15  # rad/s — angular, NÃO escala com resolução
 _SEEKER_HOMING_TIME = 1.2  # depois disso desiste e segue reto
 
-_LOB_RISE = -300.0
-_LOB_GRAVITY = 430.0
-_LOB_DRIFT = 55.0
+# ── Chuva: SUBIR → ESTAGNAR → DESCER serpenteando ─────────────────────────────
+# Três tempos, e a pausa no meio é o que faz o ataque ser legível: as esferas
+# sobem, PARAM espalhadas no alto — simetricamente, o que o olho lê como
+# formação e não como bagunça — e só então começam a cair devagar. O jogador vê
+# a formação inteira montada antes de ela virar ameaça, e escolhe por onde vai
+# passar com tempo.
+#
+# A parábola antiga não dava isso: subida e queda eram um movimento só, então a
+# ameaça chegava junto com a leitura.
+_LOB_RISE_TIME = 0.75    # subida, com desaceleração até parar no ponto
+_LOB_HOLD_TIME = 0.55    # estagnação lá em cima — a janela de leitura
+_LOB_FALL_SPEED = 125.0  # queda LENTA: dá para atravessar a formação andando
+_LOB_WEAVE_AMP = 42.0    # amplitude do serpenteio na descida
+_LOB_WEAVE_FREQ = 3.1
+
+# ── Âncoras (minas): permanentes ──────────────────────────────────────────────
+# Não expiram. Só somem quando levam tiro ou quando o chefe morre. Vira terreno,
+# não projétil: o jogador decide se gasta tiro limpando o caminho ou se convive
+# com o espaço negado. O teto de quantidade em tela é do BOSS (`_ANCORA_MAX`) —
+# é ele que sabe quantas já colocou.
+_ANCHOR_LIFETIME = float("inf")
+
+# ── Pulsação ──────────────────────────────────────────────────────────────────
+# Toda esfera respira. É a assinatura visual do vocabulário: "energia contida",
+# não "bolinha". A fase é própria de cada uma, senão o conjunto pisca em bloco e
+# lê como erro de render. O raio é quantizado no draw, então o cache de halo
+# continua fechando em poucas entradas.
+_PULSE_FREQ = 6.4
+_PULSE_AMP = 0.20
+_LOB_WEAVE_RAMP = 0.45   # segundos até a amplitude cheia, para não sair torto
+
+# Serpenteio da Cadência. Ela persegue E oscila: o jogador vê que vem atrás dele,
+# mas não consegue ler a posição exata do próximo instante — a esquiva vira
+# leitura de fase, não de linha reta.
+_SEEKER_WEAVE_AMP = 78.0
+_SEEKER_WEAVE_FREQ = 4.2
 
 _ERRATIC_SPEED = 135.0
 _ERRATIC_CORRECTION_INTERVAL = 0.5
@@ -72,12 +105,59 @@ _ERRATIC_TURN_STEP = 0.42  # rad por espasmo
 _ERRATIC_WOBBLE_FREQ = 5.5
 _ERRATIC_WOBBLE_AMP = 62.0
 
-_ANCHOR_LIFETIME = 6.0
-_ANCHOR_FADE = 0.7  # últimos segundos: pisca avisando que vai sumir
 
 _RING_SPEED = 165.0
 
 _TETHER_SAMPLES = 5  # círculos de colisão distribuídos ao longo do arco
+
+# ── Ciclo de vida: nascer e morrer são VISÍVEIS ───────────────────────────────
+# Projétil que aparece já valendo dano não é dificuldade, é emboscada — a mesma
+# regra do telégrafo dos feixes (§7 do plano), aplicada ao vocabulário de esferas.
+#
+# NASCIMENTO: a esfera existe, é visível e **não fere**. Um anel se fecha sobre o
+# ponto e o núcleo cresce de zero; quando o anel encosta, ela passa a valer. O
+# jogador lê "vai nascer um projétil ali" e tem tempo de sair. Ela já é ALVO
+# nessa janela, de propósito: quem lê cedo pode apagá-la antes de virar ameaça.
+#
+# MORTE: some em ~0,25s com o núcleo colapsando e um anel se abrindo. Sumir de um
+# frame para o outro faz o jogador duvidar se levou dano ou não.
+_BIRTH_TIME = 0.55
+_DEATH_TIME = 0.26
+
+_BIRTH = "birth"
+_LIVE = "live"
+_DYING = "dying"
+
+
+_HALO_SPRITES: Dict[tuple, pygame.Surface] = {}
+_ALPHA_STEPS = 8
+
+
+def _halo_sprite(
+    r: int,
+    core: Tuple[int, int, int],
+    bright: Tuple[int, int, int],
+    alpha_scale: float,
+) -> pygame.Surface:
+    """Halo da esfera, desenhado uma vez por (raio, cor, faixa de alpha).
+
+    Antes era uma `Surface` SRCALPHA nova **por esfera e por frame**. Com uma
+    esfera solta ninguém nota; com o Pulso contínuo e a Chuva espalhada são
+    dezenas em cena, e é a mesma classe de desperdício que travava os feixes
+    (§7). O alpha é quantizado em oito faixas — a diferença entre faixas não é
+    perceptível num halo, e sem a quantização o cache nunca acertaria.
+    """
+    passo = max(0, min(_ALPHA_STEPS, int(alpha_scale * _ALPHA_STEPS + 0.5)))
+    key = (r, core, bright, passo)
+    sprite = _HALO_SPRITES.get(key)
+    if sprite is None:
+        a = passo / _ALPHA_STEPS
+        sprite = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
+        pygame.draw.circle(sprite, (*core, int(70 * a)), (r * 2, r * 2), r * 2)
+        pygame.draw.circle(sprite, (*core, int(150 * a)), (r * 2, r * 2), r)
+        pygame.draw.circle(sprite, (*bright, int(235 * a)), (r * 2, r * 2), max(1, r // 2))
+        _HALO_SPRITES[key] = sprite
+    return sprite
 
 
 class TriadOrb(EnemyHitMixin):
@@ -100,6 +180,7 @@ class TriadOrb(EnemyHitMixin):
         lifetime: float = 8.0,
         color: Tuple[int, int, int] = pmap.CYAN,
         target: Optional[Tuple[float, float]] = None,
+        birth: float | None = None,
     ) -> None:
         sc = gameplay_scale()
         self.behavior = behavior
@@ -125,7 +206,19 @@ class TriadOrb(EnemyHitMixin):
         self._homing_left = _SEEKER_HOMING_TIME
         self._correction_timer = 0.0
         self._wobble_phase = random.uniform(0.0, math.tau)
-        self._birth = 0.0
+        self._pulse_phase = random.uniform(0.0, math.tau)
+        # Fase do ciclo de vida. `birth` mais longo é o que ESCALONA uma salva:
+        # emitir dez esferas no mesmo frame com nascimentos diferentes lê como
+        # dez chegadas em sequência, sem o boss precisar de um relógio próprio.
+        # Onde ela nasceu. O `_lob_from` é o mesmo ponto, mas com significado de
+        # movimento; este é registro, e é o que permite auditar de onde uma salva
+        # brotou depois de as esferas já terem andado.
+        self.spawn = (self.x, self.y)
+        self._lob_from = (self.x, self.y)
+        self._lob_t = 0.0
+        self._phase = _BIRTH
+        self._phase_t = 0.0
+        self._birth_time = _BIRTH_TIME if birth is None else max(0.05, birth)
         self.target = target
         self.partner: "TriadOrb | None" = None
         self._is_tether_master = False
@@ -162,6 +255,9 @@ class TriadOrb(EnemyHitMixin):
 
     # ── Contrato de entidade ─────────────────────────────────────────────────
     def _sync_rect(self) -> None:
+        if self._phase is _DYING:
+            self._rect.update(int(self.x), int(self.y), 0, 0)
+            return
         if self.behavior is OrbBehavior.TETHER and self._is_tether_master and self.partner:
             # O rect precisa cobrir o ARCO inteiro: é o pré-filtro AABB de quem
             # colide com o segmento, não só com as duas pontas.
@@ -185,10 +281,37 @@ class TriadOrb(EnemyHitMixin):
 
     @property
     def causes_damage(self) -> bool:
-        return True
+        """Só fere depois de nascida e antes de começar a morrer.
+
+        É o contrato inteiro do telégrafo: a esfera aparece, é visível, e não
+        vale dano até o anel de nascimento encostar no núcleo.
+        """
+        return self._phase is _LIVE
+
+    @property
+    def is_hatching(self) -> bool:
+        """Ainda nascendo — visível, inofensiva, e já pode levar tiro."""
+        return self._phase is _BIRTH
+
+    def can_take_damage(self) -> bool:
+        """Contrato de `systems.targeting`. Quem já está morrendo sai da mira.
+
+        Sem isto o teleguiado e o auto-aim gastariam carga numa esfera que já
+        está tocando a animação de morte — alvo que não existe mais.
+        """
+        return self._phase is not _DYING
+
+    def _collision_radius(self) -> float:
+        """Zero enquanto morre: some da colisão sem sair da lista de desenho.
+
+        É o que deixa a animação de morte rodar sem a esfera continuar
+        absorvendo tiro nem empurrando o avanço de fase. Raio zero nunca
+        intersecta, então nenhum sistema precisa saber que esta fase existe.
+        """
+        return 0.0 if self._phase is _DYING else self.radius
 
     def collision_circle(self) -> tuple[float, float, float]:
-        return self.x, self.y, self.radius
+        return self.x, self.y, self._collision_radius()
 
     def collision_circles(self) -> List[tuple[float, float, float]]:
         """Silhueta real (§8). No TETHER, **o arco é o hitbox** — não as pontas.
@@ -197,10 +320,10 @@ class TriadOrb(EnemyHitMixin):
         complexidade por projétil no kit do chefe.
         """
         if not (self.behavior is OrbBehavior.TETHER and self._is_tether_master):
-            return [(self.x, self.y, self.radius)]
+            return [(self.x, self.y, self._collision_radius())]
         p = self.partner
-        if p is None or p.dead:
-            return [(self.x, self.y, self.radius)]
+        if p is None or p.dead or self._phase is _DYING:
+            return [(self.x, self.y, self._collision_radius())]
         circles: List[tuple[float, float, float]] = []
         r = self.radius * 0.75
         for i in range(_TETHER_SAMPLES + 1):
@@ -209,35 +332,90 @@ class TriadOrb(EnemyHitMixin):
         return circles
 
     def take_damage(self, amount: int) -> None:
+        if self._phase is _DYING:
+            return
         self.health -= amount
         if self.health <= 0:
-            self.dead = True
+            self.begin_death()
+
+    def begin_death(self) -> None:
+        """Entra na animação de morte. Idempotente.
+
+        Não marca `dead` na hora: a esfera continua na lista por mais ~0,25s
+        para o estouro aparecer. Nesse intervalo ela já não fere, não é alvo e
+        não colide (ver `_collision_radius`), então nenhum outro sistema muda de
+        comportamento por causa dela.
+        """
+        if self._phase is _DYING:
+            return
+        self._phase = _DYING
+        self._phase_t = 0.0
+        self.health = 0
+        self._sync_rect()
 
     def get_points_value(self) -> int:
         return self.POINTS
+
+    def on_hit(self, damage: int, _hit_x: float, _hit_y: float) -> "HitResult":
+        """Igual ao mixin, mas o "matou" é lido na TRANSIÇÃO, não em `dead`.
+
+        O mixin decide pelo flag `dead`, que agora só sobe no fim da animação —
+        sem este override o tiro que derruba a esfera devolveria "só acertei", e
+        o jogador perderia a explosão e o som da morte no exato frame em que ela
+        acontece.
+        """
+        from ....systems import hit_sounds
+        from ....systems.hit_result import HitResult
+
+        antes = self._phase
+        self.take_damage(damage)
+        if antes is not _DYING and self._phase is _DYING:
+            return HitResult(
+                killed=True,
+                points=self.get_points_value(),
+                explosion_size=int(self.radius * 1.6),
+                sound=hit_sounds.EXPLOSION_ALIEN,
+            )
+        return HitResult(explosion_size=int(self.radius), sound=hit_sounds.BOSS_DAMAGE)
 
     def on_ship_contact(self, _cx: float, _cy: float) -> "HitResult":
         from ....systems import hit_sounds
         from ....systems.hit_result import HitResult
 
-        self.dead = True
+        self.begin_death()
         return HitResult(killed=True, sound=hit_sounds.EXPLOSION_ALIEN)
 
     # ── Tick ─────────────────────────────────────────────────────────────────
     def update_in_context(self, ctx: "EnemyUpdateContext") -> None:
         dt = ctx.sdt
         self.anim += dt
-        self._birth += dt
+        self._phase_t += dt
+
+        if self._phase is _BIRTH:
+            # Nascendo: não anda e não gasta vida útil. Só existe para ser vista.
+            if self._phase_t >= self._birth_time:
+                self._phase, self._phase_t = _LIVE, 0.0
+            self._sync_rect()
+            return
+
+        if self._phase is _DYING:
+            if self._phase_t >= _DEATH_TIME:
+                self.dead = True
+            return
+
         self.lifetime -= dt
         if self.lifetime <= 0.0:
-            self.dead = True
+            # Expirar também é morrer: a âncora que some no fim do prazo merece
+            # o mesmo estouro de quem levou tiro.
+            self.begin_death()
             return
 
         self._move(self, dt, ctx)
         self._sync_rect()
 
-        # Fora da tela com folga: some. A âncora é a exceção — ela nasce dentro
-        # da arena e some por tempo, não por posição.
+        # Fora da tela com folga: some. Sem animação, de propósito — ninguém
+        # está olhando, e um estouro fora da tela é trabalho jogado fora.
+        # A âncora é a exceção: nasce dentro da arena e some por tempo.
         if self.behavior is not OrbBehavior.ANCHOR:
             margin = scaled(90.0)
             if (
@@ -256,29 +434,86 @@ class TriadOrb(EnemyHitMixin):
         nos drones da CITY. Posição e vida avançam só no `update`.
         """
         alpha_scale = 1.0
-        if self.behavior is OrbBehavior.ANCHOR and self.lifetime < _ANCHOR_FADE:
-            # Pisca no fim: a âncora some, e sumir sem aviso é armadilha.
-            alpha_scale = 0.35 + 0.65 * abs(math.sin(self.anim * 18.0))
 
         if self.behavior is OrbBehavior.TETHER and self._is_tether_master and self.partner:
             self._draw_link(surface)
 
         cx, cy = int(self.x), int(self.y)
-        r = int(self.radius)
+        # PULSAÇÃO: a esfera respira. É a assinatura do vocabulário — "energia
+        # contida", não bolinha —, e é ela que dá vida ao anel do Pulso, onde
+        # doze esferas idênticas em linha reta pareciam um objeto só. A fase é
+        # própria de cada uma; em bloco, a cena inteira pisca e lê como erro de
+        # render. O raio vira INTEIRO aqui, o que mantém o cache de halo fechado
+        # em meia dúzia de entradas por cor.
+        pulso = 1.0 + _PULSE_AMP * math.sin(self.anim * _PULSE_FREQ + self._pulse_phase)
+        r = max(1, int(self.radius * pulso))
         core = self.color
         bright = (
             min(255, core[0] + 90), min(255, core[1] + 60), min(255, core[2] + 40)
         )
 
-        halo = pygame.Surface((r * 4, r * 4), pygame.SRCALPHA)
-        pygame.draw.circle(halo, (*core, int(70 * alpha_scale)), (r * 2, r * 2), r * 2)
-        pygame.draw.circle(halo, (*core, int(150 * alpha_scale)), (r * 2, r * 2), r)
-        pygame.draw.circle(
-            halo, (*bright, int(235 * alpha_scale)), (r * 2, r * 2), max(1, r // 2)
-        )
-        surface.blit(halo, (cx - r * 2, cy - r * 2))
+        if self._phase is _BIRTH:
+            self._draw_birth(surface, cx, cy, bright)
+            return
+        if self._phase is _DYING:
+            self._draw_death(surface, cx, cy, r, bright)
+            return
 
+        surface.blit(_halo_sprite(r, core, bright, alpha_scale), (cx - r * 2, cy - r * 2))
         self._draw_arcs(surface, cx, cy, r, bright, alpha_scale)
+
+    def _draw_birth(
+        self, surface: pygame.Surface, cx: int, cy: int, bright: Tuple[int, int, int]
+    ) -> None:
+        """Anel que se FECHA sobre um núcleo que cresce.
+
+        A leitura tem que ser inequívoca: "vai nascer um projétil aqui, e ele
+        vale quando o anel encostar". O anel é a barra de progresso — quanto ele
+        ainda tem para percorrer é exatamente quanto tempo o jogador ainda tem.
+        Por isso ele contrai LINEARMENTE: uma curva suavizada mentiria sobre o
+        tempo restante bem no trecho final, que é o que importa.
+        """
+        p = min(1.0, self._phase_t / self._birth_time)
+        r = self.radius
+        anel = int(r * (3.4 - 2.4 * p))
+        pygame.draw.circle(surface, self.color, (cx, cy), max(2, anel), 1)
+        nucleo = int(r * p)
+        if nucleo >= 1:
+            surface.blit(
+                _halo_sprite(nucleo, self.color, bright, 0.35 + 0.65 * p),
+                (cx - nucleo * 2, cy - nucleo * 2),
+            )
+        # Quatro marcas convergindo com o anel: dão direção ao movimento do anel
+        # em telas cheias, onde um círculo fino sozinho se perde no fundo.
+        for i in range(4):
+            a = self.anim * 2.0 + i * (math.tau / 4)
+            px, py = cx + math.cos(a) * anel, cy + math.sin(a) * anel
+            pygame.draw.circle(surface, bright, (int(px), int(py)), 2)
+
+    def _draw_death(
+        self,
+        surface: pygame.Surface,
+        cx: int,
+        cy: int,
+        r: int,
+        bright: Tuple[int, int, int],
+    ) -> None:
+        """Núcleo colapsa, anel se abre. O oposto exato do nascimento.
+
+        Simetria de propósito: as duas animações são a mesma figura em sentidos
+        contrários, então aprender uma ensina a outra.
+        """
+        p = min(1.0, self._phase_t / _DEATH_TIME)
+        anel = int(r * (1.0 + 1.8 * p))
+        fade = 1.0 - p
+        if anel >= 2:
+            pygame.draw.circle(surface, self.color, (cx, cy), anel, max(1, int(2 * fade)))
+        nucleo = int(r * (1.0 - p))
+        if nucleo >= 1:
+            surface.blit(
+                _halo_sprite(nucleo, self.color, bright, fade),
+                (cx - nucleo * 2, cy - nucleo * 2),
+            )
 
     def _draw_arcs(
         self,
@@ -342,10 +577,16 @@ class TriadOrb(EnemyHitMixin):
 
 
 def _move_seeker(orb: TriadOrb, dt: float, ctx: "EnemyUpdateContext") -> None:
-    """Curva fraca por `_SEEKER_HOMING_TIME`, depois desiste e segue reto.
+    """Persegue OSCILANDO, e desiste depois de `_SEEKER_HOMING_TIME`.
 
     Desistir é o que a torna justa: teleguiado eterno não tem esquiva, só
     atrito. Com prazo, o jogador aprende que basta sobreviver à curva.
+
+    O serpenteio é perpendicular ao rumo, então não atrapalha a perseguição —
+    muda só o ponto exato onde ela está em cada instante. Uma teleguiada em
+    linha reta se resolve com um passo lateral e some da cabeça do jogador; com
+    a oscilação ele precisa acompanhar a fase, que é a leitura que o ataque quer
+    cobrar.
     """
     if orb._homing_left > 0.0:
         orb._homing_left -= dt
@@ -355,15 +596,45 @@ def _move_seeker(orb: TriadOrb, dt: float, ctx: "EnemyUpdateContext") -> None:
         orb.angle += max(-step, min(step, diff))
         orb.vx = math.cos(orb.angle) * orb.speed
         orb.vy = math.sin(orb.angle) * orb.speed
-    orb.x += orb.vx * dt
-    orb.y += orb.vy * dt
+    orb._wobble_phase += _SEEKER_WEAVE_FREQ * dt
+    lateral = math.cos(orb._wobble_phase) * _SEEKER_WEAVE_AMP * gameplay_scale()
+    nx, ny = -math.sin(orb.angle), math.cos(orb.angle)
+    orb.x += (orb.vx + nx * lateral) * dt
+    orb.y += (orb.vy + ny * lateral) * dt
 
 
 def _move_lob(orb: TriadOrb, dt: float, _ctx: "EnemyUpdateContext") -> None:
-    """Sobe, perde força e cai. A queda é irregular — deriva lateral própria."""
-    orb.vy += _LOB_GRAVITY * gameplay_scale() * dt
-    orb.x += orb.vx * dt
-    orb.y += orb.vy * dt
+    """SOBE até o posto, ESTAGNA, depois DESCE devagar serpenteando.
+
+    Os três tempos são por relógio, não por física: a subida é uma interpolação
+    que desacelera até parar (`1-(1-p)²`), então a esfera *chega* ao posto em vez
+    de passar por ele e voltar. Uma parábola faria a estagnação depender da
+    gravidade acertar o ápice no lugar certo — frágil e impossível de compor em
+    formação.
+
+    O serpenteio existe só na queda, e como DESLOCAMENTO em torno da coluna do
+    posto: somado à velocidade, ele iria acumulando desvio e a formação simétrica
+    montada lá em cima se desfaria no caminho.
+    """
+    orb._lob_t += dt
+    px, py = orb.target if orb.target is not None else (orb.x, orb.y)
+    fx, fy = orb._lob_from
+
+    if orb._lob_t < _LOB_RISE_TIME:
+        p = orb._lob_t / _LOB_RISE_TIME
+        suave = 1.0 - (1.0 - p) * (1.0 - p)      # desacelera até parar
+        orb.x = fx + (px - fx) * suave
+        orb.y = fy + (py - fy) * suave
+        return
+
+    if orb._lob_t < _LOB_RISE_TIME + _LOB_HOLD_TIME:
+        orb.x, orb.y = px, py                    # estagnada: a janela de leitura
+        return
+
+    caindo = orb._lob_t - _LOB_RISE_TIME - _LOB_HOLD_TIME
+    orb._wobble_phase += _LOB_WEAVE_FREQ * dt
+    orb.y = py + _LOB_FALL_SPEED * gameplay_scale() * caindo
+    orb.x = px + math.sin(orb._wobble_phase) * _LOB_WEAVE_AMP * gameplay_scale()
 
 
 def _move_erratic(orb: TriadOrb, dt: float, ctx: "EnemyUpdateContext") -> None:
@@ -401,8 +672,8 @@ def _move_tether(orb: TriadOrb, dt: float, _ctx: "EnemyUpdateContext") -> None:
     daria um projétil invisível (o hitbox mora no arco).
     """
     p = orb.partner
-    if p is not None and p.dead:
-        orb.dead = True
+    if p is not None and (p.dead or not p.causes_damage):
+        orb.begin_death()
         return
     orb.x += orb.vx * dt
     orb.y += orb.vy * dt
@@ -434,10 +705,20 @@ _ARC_COUNT: Dict[OrbBehavior, int] = {
 }
 
 
-def make_lob(x: float, y: float, drift_dir: float, color: Tuple[int, int, int]) -> TriadOrb:
-    """Esfera lançada para cima, que volta em queda irregular."""
-    sc = gameplay_scale()
-    orb = TriadOrb(x, y, OrbBehavior.LOB, color=color, lifetime=9.0)
-    orb.vx = drift_dir * random.uniform(0.4, 1.0) * _LOB_DRIFT * sc
-    orb.vy = _LOB_RISE * random.uniform(0.85, 1.15) * sc
+def make_rain(
+    x: float,
+    y: float,
+    posto: Tuple[float, float],
+    color: Tuple[int, int, int],
+    birth: float | None = None,
+) -> TriadOrb:
+    """Esfera da Chuva: sobe até `posto`, estagna e desce serpenteando.
+
+    `posto` é o lugar no alto onde ela vai PARAR. Quem escolhe os postos é quem
+    dispara, em formação simétrica — é a formação montada e imóvel que dá ao
+    jogador a leitura da salva inteira antes de ela começar a cair.
+    """
+    orb = TriadOrb(x, y, OrbBehavior.LOB, color=color, lifetime=16.0, birth=birth)
+    orb.target = posto
+    orb._lob_from = (x, y)
     return orb

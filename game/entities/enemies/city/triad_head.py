@@ -51,6 +51,12 @@ class TriadHead:
         # porque as fases seguintes deslocam as cabeças (a Sentença manda as
         # laterais para as bordas); nesta etapa ele nunca muda do valor da arte.
         self.offset_x, self.offset_y = offset
+        # Offset de CASA — a posição em que a arte já desenhou esta cabeça dentro
+        # da tela compartilhada de 64×64. O sprite é blitado deslocado de
+        # `offset - home`, senão mover a cabeça moveria só a hitbox e a origem do
+        # feixe: na Sentença os lasers saíam do nada, com as cabeças coladas no
+        # corpo (relatado em playtest).
+        self.home_offset_x, self.home_offset_y = offset
         self.radius = radius
 
         self.center_x: float = 0.0
@@ -59,6 +65,11 @@ class TriadHead:
         # Laranja = "esta cabeça vai agir agora". Ninguém liga isso ainda; o
         # contrato existe desde já para os ataques só terem que setar o flag.
         self.attacking: bool = False
+        # Direção do rosto, em radianos de tela. `None` = pose de repouso, o
+        # blit cru da tela compartilhada (o caminho de sempre, sem giro nenhum).
+        # A Sentença destaca a cabeça e a faz MIRAR: aí o sprite passa a ser
+        # girado e ancorado no desenho, não na imagem. Ver `draw`.
+        self.aim: float | None = None
 
         self._sprites = pmap.load_part(part_key)
         # Índice de frame vem do BOSS, não de um relógio próprio: as três
@@ -102,6 +113,35 @@ class TriadHead:
         self._damageable = True
         self._alpha_scale = 1.0
         self.body_state = HeadState.SOLID
+
+    def enter_orbiting(self) -> None:
+        """Fase 3: visível e atacando, mas NÃO é mais alvo.
+
+        O portão caiu — as Vozes pararam de proteger a Coroa e viraram atacantes
+        puras. Deixá-las atacáveis reabriria o ciclo de ressonância que a fase
+        existe justamente para ENCERRAR: a pergunta passa a ser "aguento a
+        pressão?", não "consigo abrir a janela?".
+        """
+        self.hp = float(self.max_hp)
+        self._visible = True
+        self._damageable = False
+        self._alpha_scale = 1.0
+        self.body_state = HeadState.SOLID
+
+    def place(self, world_x: float, world_y: float, boss_x: float, boss_y: float) -> None:
+        """Põe a ÂNCORA da cabeça num ponto do mundo, convertendo para offset.
+
+        A coreografia da Sentença raciocina em coordenadas de tela ("esta cabeça
+        vai para a borda esquerda"); o estado da cabeça é offset relativo ao boss,
+        que continua se movendo por baixo. A conversão mora aqui para o roteiro
+        não ter que conhecer o (x, y) do boss.
+        """
+        self.offset_x = world_x - boss_x
+        self.offset_y = world_y - boss_y
+
+    def rest_pose(self) -> None:
+        """Volta ao blit de repouso — sem giro, ancorado na tela compartilhada."""
+        self.aim = None
 
     # ── Consultas ────────────────────────────────────────────────────────────
     @property
@@ -168,18 +208,27 @@ class TriadHead:
             self._alpha_scale = 0.25 + 0.75 * remat_progress
 
     def draw(self, surface: pygame.Surface, origin: tuple[int, int]) -> None:
-        """Blita o frame no MESMO ponto de origem das outras partes.
+        """Blita o frame na origem compartilhada MAIS o quanto a cabeça se moveu.
 
         As três partes compartilham a tela de 64×64 da arte (ver
-        `triad_pixel_map`), então nenhuma composição manual é necessária: mesma
-        origem, e o boss se monta sozinho.
+        `triad_pixel_map`), então em repouso a composição é a origem crua e o
+        boss se monta sozinho. Quando a cabeça SAI de casa — a Sentença a manda
+        para a borda da arena — o sprite tem que ir junto: a posição dela na
+        tela compartilhada é fixa na arte, e só este deslocamento a move.
         """
         if not self._visible:
             return
         white = self._hit_flash > 0.0
+        if self.aim is not None:
+            self._draw_aimed(surface, white)
+            return
         frame = self._sprites.frame(self._frame_index, self.attacking, white=white)
         if frame is None:
             return
+        origin = (
+            origin[0] + int(self.offset_x - self.home_offset_x),
+            origin[1] + int(self.offset_y - self.home_offset_y),
+        )
         if self._alpha_scale >= 1.0:
             surface.blit(frame, origin)
             return
@@ -189,3 +238,27 @@ class TriadHead:
         faded = frame.copy()
         faded.set_alpha(int(255 * max(0.0, min(1.0, self._alpha_scale))))
         surface.blit(faded, origin)
+
+    def _draw_aimed(self, surface: pygame.Surface, white: bool) -> None:
+        """Pose de MIRA: sprite girado, ancorado no DESENHO e não na imagem.
+
+        O caminho de repouso blita a tela de 64×64 inteira e deixa o boss se
+        montar sozinho — não serve girada, porque o giro é em torno do centro da
+        IMAGEM e o desenho ocupa um canto dela: a cabeça descreveria um arco em
+        volta de um pivô vazio. Aqui o `aimed_part` devolve o recorte já girado
+        mais o offset que mantém a âncora (um pixel real do rosto) parada.
+        """
+        posed = pmap.aimed_part(self.part_key, self.aim or 0.0, attacking=True)
+        if posed is None:
+            return
+        sprite, ox, oy = posed
+        if white:
+            sprite = sprite.copy()
+            sprite.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+        pos = (int(self.center_x + ox), int(self.center_y + oy))
+        if self._alpha_scale >= 1.0:
+            surface.blit(sprite, pos)
+            return
+        faded = sprite.copy()
+        faded.set_alpha(int(255 * max(0.0, min(1.0, self._alpha_scale))))
+        surface.blit(faded, pos)
