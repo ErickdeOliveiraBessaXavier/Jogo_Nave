@@ -20,6 +20,9 @@ game/entities/
                  particles, floating_score, coop_link, cutting_storm, slime_drip
   bosses/        boss base + *_boss + *_pixel_map + boss_hit_mixin/state/cannon/
                  renderer/square + square_base + spike
+    city/        chefes do tema CITY + satélites exclusivos: metropolis_overlord_boss
+                 (nível 30) e triad_boss (nível 34), com metropolis_* e triad_*
+                 (pixel maps, projéteis, feixes, segmentos, coreografia) + city_thruster
   pickups/       powerup, star
   _shared/       mixins/pools/utils cross-categoria: pool_stats_mixin, zone_base,
                  attraction_utils, draw_utils, impact_styles
@@ -36,6 +39,21 @@ game/entities/
 aparece). Projétil (voa+dano) → `projectiles/`, independente de quem dispara.
 Efeito cosmético/zona → `effects/`. Boss e seus pixel_maps → `bosses/`.
 Mixin/pool/util usado por várias categorias → `_shared/`.
+
+**Boss com muito satélite ganha subpasta por tema** (`bosses/city/`). O corte é
+por USO, não por nome: módulo que só o boss consome vai junto com ele; módulo que
+o tema também usa fica em `enemies/<tema>/`. Foi assim que `city_mine` ficou para
+trás (o `levels/pipeline.py` também o spawna) enquanto `city_thruster` foi junto.
+Os dois chefes do City nasceram (2026-08) dentro de `enemies/city/` porque
+compartilhavam pasta com os inimigos do tema — corrigido depois, com `git mv`
+(renames preservados) + reescrita mecânica dos imports.
+
+**Reescrita de imports ao mover entre subpastas de mesma profundidade**
+(`enemies/city/` → `bosses/city/`): a contagem até `game` NÃO muda (`....core`
+continua igual), e `...effects`/`...projectiles`/`...pickups` também não, porque
+`...` é `entities` nos dois casos. Mudam só os que apontavam para irmãos:
+`...bosses.X` → `..X`, `.._shared.Y` → `...enemies._shared.Y`,
+`.city_mine` → `...enemies.city.city_mine`.
 
 **Imports relativos:** arquivos em subpasta simples (`player/`) usam `...core`
 (3 pontos); em subpasta dupla (`enemies/space/`) usam `....core` (4 pontos).

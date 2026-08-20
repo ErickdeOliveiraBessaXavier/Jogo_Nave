@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, List
 import pygame
 
 from ....core.config import config as Config
-from .._shared.enemy_hit_mixin import EnemyHitMixin
+from ...enemies._shared.enemy_hit_mixin import EnemyHitMixin
 from . import metropolis_overlord_pixel_map as pmap
 from .city_thruster import EnergyThruster
 from .metropolis_projectiles import EnergyDrone, TriShard

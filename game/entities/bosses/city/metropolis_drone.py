@@ -43,7 +43,7 @@ import pygame
 
 from ....core.config import config as Config
 from ....core.visual_quality import visual_quality as vq
-from .._shared.enemy_hit_mixin import EnemyHitMixin
+from ...enemies._shared.enemy_hit_mixin import EnemyHitMixin
 from . import metropolis_overlord_pixel_map as pmap
 from .metropolis_projectiles import EMPPulse
 

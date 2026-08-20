@@ -29,9 +29,9 @@ from ....core.config import config as Config
 from ....core.scale import scaled
 from ....core.sound import sound_manager
 from ....core.visual_quality import visual_quality as vq
-from ...bosses.boss_hit_mixin import BossHitMixin
+from ..boss_hit_mixin import BossHitMixin
 from . import metropolis_overlord_pixel_map as pmap
-from .city_mine import CityMine
+from ...enemies.city.city_mine import CityMine
 from .city_thruster import EnergyThruster
 from .metropolis_beam import MetropolisOrbitalBeam
 from .metropolis_fence import FenceBeam, build_arena_fence

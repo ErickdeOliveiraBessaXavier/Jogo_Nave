@@ -38,7 +38,7 @@ import pygame
 from ....core.config import config as Config
 from ....core.scale import gameplay_scale, scaled
 from ....core.visual_quality import visual_quality as vq
-from .._shared.enemy_hit_mixin import EnemyHitMixin
+from ...enemies._shared.enemy_hit_mixin import EnemyHitMixin
 from . import triad_pixel_map as pmap
 
 if TYPE_CHECKING:

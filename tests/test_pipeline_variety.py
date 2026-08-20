@@ -20,6 +20,7 @@ tema vazado), não a escolha específica de specials — essa muda a cada tuning
 
 import pytest
 
+from conftest import skip_se_arena_de_teste
 from game.core.difficulty import DifficultyPreset
 from game.core.levels.pipeline import (
     THEME_BASE_ENEMY,
@@ -83,6 +84,7 @@ class TestVarietyCeiling:
         assert VARIETY_CAP_MAX_BY_DIFFICULTY[DifficultyPreset.NIGHTMARE] == 4
 
 
+@skip_se_arena_de_teste
 class TestVarietyCapEndToEnd:
     """Sweep de `get_level_config` — o teto do §11 valendo end-to-end."""
 
@@ -125,6 +127,7 @@ class TestVarietyCapEndToEnd:
             assert cfg.enemy_spawn_config, f"L{lvl} {preset.name} sem inimigos"
 
 
+@skip_se_arena_de_teste
 class TestSwarmBaseOpensWorld:
     """§11 — 'SWARM + N complementares': o base do tema abre o mundo sozinho."""
 
@@ -154,6 +157,7 @@ class TestSwarmBaseOpensWorld:
         assert checados >= 4, f"esperava abrir 4 mundos nomeados, checou {checados}"
 
 
+@skip_se_arena_de_teste
 class TestDeterminismoESalt:
     """A seleção é determinística por nível; o salt de run a diversifica."""
 

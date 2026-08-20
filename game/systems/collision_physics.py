@@ -290,9 +290,9 @@ class CollisionPhysics:
         if result.fragments:
             entity_manager.absorb_fragments(result.fragments)
         if result.drops:
-            # Coletáveis largados pela morte. Lista própria: `fragments` vai
-            # para `enemies`, e um power-up ali viraria inimigo.
-            entity_manager.powerups.extend(result.drops)
+            # Coletáveis largados pela morte. O `EntityManager` é quem aplica o
+            # "um power-up por vez" — daqui não se escreve na lista direto.
+            entity_manager.add_powerups(result.drops)
 
         if result.killed and result.points > 0:
             if floating_scores is not None:

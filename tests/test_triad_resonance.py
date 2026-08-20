@@ -17,9 +17,9 @@ import random
 import pygame
 import pytest
 
-from game.entities.enemies.city.triad_boss import _CROWN_ACTOR as _CROWN
-from game.entities.enemies.city.triad_boss import TriadBoss
-from game.entities.enemies.city.triad_resonance import (
+from game.entities.bosses.city.triad_boss import _CROWN_ACTOR as _CROWN
+from game.entities.bosses.city.triad_boss import TriadBoss
+from game.entities.bosses.city.triad_resonance import (
     LEFT,
     RIGHT,
     HeadState,
@@ -271,7 +271,7 @@ def test_coroa_recebe_dano_so_onde_ha_desenho(boss: TriadBoss):
     """
     from PIL import Image
 
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     boss._frame_index = 0
     crown = pmap.load_part("crown").mask(0, attacking=False)
@@ -295,7 +295,7 @@ def test_area_da_voz_e_o_L_invertido_do_rosto(boss: TriadBoss):
     inteira na altura da "boca" (linha 32): recortado por máscara, esse vão vira
     uma fresta atravessável no meio da cabeça.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     scale = pmap.PIXEL_SCALE
     ox, oy = boss._blit_origin()
@@ -323,7 +323,7 @@ def test_filamento_da_voz_nao_recebe_dano(boss: TriadBoss):
     """O filamento curva para DENTRO e nas linhas 37-39 se entrelaça com o
     tronco. Enquanto foi alvo, tiro mirado na cabeça central virava dano na
     lateral — o roteamento dá o empate à Voz."""
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     scale = pmap.PIXEL_SCALE
     ox, oy = boss._blit_origin()
@@ -335,7 +335,7 @@ def test_filamento_da_voz_nao_recebe_dano(boss: TriadBoss):
 
 def test_faixa_central_nao_da_dano_nas_vozes(boss: TriadBoss):
     """Tiro na coluna do corpo é da Coroa — o sintoma relatado em playtest."""
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     scale = pmap.PIXEL_SCALE
     ox, oy = boss._blit_origin()
@@ -386,7 +386,7 @@ class _EMStub:
 
 
 def _sprite_point(boss: TriadBoss, sx: float, sy: float) -> tuple[float, float]:
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     ox, oy = boss._blit_origin()
     return ox + (sx + 0.5) * pmap.PIXEL_SCALE, oy + (sy + 0.5) * pmap.PIXEL_SCALE
@@ -462,7 +462,7 @@ def test_nenhum_ponto_do_corpo_credita_uma_voz(boss: TriadBoss):
     Cobre traço e vão igualmente — é o teste que pega a regressão de fallback,
     que só aparece nos buracos do desenho e por isso escapa de amostragem.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     declarado = {
         (sx, sy)
@@ -497,7 +497,7 @@ def test_tiro_por_baixo_do_torso_nao_credita_uma_voz(boss: TriadBoss):
     Varre uma faixa inteira abaixo e ao redor da base, não um ponto só: o defeito
     original valia para toda a região sob o boss.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     errados = []
     for sy in range(pmap.CONTENT_Y1 - 4, pmap.CONTENT_Y1 + 8):
@@ -534,7 +534,7 @@ def test_idle_faz_loop_de_ida_e_volta():
     São só 3 frames por parte; o loop em serra salta 2→0 num passo e num ciclo
     tão curto isso lê como tranco, não como respiração.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     assert [pmap._pingpong(i, 3) for i in range(9)] == [0, 1, 2, 1, 0, 1, 2, 1, 0]
     assert [pmap._pingpong(i, 2) for i in range(4)] == [0, 1, 0, 1]
@@ -546,7 +546,7 @@ def test_sprite_e_mascara_usam_o_mesmo_frame():
 
     O sintoma seria invisível no render e aleatório no gameplay — o pior tipo.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     crown = pmap.load_part("crown")
     for i in range(24):
@@ -649,7 +649,7 @@ def test_cabeca_derrubada_nao_ataca(boss: TriadBoss):
 
 
 def test_cada_ataque_usa_o_comportamento_certo(boss: TriadBoss):
-    from game.entities.enemies.city.triad_orb import OrbBehavior
+    from game.entities.bosses.city.triad_orb import OrbBehavior
 
     esperado = {
         "cadencia": OrbBehavior.SEEKER,
@@ -737,7 +737,7 @@ def _boss_hardcore() -> TriadBoss:
 
 def _rodar_sentenca(boss: TriadBoss, dt: float = DT):
     """Roda a Sentença inteira; devolve (duração, feixes emitidos)."""
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     feixes: list = []
     t = 0.0
@@ -754,7 +754,7 @@ def _entrar_na_sentenca(boss: TriadBoss, limiar: float | None = None) -> None:
 
 
 def test_sentenca_dispara_no_gate_de_hp_e_deixa_o_boss_intangivel(boss: TriadBoss):
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     _entrar_na_sentenca(boss)
 
@@ -794,7 +794,7 @@ def test_janela_de_ameaca_cobre_quase_toda_a_sentenca(boss: TriadBoss):
     """Entre a primeira e a última ameaça o jogador quase não tem folga."""
     boss = _boss_hardcore()
     _entrar_na_sentenca(boss)
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     feixes: list = []
     t = primeiro = ultimo = 0.0
@@ -833,7 +833,7 @@ def test_muitas_cabecas_disparam_a_sentenca(boss: TriadBoss):
     de ser.
     """
     _entrar_na_sentenca(boss)
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     pico = 0
     ecos = 0
@@ -858,7 +858,7 @@ def test_o_feixe_nasce_na_boca_da_cabeca_que_o_disparou(boss: TriadBoss):
     lê o caster, então o desvio tem que ser ZERO, não "pequeno".
     """
     _entrar_na_sentenca(boss)
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     conferidos = 0
     t = 0.0
@@ -896,7 +896,7 @@ def test_o_rosto_acompanha_a_direcao_do_feixe(boss: TriadBoss):
     e o fecho continuam sendo "as cabeças do boss" aos olhos do jogador.
     """
     _entrar_na_sentenca(boss)
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     girou = set()
     rostos = set()
@@ -941,7 +941,7 @@ def test_a_boca_fica_na_frente_e_ABAIXO_da_ancora():
     sprite, o feixe volta a nascer no meio da cabeça — ou, pior, a dezenas de
     pixels dela, no espaço negativo do PNG.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     centro_img = (pmap.FRAME / 2.0, pmap.FRAME / 2.0)
     for part in ("left", "right"):
@@ -971,7 +971,7 @@ def test_a_boca_gira_junto_com_a_mira():
     Com a cabeça olhando para baixo, a boca tem que estar ABAIXO da âncora no
     eixo do olhar, não continuar no mesmo canto de quando ela olhava para o lado.
     """
-    from game.entities.enemies.city.triad_caster import TriadCaster
+    from game.entities.bosses.city.triad_caster import TriadCaster
 
     for aim in (0.0, math.pi / 2, math.pi, -math.pi / 2, 2.1):
         c = TriadCaster("right", 500.0, 300.0, aim, 0.5, 1.0)
@@ -987,7 +987,7 @@ def test_girar_a_cabeca_nao_move_a_ancora():
     pivô vazio — ela "escapa" do lugar enquanto mira. O offset devolvido por
     `aimed_part` é o que prende o pixel de ancoragem no lugar.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     for part in ("left", "right"):
         base = pmap.cropped_part(part)
@@ -1009,7 +1009,7 @@ def test_nenhum_eco_fere_antes_de_terminar_de_materializar(boss: TriadBoss):
     jogador veria a cabeça no mesmo frame em que já não dá para sair.
     """
     _entrar_na_sentenca(boss)
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     t = 0.0
     feixes: list = []
@@ -1092,7 +1092,7 @@ def test_a_sentenca_sempre_deixa_uma_saida_alcancavel(boss: TriadBoss, ocorrenci
     batida.
     """
     from game.core.config import config as Config
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     sw, sh = float(Config.SCREEN_WIDTH), float(Config.SCREEN_HEIGHT)
     passo_px = sw / _GRID_W
@@ -1138,7 +1138,7 @@ def test_a_partitura_alterna_os_eixos():
     assinatura compara quantidade, mira e se a cabeça se move — se duas salvas
     vizinhas empatarem nos três, o padrão foi copiado, não composto.
     """
-    from game.entities.enemies.city import triad_score as score
+    from game.entities.bosses.city import triad_score as score
 
     assinaturas = []
     for _, construir in score.SCORE:
@@ -1255,7 +1255,7 @@ def test_as_vozes_abrem_para_a_orbita_sem_teleporte(boss: TriadBoss):
 # ── Fases 2 e 3 ──────────────────────────────────────────────────────────────
 def _levar_ate_fase(boss: TriadBoss, fase: int) -> None:
     """Queima o boss até a fase pedida, atravessando as Sentenças."""
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     limiares = {2: boss.PHASE2_THRESHOLD, 3: boss.PHASE3_THRESHOLD}
     for alvo in sorted(limiares)[: fase - 1]:
@@ -1279,7 +1279,7 @@ def _colher_turnos(boss: TriadBoss, segundos: float, seed: int | None = None):
     * faz as esferas AVANÇAREM, senão elas nunca morrem, o teto de
       `_MAX_LIVE_ORBS` enche e o chefe simplesmente para de atacar.
     """
-    from game.entities.enemies.city.triad_boss import _ACT_WINDUP
+    from game.entities.bosses.city.triad_boss import _ACT_WINDUP
 
     if seed is not None:
         random.seed(seed)
@@ -1321,7 +1321,7 @@ def test_fase2_so_combina_chuva_pulso_e_parede(boss: TriadBoss):
     a dificuldade tem que vir da COMBINAÇÃO. As minas entram à parte — elas são
     terreno, repostas até o teto, não um dos combos.
     """
-    from game.entities.enemies.city.triad_boss import (
+    from game.entities.bosses.city.triad_boss import (
         _ATK_ANCORA,
         _ATK_CHUVA,
         _ATK_PAREDE,
@@ -1343,9 +1343,9 @@ def test_fase2_nao_repete_o_combo_anterior(boss: TriadBoss):
     turnos = _colher_turnos(boss, 60.0, seed=29)
     # As minas são repostas em todo turno; comparar com elas dentro esconderia
     # a repetição do combo, que é o que este teste existe para pegar.
-    from game.entities.enemies.city.triad_boss import _ATK_ANCORA
+    from game.entities.bosses.city.triad_boss import _ATK_ANCORA
 
-    from game.entities.enemies.city.triad_boss import _ATK_PULSO
+    from game.entities.bosses.city.triad_boss import _ATK_PULSO
 
     assinaturas = [
         tuple(a for _ator, a in t if a != _ATK_ANCORA) for t in turnos
@@ -1440,7 +1440,7 @@ def test_fase3_o_nucleo_continua_atingivel(boss: TriadBoss):
 
 
 def test_fase3_orbita_e_pinta_as_esferas_de_laranja(boss: TriadBoss):
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     _levar_ate_fase(boss, 3)
     antes = (boss.heads[LEFT].offset_x, boss.heads[LEFT].offset_y)
@@ -1460,7 +1460,7 @@ def test_fase3_so_usa_os_ataques_dela(boss: TriadBoss):
     conteúdo novo: é o primeiro padrão que o chefe ensinou, voltando em laranja
     e mais rápido.
     """
-    from game.entities.enemies.city.triad_boss import _ATK_PULSO
+    from game.entities.bosses.city.triad_boss import _ATK_PULSO
 
     _levar_ate_fase(boss, 3)
     turnos = _colher_turnos(boss, 34.0)
@@ -1478,7 +1478,7 @@ def test_fase3_nao_repete_o_ataque_anterior(boss: TriadBoss):
     fora da cobrança pelo mesmo motivo da Fase 2 — ele é o fallback, e exigir
     que ele alterne obrigaria o chefe a relançar um ataque ainda em cena.
     """
-    from game.entities.enemies.city.triad_boss import _ATK_PULSO
+    from game.entities.bosses.city.triad_boss import _ATK_PULSO
 
     _levar_ate_fase(boss, 3)
     turnos = _colher_turnos(boss, 60.0, seed=31)
@@ -1498,7 +1498,7 @@ def test_unissono_acende_as_tres_cabecas(boss: TriadBoss):
     Dois dos três anéis saem das Vozes. Com o telégrafo só na Coroa, o jogador
     recebia dois anéis de cabeças que não avisaram nada.
     """
-    from game.entities.enemies.city.triad_boss import (
+    from game.entities.bosses.city.triad_boss import (
         _ACT_WINDUP,
         _ATK_UNISSONO,
         _CROWN_ACTOR,
@@ -1523,12 +1523,12 @@ def test_convergencia_devolve_o_estouro_com_a_arena_no_teto(boss: TriadBoss):
     dele: com a arena cheia, o ataque engolia tudo e devolvia nada. O telégrafo
     acendia, a tela limpava e o troco não vinha.
     """
-    from game.entities.enemies.city.triad_boss import (
+    from game.entities.bosses.city.triad_boss import (
         _ATK_CONVERGENCIA,
         _CROWN_ACTOR,
         _MAX_LIVE_ORBS,
     )
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     boss._phase = 3
     boss._orbs = [
@@ -1546,8 +1546,8 @@ def test_convergencia_devolve_o_estouro_com_a_arena_no_teto(boss: TriadBoss):
 def test_pulso_sustentado_respeita_o_teto(boss: TriadBoss):
     """As batidas 2 e 3 não passam pelo `_fire_current_attack` — e nasciam fora
     do teto por isso. Medido na Fase 3: 64 esferas em cena com o teto em 52."""
-    from game.entities.enemies.city.triad_boss import _MAX_LIVE_ORBS
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_boss import _MAX_LIVE_ORBS
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     boss._orbs = [
         TriadOrb(100.0 + i, 200.0, OrbBehavior.ANCHOR) for i in range(_MAX_LIVE_ORBS)
@@ -1583,8 +1583,8 @@ def test_o_veu_fecha_antes_do_primeiro_feixe_e_abre_depois_do_ultimo(boss: Triad
     "começou outra coisa" — vira só uma cabeça piscando no meio do ataque. A
     partitura reserva a INTRO justamente para isto (`score.INTRO`).
     """
-    from game.entities.enemies.city.triad_boss import _SENTENCA, _VOICE_FADE
-    from game.entities.enemies.city import triad_score as score
+    from game.entities.bosses.city.triad_boss import _SENTENCA, _VOICE_FADE
+    from game.entities.bosses.city import triad_score as score
 
     assert _VOICE_FADE < score.INTRO, "o véu não cabe na abertura da partitura"
 
@@ -1639,7 +1639,7 @@ def test_convergencia_cobra_pelo_que_ficou_vivo(boss: TriadBoss):
 
     É o que transforma limpar as esferas de opcional em leitura de risco.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     boss._phase = 3
     boss._orbs.clear()
@@ -1691,8 +1691,8 @@ def test_a_cabeca_se_dissolve_junto_com_o_feixe():
     uma cabeça acesa sem feixe nenhum. As duas leituras são "apareceu do nada"
     ao contrário, que é o defeito que esta coreografia veio corrigir.
     """
-    from game.entities.enemies.city.triad_beam import TriadBeam
-    from game.entities.enemies.city.triad_caster import TriadCaster
+    from game.entities.bosses.city.triad_beam import TriadBeam
+    from game.entities.bosses.city.triad_caster import TriadCaster
 
     assert TriadCaster.SINK_TIME == TriadBeam.FADE_TIME
 
@@ -1710,7 +1710,7 @@ def test_nenhum_feixe_varre_mais_rapido_que_a_nave():
     padrão: a cruz do uníssono corria a 404 px/s e o giro do cruzado chicoteava
     a ponta do feixe a ~995 px/s, contra 200 px/s da nave mais lenta do elenco.
     """
-    from game.entities.enemies.city import triad_score as score
+    from game.entities.bosses.city import triad_score as score
 
     for inicio, construir in score.SCORE:
         for i, tiro in enumerate(construir(1280.0, 720.0)):
@@ -1728,7 +1728,7 @@ def test_todo_feixe_avisa_antes_de_ferir():
     até um lugar seguro. Com os 0,45s da primeira versão sobravam 0,20s, ou 40px
     na nave mais lenta — menos que o corpo dela.
     """
-    from game.entities.enemies.city import triad_score as score
+    from game.entities.bosses.city import triad_score as score
 
     for inicio, construir in score.SCORE:
         for i, tiro in enumerate(construir(1280.0, 720.0)):
@@ -1746,7 +1746,7 @@ def test_a_varredura_ja_esta_em_curso_quando_o_feixe_passa_a_ferir(boss: TriadBo
     feixe passa a ferir ele JÁ ANDOU, e o quanto andou é a prova de que a direção
     era pública antes de o dano existir.
     """
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     _entrar_na_sentenca(boss)
 
@@ -1794,7 +1794,7 @@ def test_o_render_do_feixe_nao_aloca_por_frame():
     """
     import pygame
 
-    from game.entities.enemies.city import triad_beam as tb
+    from game.entities.bosses.city import triad_beam as tb
 
     tela = pygame.Surface((640, 360))
     feixes = [
@@ -1827,7 +1827,7 @@ def test_esfera_nasce_inofensiva_e_ja_pode_levar_tiro():
     mesma regra dos feixes. Ela JÁ é alvo nessa janela de propósito: quem lê
     cedo pode apagá-la antes de virar ameaça, e isso premia a leitura.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     orb = TriadOrb(300.0, 200.0, OrbBehavior.RING, angle=0.0, birth=0.40)
     assert orb.is_hatching
@@ -1851,7 +1851,7 @@ def test_esfera_morrendo_sai_da_colisao_mas_fica_na_tela():
     nave, da mira e da contagem de hostis, sem precisar que nenhum desses
     sistemas saiba que esta fase existe.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     orb = TriadOrb(300.0, 200.0, OrbBehavior.RING, angle=0.0, birth=0.05)
     _tick(orb, 0.10)
@@ -1877,7 +1877,7 @@ def test_matar_a_esfera_credita_a_morte_uma_vez_so():
     override, o tiro que derruba a esfera devolveria "só acertei" e o jogador
     perderia a explosão e o som no frame em que a morte acontece.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     orb = TriadOrb(300.0, 200.0, OrbBehavior.RING, angle=0.0, birth=0.05)
     _tick(orb, 0.10)
@@ -1893,7 +1893,7 @@ def test_matar_a_esfera_credita_a_morte_uma_vez_so():
 
 def test_expirar_tambem_toca_a_animacao_de_morte():
     """Vencer o prazo merece o mesmo estouro de quem levou tiro."""
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     orb = TriadOrb(300.0, 200.0, OrbBehavior.RING, angle=0.0, lifetime=0.25, birth=0.05)
     _tick(orb, 0.10)
@@ -1928,7 +1928,7 @@ def test_a_chuva_e_assinatura_da_coroa(boss: TriadBoss):
     pressão direta. Ver a Chuva sair de uma lateral desfaz a leitura de "quem
     faz o quê" de que o telégrafo laranja depende para informar.
     """
-    from game.entities.enemies.city.triad_boss import _ATK_CHUVA, _CROWN_ACTOR
+    from game.entities.bosses.city.triad_boss import _ATK_CHUVA, _CROWN_ACTOR
 
     lotes, _ = _run_phase1(boss, 60.0, seed=3)
     chuvas = [(a, o) for a, atk, o in lotes if atk == _ATK_CHUVA]
@@ -1938,7 +1938,7 @@ def test_a_chuva_e_assinatura_da_coroa(boss: TriadBoss):
 
 
 def test_a_cadencia_e_das_vozes(boss: TriadBoss):
-    from game.entities.enemies.city.triad_boss import _ATK_CADENCIA, _CROWN_ACTOR
+    from game.entities.bosses.city.triad_boss import _ATK_CADENCIA, _CROWN_ACTOR
 
     lotes, _ = _run_phase1(boss, 60.0, seed=5)
     cads = [(a, o) for a, atk, o in lotes if atk == _ATK_CADENCIA]
@@ -1955,7 +1955,7 @@ def test_cadencia_nasce_espalhada_escalonada_e_longe_do_jogador(boss: TriadBoss)
     sem esquiva, que é justamente o que o anel de nascimento existe para evitar.
     """
     from game.core.config import config as Config
-    from game.entities.enemies.city.triad_boss import _ATK_CADENCIA, _CADENCIA_CLEARANCE
+    from game.entities.bosses.city.triad_boss import _ATK_CADENCIA, _CADENCIA_CLEARANCE
 
     sw, sh = float(Config.SCREEN_WIDTH), float(Config.SCREEN_HEIGHT)
     minima = math.hypot(sw, sh) * _CADENCIA_CLEARANCE
@@ -1991,7 +1991,7 @@ def test_pulso_e_um_anel_fechado_batendo_em_compasso(boss: TriadBoss):
     resposta preguiçosa de achar um corredor e ficar nele — a onda seguinte sai
     exatamente pelas vagas da anterior.
     """
-    from game.entities.enemies.city.triad_boss import (
+    from game.entities.bosses.city.triad_boss import (
         _ATK_PULSO,
         _PULSO_SLOTS,
         _PULSO_WAVES,
@@ -2022,8 +2022,8 @@ def test_o_cache_de_halo_da_esfera_nao_cresce_por_frame():
     """
     import pygame
 
-    from game.entities.enemies.city import triad_orb as to
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city import triad_orb as to
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     tela = pygame.Surface((640, 360))
     orbs = []
@@ -2053,7 +2053,7 @@ def test_chuva_monta_formacao_simetrica_no_alto(boss: TriadBoss):
     por onde vai passar antes de a queda começar.
     """
     from game.core.config import config as Config
-    from game.entities.enemies.city.triad_boss import _CHUVA_TOPO
+    from game.entities.bosses.city.triad_boss import _CHUVA_TOPO
 
     sw, sh = float(Config.SCREEN_WIDTH), float(Config.SCREEN_HEIGHT)
     postos = boss._postos_da_chuva()
@@ -2077,7 +2077,7 @@ def test_chuva_sobe_estagna_e_so_entao_desce_devagar():
     A pausa é a janela de leitura: sem ela a ameaça chega junto com a informação,
     que era o defeito da parábola antiga.
     """
-    from game.entities.enemies.city.triad_orb import (
+    from game.entities.bosses.city.triad_orb import (
         _LOB_FALL_SPEED,
         _LOB_HOLD_TIME,
         _LOB_RISE_TIME,
@@ -2114,7 +2114,7 @@ def test_chuva_sobe_estagna_e_so_entao_desce_devagar():
 # ── Minas: terreno, não projétil ─────────────────────────────────────────────
 def test_minas_nao_expiram():
     """Só somem a tiro ou com o chefe. Não têm prazo."""
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     mina = TriadOrb(400.0, 400.0, OrbBehavior.ANCHOR, birth=0.05)
     _tick(mina, 0.10)
@@ -2127,7 +2127,7 @@ def test_minas_nao_expiram():
 
 def test_minas_respeitam_o_teto_em_tela(boss: TriadBoss):
     """O campo se estabelece e para. Uma luta longa não pode entupir a arena."""
-    from game.entities.enemies.city.triad_boss import _ANCORA_MAX
+    from game.entities.bosses.city.triad_boss import _ANCORA_MAX
 
     _levar_ate_fase(boss, 2)
     vivas: list = []
@@ -2153,7 +2153,7 @@ def test_minas_morrem_com_o_chefe(boss: TriadBoss):
     Sem isso, oito minas continuariam ferindo depois de a luta acabar — o que lê
     como bug mesmo sendo consequência direta da regra de não expirarem.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     minas = [
         TriadOrb(300.0 + i * 60, 400.0, OrbBehavior.ANCHOR, birth=0.05)
@@ -2181,7 +2181,7 @@ def test_parede_vem_dos_dois_lados_com_alturas_intercaladas(boss: TriadBoss):
     passar.
     """
     from game.core.config import config as Config
-    from game.entities.enemies.city.triad_boss import _PAREDE_DIR, _PAREDE_ESQ
+    from game.entities.bosses.city.triad_boss import _PAREDE_DIR, _PAREDE_ESQ
 
     orbs = boss._fire_parede(_PLAYER)
     assert len(orbs) == _PAREDE_ESQ + _PAREDE_DIR
@@ -2237,7 +2237,7 @@ def test_um_ataque_nao_repete_com_a_leva_anterior_em_cena(boss: TriadBoss, fase:
     ficar ocioso. Esperar a arena limpar antes de qualquer ataque daria ciclos
     de 8,2s na Fase 1 e 15,9s na Fase 2, e o chefe passaria a luta parado.
     """
-    from game.entities.enemies.city.triad_boss import _ATAQUES_SEM_ESPERA
+    from game.entities.bosses.city.triad_boss import _ATAQUES_SEM_ESPERA
 
     if fase >= 2:
         _levar_ate_fase(boss, fase)
@@ -2260,7 +2260,7 @@ def test_os_isentos_continuam_podendo_empilhar(boss: TriadBoss):
     esvaziar entre eles. As minas são permanentes, então cobrá-las travaria o
     chefe para sempre. A regra existe para dar ritmo, não para esterilizar.
     """
-    from game.entities.enemies.city.triad_boss import _ATAQUES_SEM_ESPERA, _ATK_PULSO
+    from game.entities.bosses.city.triad_boss import _ATAQUES_SEM_ESPERA, _ATK_PULSO
 
     assert _ATK_PULSO in _ATAQUES_SEM_ESPERA
     registro = _emissoes_com_cena(boss, 60.0, seed=5)
@@ -2277,7 +2277,7 @@ def test_o_teleguiado_desiste_e_vai_embora():
     px/s (mais devagar que a nave), só sobrepondo as levas seguintes. Projétil
     que já não oferece decisão e não sai do caminho é sujeira visual.
     """
-    from game.entities.enemies.city.triad_orb import (
+    from game.entities.bosses.city.triad_orb import (
         _SEEKER_COMMIT_SPEED,
         _SEEKER_HOMING_TIME,
         OrbBehavior,
@@ -2312,7 +2312,7 @@ def test_a_chuva_entra_na_queda_sem_tranco():
     velocidades lateral e vertical saltavam de zero para ~147 e 125 px/s. Era
     isso que se via como um tranco.
     """
-    from game.entities.enemies.city.triad_orb import (
+    from game.entities.bosses.city.triad_orb import (
         _LOB_HOLD_TIME,
         _LOB_RISE_TIME,
         make_rain,
@@ -2352,7 +2352,7 @@ def test_a_chuva_cai_espelhada():
     simetria — que é o ponto do ataque — se perde no meio do caminho.
     """
     from game.core.config import config as Config
-    from game.entities.enemies.city.triad_orb import (
+    from game.entities.bosses.city.triad_orb import (
         _LOB_HOLD_TIME,
         _LOB_RISE_TIME,
         make_rain,
@@ -2380,7 +2380,7 @@ def test_convergencia_suga_as_esferas_em_vez_de_apaga_las():
     Convergência sai em 1 de cada 3 turnos da Fase 3 e o jogador está sempre
     acertando o chefe quando ela vem.
     """
-    from game.entities.enemies.city.triad_orb import (
+    from game.entities.bosses.city.triad_orb import (
         VACUUM_TIME,
         OrbBehavior,
         TriadOrb,
@@ -2426,7 +2426,7 @@ def test_dano_no_chefe_nao_limpa_a_arena(boss: TriadBoss):
     Fase 3. Este teste fixa que o caminho do DANO não mexe em nada disso — se
     alguém acoplar os dois um dia, falha aqui.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     boss._phase = 3
     boss._apply_phase()
@@ -2455,7 +2455,7 @@ def test_a_pulsacao_nao_mexe_na_hitbox():
     dependendo do frame, que é o tipo de injustiça que o jogador não tem como
     diagnosticar.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     orb = TriadOrb(400.0, 300.0, OrbBehavior.RING, angle=0.0, birth=0.05)
     _tick(orb, 0.10)
@@ -2475,7 +2475,7 @@ def test_a_area_da_esfera_acompanha_o_raio_de_classe():
     corpo, e o jogador julga o vão entre esferas pelo que vê.
     """
     from game.core.scale import gameplay_scale
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     comum = TriadOrb(400.0, 300.0, OrbBehavior.RING, angle=0.0)
     mina = TriadOrb(400.0, 300.0, OrbBehavior.ANCHOR)
@@ -2487,7 +2487,7 @@ def test_a_area_da_esfera_acompanha_o_raio_de_classe():
 # ── Som dos feixes ───────────────────────────────────────────────────────────
 def _sentenca_com_bus():
     from game.core.events import EventBus
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
     from game.events import game_events as ev
 
     bus = EventBus()
@@ -2545,7 +2545,7 @@ def test_o_feixe_toca_som_ao_disparar():
 
 def test_sem_event_bus_o_boss_nao_quebra():
     """O bus é opcional (testes, previews). Sem ele, silêncio — não exceção."""
-    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.entities.bosses.city.triad_boss import _SENTENCA
 
     boss = TriadBoss(event_bus=None)
     boss.x, boss.y = boss._home_x, boss._home_y
@@ -2567,7 +2567,7 @@ def test_a_folga_entre_salvas_cresce_nas_dificuldades_menores():
     aprovou como limite. Abaixo disso cada salva entra mais tarde que a anterior,
     o que ALARGA o intervalo sem tocar no interior de salva nenhuma.
     """
-    from game.entities.enemies.city import triad_score as score
+    from game.entities.bosses.city import triad_score as score
 
     dura = score.folga_por_agressividade(1.20)
     normal = score.folga_por_agressividade(1.00)
@@ -2602,7 +2602,7 @@ def test_a_folga_nao_mexe_dentro_da_salva():
     Se a folga esticasse a salva, o modo fácil teria feixes mais lentos — outro
     ataque, não o mesmo com mais ar entre um e outro.
     """
-    from game.entities.enemies.city import triad_score as score
+    from game.entities.bosses.city import triad_score as score
 
     apertado, _ = score.build_schedule(1280.0, 720.0, 1.0, 0.0)
     folgado, _ = score.build_schedule(1280.0, 720.0, 1.0, score.FOLGA_MAX)
@@ -2620,7 +2620,7 @@ def test_a_chuva_se_posiciona_no_topo_da_tela(boss: TriadBoss):
     se posicionar sem estar embaixo — e ainda ganha 1s de pausa antes da queda.
     """
     from game.core.config import config as Config
-    from game.entities.enemies.city.triad_orb import _LOB_HOLD_TIME
+    from game.entities.bosses.city.triad_orb import _LOB_HOLD_TIME
 
     sh = float(Config.SCREEN_HEIGHT)
     postos = boss._postos_da_chuva()
@@ -2641,7 +2641,7 @@ def _forcar_premiada(boss: TriadBoss, orbs: list):
 
 
 def pmap_cor(boss: TriadBoss):
-    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.bosses.city import triad_pixel_map as pmap
 
     return pmap.CYAN if boss._phase >= 3 else pmap.ORANGE
 
@@ -2653,8 +2653,8 @@ def test_a_premiada_sai_na_cor_contraria_a_da_fase(boss: TriadBoss, fase: int):
     A cor é o contrato inteiro — "a diferente vale alguma coisa" se aprende no
     primeiro tiro, e vale igual nas duas pontas da luta.
     """
-    from game.entities.enemies.city import triad_pixel_map as pmap
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city import triad_pixel_map as pmap
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     boss._phase = fase
     comuns = boss._palette("pulso")
@@ -2677,7 +2677,7 @@ def test_a_premiada_larga_o_powerup_ao_ser_destruida(boss: TriadBoss):
     vínculo entre "atirei naquela" e "caiu isto" que ensina o jogador a procurar.
     """
     from game.core.config import PowerUpType
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     orb = TriadOrb(430.0, 260.0, OrbBehavior.RING, angle=0.0, birth=0.05)
     _tick(orb, 0.10)
@@ -2697,7 +2697,7 @@ def test_a_premiada_larga_o_powerup_ao_ser_destruida(boss: TriadBoss):
 
 
 def test_esfera_comum_nao_larga_nada():
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     orb = TriadOrb(430.0, 260.0, OrbBehavior.RING, angle=0.0, birth=0.05)
     _tick(orb, 0.10)
@@ -2713,7 +2713,7 @@ def test_o_premio_nao_sai_de_graca():
     chegou a ser um alvo. Entregar o prêmio nesses casos apagaria a decisão que
     ele existe para recompensar.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     contato = TriadOrb(430.0, 260.0, OrbBehavior.RING, angle=0.0, birth=0.05)
     _tick(contato, 0.10)
@@ -2766,7 +2766,7 @@ def test_a_premiada_volta_a_ser_sorteada_depois_de_destruida(boss: TriadBoss):
     Se o bloqueio não soltasse depois da morte, o jogador teria um prêmio a luta
     inteira — o incentivo de procurar a esfera diferente sumiria no primeiro tiro.
     """
-    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+    from game.entities.bosses.city.triad_orb import OrbBehavior, TriadOrb
 
     def _salva():
         return [

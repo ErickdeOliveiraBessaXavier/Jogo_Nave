@@ -8,6 +8,7 @@ sobrevive ao caminho completo, que é onde o furo acontecia.
 
 import pytest
 
+from conftest import skip_se_arena_de_teste
 from game.core.difficulty import DifficultyPreset
 from game.core.levels import DifficultyConfig, LevelConfig, get_level_config
 from game.core.levels.pipeline import _STAGE_ENTRY_GRACE, _apply_stage_grace_and_coop
@@ -102,6 +103,7 @@ class TestCoopScaling:
         assert adjusted.enemy_spawn_config[_Enemy] >= DifficultyConfig.MIN_SPAWN_TIME
 
 
+@skip_se_arena_de_teste
 class TestPipelineEndToEnd:
     @pytest.mark.parametrize("player_count", [1, 2, 3, 4])
     @pytest.mark.parametrize("preset", list(DifficultyPreset))

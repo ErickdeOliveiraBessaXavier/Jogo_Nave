@@ -53,7 +53,7 @@ TAIL: float = 0.90
 # Fator da 2ª ocorrência: mais RÁPIDA, nunca mais densa. Multiplica os instantes
 # E as durações, então a coreografia acelera inteira em vez de comprimir os
 # intervalos e deixar os feixes se acumulando.
-SPEEDUP: float = 0.8
+SPEEDUP: float = 0.7
 
 # ── Folga entre salvas, por dificuldade ───────────────────────────────────────
 # A troca de uma formação para a seguinte é o momento mais difícil da coreografia:

@@ -32,10 +32,10 @@ from ...entities.enemies.city.city_drone import CityDrone  # noqa: F401
 from ...entities.enemies.city.cyber_captor import CyberCaptor  # noqa: F401
 from ...entities.enemies.city.cyber_tank import CyberTank  # noqa: F401
 from ...entities.enemies.city.jammer_node import JammerNode  # noqa: F401
-from ...entities.enemies.city.metropolis_overlord_boss import (  # noqa: F401
+from ...entities.bosses.city.metropolis_overlord_boss import (  # noqa: F401
     MetropolisOverlordBoss,  # arena de teste: alternativa de chefe da Cidade
 )
-from ...entities.enemies.city.triad_boss import TriadBoss  # noqa: F401  (arena de teste)
+from ...entities.bosses.city.triad_boss import TriadBoss  # noqa: F401  (arena de teste)
 from ...entities.enemies.city.mirror_pylon import MirrorPylon  # noqa: F401
 from ...entities.enemies.city.mortar_drone import MortarDrone  # noqa: F401
 from ...entities.enemies.city.neon_sniper import NeonSniper  # noqa: F401

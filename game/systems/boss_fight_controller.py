@@ -316,10 +316,10 @@ class BossFightController:
     ) -> None:
         from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
         from ..entities.bosses.giant_meteor_boss import GiantMeteorBoss
-        from ..entities.enemies.city.metropolis_overlord_boss import (
+        from ..entities.bosses.city.metropolis_overlord_boss import (
             MetropolisOverlordBoss,
         )
-        from ..entities.enemies.city.triad_boss import TriadBoss
+        from ..entities.bosses.city.triad_boss import TriadBoss
         from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
         from ..entities.bosses.stone_golem_boss import StoneGolemBoss
 

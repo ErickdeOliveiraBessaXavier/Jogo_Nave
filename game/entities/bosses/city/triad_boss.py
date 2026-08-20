@@ -41,7 +41,8 @@ import pygame
 from ....core.assets import get_font
 from ....core.config import config as Config
 from ....core.events import EventBus
-from ...bosses.boss_hit_mixin import BossHitMixin
+from ...effects.critical_damage import area_from_box
+from ..boss_hit_mixin import BossHitMixin
 from . import triad_pixel_map as pmap
 from .triad_head import TriadHead
 from .triad_beam import TriadBeam
@@ -458,6 +459,9 @@ class TriadBoss(BossHitMixin):
         # esferas soltas da arena). Lista com teto, então rebuild por
         # compreensão é aceitável aqui (§6).
         self._orbs: List[TriadOrb] = []
+        # Recarregado do `BossUpdateContext` a cada tick. Público: é contrato de
+        # entrada do boss, não estado interno.
+        self.arena_has_powerup: bool = False
         # Feixes emitidos neste frame, drenados pelo `update_boss`.
         self._pending_beams: List[TriadBeam] = []
         self._sent_t: float = 0.0
@@ -490,6 +494,16 @@ class TriadBoss(BossHitMixin):
     def _crown_circle(self) -> tuple[float, float, float]:
         cx, cy = pmap.CROWN_HEAD_CENTER
         return self.x + cx, self.y + cy, pmap.CROWN_HEAD_RADIUS
+
+    def critical_fx_area(self) -> pygame.Rect:
+        """O fogo queima na COROA — é dela que `self.health` fala.
+
+        A caixa do sprite inteiro cobre também os soquetes das Vozes, e na Fase 3
+        elas nem estão lá: metade das partículas nasceria em espaço vazio. O
+        círculo da Coroa mantém o fogo sobre o que o jogador está derrubando.
+        """
+        cx, cy, r = self._crown_circle()
+        return area_from_box(cx - r, cy - r, r * 2.0, r * 2.0, inset=0.10)
 
     def collision_circle(self) -> tuple[float, float, float]:
         """Círculo do alvo VÁLIDO do momento — não o do corpo inteiro.
@@ -910,6 +924,12 @@ class TriadBoss(BossHitMixin):
     def update_boss(self, dt: float, ctx: "BossUpdateContext") -> "BossUpdateResult":
         from ....systems.boss_context import BossUpdateResult
 
+        # A arena inteira decide se cabe uma nova promessa de prêmio, e só o
+        # `BossUpdateContext` dá acesso a ela (§1: contrato explícito, nada de
+        # ler estado de outro sistema). Guardado em campo público porque o
+        # `update` cru — usado pelos testes e por quem não monta contexto —
+        # continua funcionando com o default `False`.
+        self.arena_has_powerup = ctx.entity_manager.has_powerup_on_screen()
         py = ctx.player_y if ctx.player_y is not None else Config.SCREEN_HEIGHT * 0.8
         spawned = self.update(dt, (ctx.player_x, py))
         result = BossUpdateResult()
@@ -927,6 +947,10 @@ class TriadBoss(BossHitMixin):
             return []
 
         self._time += dt
+        # Fogo e fumaça de vida baixa — API da família, em `BossHitMixin`. Com a
+        # Coroa perto de cair o casco pega fogo, que é como todo boss do jogo
+        # diz "quanto falta" sem número na tela.
+        self.update_critical_fx(dt)
         # A área de colisão larga vale por frame: as partes acabaram de andar.
         self._wide_dirty = True
         self._hit_flash = max(0.0, self._hit_flash - dt)
@@ -1379,6 +1403,16 @@ class TriadBoss(BossHitMixin):
         self._orbs.extend(orbs)
         return orbs
 
+    @property
+    def has_prize_pending(self) -> bool:
+        """Há esfera premiada viva na arena? Lido pelo `EntityManager` (§5).
+
+        Enquanto for verdade, o relógio de power-up segura o próximo item: são
+        duas fontes da MESMA promessa, e deixá-las coincidir faria o prêmio da
+        esfera nascer bloqueado pelo item que o relógio acabou de soltar.
+        """
+        return any(o.prize and o.is_collectible for o in self._orbs)
+
     def _vagas(self) -> int:
         """Quantas esferas ainda cabem em cena. Nunca negativo."""
         self._prune_orbs()
@@ -1399,6 +1433,14 @@ class TriadBoss(BossHitMixin):
         if not orbs:
             return
         if any(o.prize and o.is_collectible for o in self._orbs):
+            return
+        # Com power-up já caindo, a esfera premiada NÃO NASCE. Deixá-la nascer
+        # para depois descartar o drop é prometer com a cor e não pagar: o
+        # jogador gasta tiro na esfera certa, vê a explosão e não vem nada — e a
+        # lição que ele tira é "o prêmio é aleatório", que é o oposto do que a
+        # cor diferente existe para ensinar. Barrar aqui é mais barato E mais
+        # honesto que barrar na entrega.
+        if self.arena_has_powerup:
             return
         if random.random() >= _PREMIO_CHANCE:
             return
@@ -2166,6 +2208,9 @@ class TriadBoss(BossHitMixin):
 
         for head in self.heads:
             head.draw(surface, origin)
+
+        # Depois do corpo: o fogo sai POR CIMA do casco, senão o sprite o cobre.
+        self.draw_critical_fx(surface)
 
         self._draw_pulse(surface)
 

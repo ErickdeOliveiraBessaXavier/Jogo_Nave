@@ -1,6 +1,6 @@
 import colorsys
 import random
-from typing import Tuple
+from typing import Iterable, Tuple
 
 import pygame
 
@@ -68,6 +68,16 @@ class PowerUp:
         # Fade de encerramento de fase (dissolver).
         self._fading: bool = False
         self._fade_timer: float = 0.0
+
+    @property
+    def on_screen(self) -> bool:
+        """Está na arena esperando coleta? É o que TRAVA o nascimento de outro.
+
+        Quem já dissolve (`begin_fade_out`) ou morreu não conta: o jogador não
+        pode mais pegá-lo, então segurá-lo como bloqueio só adiaria o próximo
+        sem nada em tela para justificar a espera.
+        """
+        return not self.dead and not self._fading
 
     def begin_fade_out(self) -> None:
         """Inicia o dissolver de encerramento (idempotente). Retardatário que não
@@ -225,3 +235,17 @@ class PowerUp:
     def is_off_screen(self) -> bool:
         """Verifica se o power-up saiu da tela"""
         return self.y > Config.SCREEN_HEIGHT
+
+
+def screen_has_powerup(powerups: "Iterable[PowerUp]") -> bool:
+    """Regra do "um de cada vez", escrita UMA vez.
+
+    O jogo tem dois produtores de power-up — o relógio do `PowerUpSpawner` e os
+    drops de morte que passam pelo `EntityManager` — e os dois consultam esta
+    função. Duplicar o `any(...)` nos dois lados é como a regra volta a valer só
+    num caminho quando alguém mexe no outro.
+
+    A lista é comprovadamente minúscula (0–2 itens), então o scan linear é o
+    certo aqui — nada de índice a manter em sincronia (§8).
+    """
+    return any(p.on_screen for p in powerups)

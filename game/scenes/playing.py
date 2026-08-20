@@ -1616,7 +1616,11 @@ class PlayingScene(Scene):
                 )
 
             if not self.no_powerups_mode:
-                self.powerup_spawner.update(dt, self.entity_manager.powerups)
+                self.powerup_spawner.update(
+                    dt,
+                    self.entity_manager.powerups,
+                    reward_pending=self.entity_manager.reward_pending(),
+                )
 
             self.star_spawner.update(self.entity_manager.stars)
 

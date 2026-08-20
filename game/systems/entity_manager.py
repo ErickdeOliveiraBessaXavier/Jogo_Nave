@@ -49,11 +49,11 @@ from ..entities.enemies.city.core_implosion import CoreImplosion
 from ..entities.enemies.city.cyber_captor import CyberCaptor
 from ..entities.enemies.city.cyber_tank import CyberTank
 from ..entities.enemies.city.jammer_node import JammerNode
-from ..entities.enemies.city.metropolis_overlord_boss import (
+from ..entities.bosses.city.metropolis_overlord_boss import (
     MetropolisOverlordBoss,
 )
 from ..entities.enemies.city.neon_bolt import NeonBolt
-from ..entities.enemies.city.triad_boss import TriadBoss
+from ..entities.bosses.city.triad_boss import TriadBoss
 from ..entities.enemies.city.splitter_debris import SplitterDebris
 from ..entities.enemies.city.carrier_debris import CarrierDebris
 from ..entities.enemies.city.cargo_carrier import CargoCarrier
@@ -87,7 +87,7 @@ from ..entities.bosses.mountain_serpent_boss import (
     SerpentRockBullet,
 )
 from ..entities.projectiles.orbital_discharge import OrbitalDischarge
-from ..entities.pickups.powerup import PowerUp
+from ..entities.pickups.powerup import PowerUp, screen_has_powerup
 from ..entities.enemies.mountain.rock_glider_pool import RockGliderPool
 from ..entities.bosses.slime_boss import SlimeBoss
 from ..entities.effects.slime_drip import SlimeDrip
@@ -902,6 +902,53 @@ class EntityManager:
                 self.enemies.append(meteor)
             else:
                 self.enemies.append(spec)
+
+    def has_powerup_on_screen(self) -> bool:
+        """Existe power-up esperando coleta? Consultado por quem PRODUZ prêmio."""
+        return screen_has_powerup(self.powerups)
+
+    def reward_pending(self) -> bool:
+        """Já existe recompensa prometida na arena?
+
+        Power-up caindo **ou** esfera premiada viva: para o jogador as duas são a
+        mesma promessa ("tem prêmio esperando por mim"), e é ela que não pode
+        acontecer duas vezes ao mesmo tempo. Quem só olhasse a lista de power-ups
+        deixaria o relógio soltar um item enquanto a esfera de cor diferente
+        ainda está lá — e aí o prêmio dela nasceria bloqueado.
+
+        A esfera é descoberta por class attribute via `getattr` (§5), não por
+        `isinstance`: boss que não tem prêmio simplesmente não declara o atributo.
+        """
+        if self.has_powerup_on_screen():
+            return True
+        return bool(getattr(self.boss, "has_prize_pending", False))
+
+    def add_powerups(self, drops: tuple[Any, ...]) -> None:
+        """Coletáveis largados por uma morte. Porta ÚNICA dos drops de power-up.
+
+        Vale a mesma regra do relógio do spawner: **um power-up por vez em
+        tela**. Sem ela, um ataque que solta prêmio por peça destruída (as
+        esferas premiadas da Tríade) enfileira vários de uma vez, e o que era
+        recompensa por mirar na esfera certa vira chuva de item — o oposto de
+        uma decisão.
+
+        Lista própria e não `enemies`: `absorb_fragments` é que vai para lá, e
+        um power-up ali viraria inimigo.
+        """
+        if not drops:
+            return
+        for drop in drops:
+            if self.has_powerup_on_screen():
+                # REDE DE SEGURANÇA, não o mecanismo principal. Quem impede o
+                # prêmio de frustrar é `reward_pending`, que barra a promessa na
+                # ORIGEM: a esfera premiada não nasce com recompensa pendente, e
+                # o relógio não solta item enquanto ela está viva. Chegar aqui
+                # com a tela ocupada significa que um produtor novo apareceu sem
+                # consultar aquele gate — o drop é descartado em vez de
+                # enfileirado porque guardá-lo para soltar depois desamarraria o
+                # prêmio do tiro que o mereceu.
+                break
+            self.powerups.append(drop)
 
     def trigger_death_sequence(self, target: Any) -> None:
         """Dispara cinemáticas de morte específicas (ex.: SlimeBoss)."""

@@ -60,7 +60,7 @@ from ..entities.enemies.space.meteor_pool import MeteorPool
 from ..entities.enemies.mountain.mountain_mage import MountainMage
 from ..entities.enemies.mountain.mountain_propeller import MountainPropeller
 from ..entities.enemies.space.orbital_turret import OrbitalTurret
-from ..entities.pickups.powerup import PowerUp
+from ..entities.pickups.powerup import PowerUp, screen_has_powerup
 from ..entities.enemies.space.repair_drone import RepairDrone
 from ..entities.enemies.mountain.rock_glider import RockGlider
 from ..entities.enemies.space.satellite import Satellite, SatelliteFragment
@@ -2374,10 +2374,27 @@ class PowerUpSpawner:
         self.timer = Timer(interval)
         self.timer.start()
 
-    def update(self, dt: float, powerups: List[PowerUp]) -> None:
+    def update(
+        self, dt: float, powerups: List[PowerUp], reward_pending: bool = False
+    ) -> None:
+        """`reward_pending`: a arena já tem promessa de prêmio de OUTRA fonte.
+
+        Hoje é a esfera premiada da Tríade — de cor diferente justamente para
+        dizer "tem prêmio aqui". Sem este parâmetro o relógio solta um item
+        enquanto ela está viva, e o prêmio dela nasce bloqueado: o jogador mira
+        na esfera certa e não recebe nada. Quem sabe disso é a cena, que enxerga
+        arena e boss; o spawner só obedece.
+        """
         self.timer.update(dt)
         if self.timer.done():
-            powerups.append(PowerUp(self._select_powerup_by_rarity()))
+            # Um de cada vez: com um power-up ainda descendo, o relógio vence em
+            # falso e recomeça. Não é "guardar o crédito para depois" de
+            # propósito — segurar o timer vencido faria o próximo nascer no frame
+            # em que a tela limpa, e a tela nunca ficaria vazia (§14: crédito
+            # acumulado com o gate fechado dispara tudo no instante em que ele
+            # abre). O intervalo novo é o que preserva a cadência configurada.
+            if not reward_pending and not screen_has_powerup(powerups):
+                powerups.append(PowerUp(self._select_powerup_by_rarity()))
             self._reset_timer()
         powerups[:] = [p for p in powerups if not p.is_off_screen()]
 
