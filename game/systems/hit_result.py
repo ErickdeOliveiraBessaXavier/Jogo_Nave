@@ -32,6 +32,10 @@ class HitResult:
             EntityManager.absorb_fragments() materializa cada item.
         triggers_special_death: a entidade quer um death-sequence custom
             controlado pelo entity_manager (ex.: SlimeBoss).
+        drops: coletáveis largados pela morte (power-ups). Vão para
+            `entity_manager.powerups`, e NÃO para `fragments` — este último
+            desemboca em `enemies`, e um power-up ali seria tratado como
+            inimigo. Campo próprio em vez de farejar tipo no destino.
     """
 
     killed: bool = False
@@ -41,6 +45,7 @@ class HitResult:
     sound: Callable[[], None] | None = None
     fragments: tuple[Any, ...] = field(default_factory=tuple)
     triggers_special_death: bool = False
+    drops: tuple[Any, ...] = field(default_factory=tuple)
 
 
 # Resultado neutro reusado quando a entidade absorve sem feedback (zero alocação no hot path).

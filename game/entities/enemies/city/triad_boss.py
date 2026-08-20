@@ -47,7 +47,7 @@ from .triad_head import TriadHead
 from .triad_beam import TriadBeam
 from .triad_caster import TriadCaster
 from . import triad_score as score
-from .triad_orb import OrbBehavior, TriadOrb, make_rain
+from .triad_orb import VACUUM_TIME, OrbBehavior, TriadOrb, make_rain
 from .triad_resonance import LEFT, RIGHT, HeadState, ResonanceEvent, ResonanceGate
 
 if TYPE_CHECKING:
@@ -101,7 +101,11 @@ _CHUVA_COUNT = 6             # PAR: a formação é montada em espelho, aos pare
 # tremer dentro da sua. O jitter existe para o padrão não virar uma grade
 # perfeita; ele é FRAÇÃO da faixa, então nunca invade a vizinha.
 _CHUVA_SPAN = (0.08, 0.92)   # extremos da formação, em fração da largura
-_CHUVA_TOPO = (0.15, 0.33)   # faixa de altura onde a formação estagna
+# Faixa de altura onde a formação estagna: o LIMITE SUPERIOR da tela. Antes era
+# (0,15 – 0,33), o miolo da região onde a nave fica atirando no chefe — a
+# formação se montava em cima dela e a parte injusta da Chuva era essa, não a
+# queda. No topo, o jogador vê tudo se posicionar sem estar embaixo.
+_CHUVA_TOPO = (0.04, 0.13)
 _CHUVA_STAGGER = 0.09        # atraso de nascimento entre esferas vizinhas
 _LANE_JITTER = 0.34
 # ── Pulso: anel FECHADO, batendo em compasso ──────────────────────────────────
@@ -117,6 +121,17 @@ _PULSO_SLOTS = 10            # direções do anel (sem brecha)
 _PULSO_WAVES = 3             # anéis por ataque
 _PULSO_BEAT = 0.85           # segundos entre anéis — o compasso
 _PULSO_BIRTH = 0.22          # nascimento curto: a pulsação da Coroa já avisou
+
+# ── Esfera premiada ───────────────────────────────────────────────────────────
+# Uma esfera da salva pode sair na COR CONTRÁRIA à da fase e largar um power-up
+# ao ser destruída. A cor é o contrato inteiro: nas Fases 1 e 2 tudo é ciano e a
+# premiada é laranja; na Fase 3 tudo é laranja e a premiada é AZUL. O jogador não
+# precisa de tutorial — "a diferente vale alguma coisa" se aprende no primeiro
+# tiro, e é a mesma regra nas duas pontas da luta.
+#
+# É sempre o mesmo power-up (tiro 5×) de propósito: recompensa previsível vira
+# alvo procurado. Se fosse sorteada, atirar na esfera diferente viraria aposta.
+_PREMIO_CHANCE = 0.35        # chance de uma salva trazer uma premiada
 
 _CROWN_ACTOR = -1            # "quem age" quando é a cabeça principal
 # Teto de segurança. Subiu de 40 porque as âncoras agora são PERMANENTES (até 8
@@ -210,6 +225,26 @@ _ATK_UNISSONO = "unissono"       # três anéis com as brechas DESALINHADAS
 _UNISSONO_GAP = 3
 _ATK_DILUVIO = "diluvio"         # chuva de tela cheia com faixa segura
 _ATK_CONVERGENCIA = "convergencia"  # recolhe as esferas soltas e devolve
+# Vocabulário da fase, na ordem em que ele foi apresentado. Lista e não sorteio
+# solto: é sobre ela que a anti-repetição e o filtro de `_livre` operam.
+_UNISONO_POOL = (_ATK_UNISSONO, _ATK_DILUVIO, _ATK_CONVERGENCIA)
+# Esferas mínimas em cena para a Convergência valer a pena. Abaixo disso o
+# ataque não RECOLHE nada visível e vira um anel qualquer — ver `_plan_unisono`.
+_CONVERGENCIA_ALVOS = 4
+
+# Ataques que NÃO esperam a leva anterior sair de cena (ver `_livre`).
+#
+# O Uníssono NÃO entra aqui, embora seja radial como o Pulso: ele são três anéis
+# de origens diferentes, 21 esferas por salva contra 10 do Pulso. Isento, ele
+# saturava a fase sozinho — medido: 59% dos turnos, 24 das 35 esferas médias em
+# cena, e 52% das próprias salvas nascendo cortadas pelo teto.
+_ATAQUES_SEM_ESPERA = frozenset({_ATK_PULSO, _ATK_ANCORA})
+
+# Ataques que nascem das TRÊS cabeças ao mesmo tempo. O laranja tem que acender
+# nas três, senão o telégrafo mente por omissão: dois dos três anéis do Uníssono
+# saem de Vozes que não avisaram nada. É o mesmo contrato do §7 — quem acende
+# dispara, e quem dispara acende.
+_ATAQUES_CORAIS = frozenset({_ATK_UNISSONO})
 
 # ── O tom de cada ataque ──────────────────────────────────────────────────────
 # Deslocamento de MATIZ sobre a cor da família (ciano até a Fase 2, laranja na 3).
@@ -255,6 +290,56 @@ _DRIFT_AMPLITUDE = 0.16  # fração da largura da tela
 _BOB_SPEED = 1.1  # rad/s do sobe-e-desce
 _BOB_AMPLITUDE = 10.0  # px
 _ENTER_SPEED = 2.0  # fator de lerp da descida de entrada
+
+# ── Reencaixe pós-Sentença ────────────────────────────────────────────────────
+# A coreografia leva o corpo para o topo-centro e as cabeças para as bordas; a
+# deriva normal ATRIBUI a posição a partir de um seno, e o relógio dela ficou
+# parado durante a Sentença. Voltar direto ao seno teleporta o chefe — medido a
+# 720p: até 205px em x (a amplitude inteira da deriva, `_DRIFT_AMPLITUDE` da
+# largura), ~22px em y (a diferença entre `_SENT_BOSS_Y` e `_home_y`), e as
+# cabeças de volta ao soquete de uma vez. Durante o reencaixe o alvo já é o do
+# estado normal; só o caminho até ele é por aproximação.
+#
+# O reencaixe dissolve um DESVIO, não persegue o alvo. Perseguir com lerp deixa
+# um atraso proporcional à velocidade do alvo — e o alvo aqui é um seno que
+# parte da fase zero, a região onde ele anda mais rápido (~72px/s). Medido: com
+# lerp o corpo ficava 19px atrás e o salto voltava no fim da janela, menor e
+# mais tarde. Com desvio decaindo, a chegada é exata por construção.
+_RESYNC_TIME = 1.6   # s de reencaixe
+
+# Velocidade com que a Voz reencontra o soquete quando alguma coisa a tirou de
+# lá. Hoje só a órbita da Fase 3 a tira; a Sentença não move mais cabeça nenhuma.
+# Aproximação exponencial contra alvo FIXO, então chega exata e desacelera na
+# chegada.
+_HEAD_RETURN_SPEED = 4.2
+
+# ── O VÉU DA SENTENÇA ─────────────────────────────────────────────────────────
+# As Vozes não vão para a arena disparar: elas DISSOLVEM quando a coreografia
+# começa e voltam quando ela acaba. O fade é a transição — ele é quem diz "agora
+# é outra coisa" —, e as cabeças que aparecem durante os lasers são todas
+# aparições temporárias (os ecos do `TriadCaster`), inclusive as que a partitura
+# marca como Voz: a marcação passou a escolher só o ROSTO do eco.
+#
+# A alternativa que existiu antes — a Voz real viajando pela arena e ficando
+# parada entre as salvas — pagava caro em legibilidade por uma ficção que o
+# jogador não tinha como notar, e criava o problema de reposicionar uma peça do
+# corpo no meio da luta. Some tudo: nenhum offset se move, nenhuma hitbox viaja,
+# nenhuma volta para calcular.
+#
+# Dura menos que a INTRO da partitura (1,10s), então o véu FECHA antes do
+# primeiro feixe e ABRE depois do último — o fade nunca disputa a atenção com um
+# laser em cena.
+_VOICE_FADE = 0.55
+
+
+def _approach(atual: float, alvo: float, vel: float) -> float:
+    """Aproximação exponencial de um escalar. `vel` já vem clampado em 1.0."""
+    return atual + (alvo - atual) * vel
+
+
+def _smoothstep(s: float) -> float:
+    """Curva com derivada zero nas duas pontas — sem canto na saída nem na chegada."""
+    return s * s * (3.0 - 2.0 * s)
 
 
 class TriadBoss(BossHitMixin):
@@ -310,6 +395,16 @@ class TriadBoss(BossHitMixin):
         # Um índice de frame para as três partes: elas são uma criatura só.
         self._frame_index: int = 0
         self._mask_cache: dict[tuple, pygame.mask.Mask] = {}
+        # Buffer de colisão para quando uma parte sai do soquete (`_wide_mask`).
+        # A margem cobre o alcance da órbita da Fase 3 mais o raio da cabeça: é
+        # o quanto uma Voz pode se afastar do soquete sem sair da conta.
+        self._wide_buffer: "pygame.mask.Mask | None" = None
+        self._wide_dirty: bool = True
+        self._wide_pad: int = int(
+            Config.SCREEN_WIDTH * _ORBIT_RADIUS * (1.0 + _ORBIT_BREATH)
+            + pmap.SIDE_HEAD_RADIUS
+            + pmap.CROWN_HEAD_CENTER[0]
+        )
 
         side_hp = max(1, int(self.max_health * self.SIDE_HP_FRACTION))
         # A âncora de cada Voz é DERIVADA do sprite (`part_anchor`), não digitada:
@@ -344,11 +439,19 @@ class TriadBoss(BossHitMixin):
         self._pulse_turn: int = 0
         # Relógio PRÓPRIO da deriva lateral: congela durante o Pulso.
         self._drift_t: float = 0.0
+        # Reencaixe pós-Sentença: tempo restante e o desvio congelado do corpo
+        # e de cada Voz em relação ao que o estado normal pede (`_RESYNC_TIME`).
+        self._resync: float = 0.0
+        self._body_slack: tuple[float, float] = (0.0, 0.0)
+        self._head_slack: List[tuple[float, float]] = [(0.0, 0.0), (0.0, 0.0)]
         self._pulse_flash: float = 0.0
         # O turno deixou de ser UM ator: da Fase 2 em diante várias cabeças agem
         # juntas, e é a combinação que é o conteúdo.
         self._turn: List[tuple[int, str]] = []
         self._last_combo: str | None = None
+        self._last_unisono: str | None = None
+        # O trecho final da Fase 3 já começou? Ver `_DESPERATION`.
+        self._desperate: bool = False
         self._orbit_t: float = 0.0
         # Esferas que ESTE boss soltou e ainda vivem. Serve ao teto de
         # segurança agora e à Convergência da Fase 3 depois (ela recolhe as
@@ -369,6 +472,8 @@ class TriadBoss(BossHitMixin):
         # aparições temporárias. É o que permite oito cabeças disparando sem o
         # boss ter oito Vozes.
         self._sent_casters: List[TriadCaster] = []
+        # Presença das Vozes: 1 em cena, 0 dissolvidas (ver `_VOICE_FADE`).
+        self._voice_veil: float = 1.0
         self._home_offsets = [(h.offset_x, h.offset_y) for h in self.heads]
         self._phase: int = 1             # 1, 2 ou 3
         # Agressividade encurta o RESPIRO, nunca o wind-up: o telégrafo é
@@ -411,11 +516,13 @@ class TriadBoss(BossHitMixin):
 
         A Coroa entra na lista MESMO intangível — é o que permite o tiro parar
         nela e o "MISS" aparecer, em vez de o projétil atravessar em silêncio e
-        o jogador não descobrir por que não fez dano.
+        o jogador não descobrir por que não fez dano. Pelo mesmo motivo a Voz em
+        ESCUDO (Fase 3) entra: o critério é `blocks_shots` (o tiro para?), não
+        `damageable` (o tiro fere?).
         """
         circles: List[tuple[float, float, float]] = [self._crown_circle()]
         for head in self.heads:
-            if head.damageable:
+            if self._hit_mask(head) is not None:
                 circles.append(head.collision_circle())
         return circles
 
@@ -430,7 +537,7 @@ class TriadBoss(BossHitMixin):
         ir = int(r)
         rects = [pygame.Rect(int(cx - ir), int(cy - ir), ir * 2, ir * 2)]
         for head in self.heads:
-            if head.damageable:
+            if self._hit_mask(head) is not None:
                 rects.append(head.contact_rect())
         return rects
 
@@ -439,27 +546,73 @@ class TriadBoss(BossHitMixin):
         return (int(self.x) + pmap.BLIT_OFFSET_X, int(self.y) + pmap.BLIT_OFFSET_Y)
 
     def _mask_key(self) -> tuple:
-        """Identidade do conjunto de máscaras em cena, para o cache.
+        """Identidade do conjunto de máscaras EM CASA, para o cache.
 
         Espaço de chaves minúsculo (frames × cabeças presentes × flags de
         ataque), então o cache satura em poucos segundos de luta e nunca mais
-        recombina — daí não precisar de despejo.
+        recombina — daí não precisar de despejo. Cabeça fora do soquete não entra
+        na chave porque não entra nesta máscara: a posição dela é contínua e
+        chavear por ela furaria o cache todo frame (ver `_wide_mask`).
         """
         return (
             self._frame_index,
             self._crown_attacking,
             *[
-                (h.damageable, h.attacking, h.body_state)
+                (h.at_home and h.blocks_shots, h.attacking, h.body_state)
                 for h in self.heads
             ],
         )
 
+    def _hit_mask(self, head: TriadHead) -> "pygame.mask.Mask | None":
+        """Máscara desta Voz para COLISÃO, ou None se o tiro a atravessa agora.
+
+        Em casa vale o `blocks_shots` dela (atacável ou em escudo). FORA de casa,
+        só o ESCUDO da Fase 3 entra — a Sentença também tira as Vozes do soquete,
+        mas ali o boss inteiro é intangível e a cabeça é CENÁRIO do ataque: o que
+        fere é o feixe. Deixá-la colidir na coreografia mataria balas sem efeito
+        nenhum e mataria a nave por contato com uma peça que o jogador lê como
+        parte do desenho.
+        """
+        if not head.blocks_shots:
+            return None
+        if not (head.at_home or head.shielding):
+            return None
+        return head.current_mask()
+
+    def _head_shift(self, head: TriadHead) -> tuple[int, int]:
+        """O quanto esta cabeça está deslocada do soquete, em pixels de tela.
+
+        É o MESMO deslocamento que o `TriadHead.draw` aplica ao blit — a máscara
+        do sprite vive na tela compartilhada de 64×64, então deslocá-la por este
+        vetor a põe exatamente sobre o desenho.
+        """
+        return (
+            int(head.offset_x - head.home_offset_x),
+            int(head.offset_y - head.home_offset_y),
+        )
+
+    def _detached(self) -> bool:
+        """Alguma parte PARA o tiro estando fora do soquete?
+
+        É o caso da Fase 3: as Vozes viram escudo e orbitam a ~200px do corpo.
+        Na Sentença elas também saem, mas ali não bloqueiam nada (o boss inteiro
+        é intangível), então esta pergunta continua falsa e o caminho barato
+        vale para a luta quase inteira.
+        """
+        return any(
+            not h.at_home and self._hit_mask(h) is not None for h in self.heads
+        )
+
     def _combined_mask(self) -> pygame.mask.Mask | None:
-        """União das máscaras das partes em cena — a área de dano do boss.
+        """União das máscaras das partes EM CASA — a área de colisão do corpo.
 
         A Coroa entra MESMO intangível: é o que faz o tiro parar nela e o "MISS"
         aparecer em vez de o projétil atravessar em silêncio. Cabeça no DOWN não
         entra, então o soquete vazio é atravessável.
+
+        Todas as partes vivem na MESMA tela de 64×64 escalada, então a união é
+        offset (0, 0) e o resultado é cacheável por `_mask_key`. Quem sai do
+        soquete não cabe nessa conta e é tratado em `_wide_mask`.
         """
         key = self._mask_key()
         cached = self._mask_cache.get(key)
@@ -471,14 +624,55 @@ class TriadBoss(BossHitMixin):
             return None
         combined = crown_mask.copy()
         for head in self.heads:
-            head_mask = head.current_mask()
+            if not head.at_home:
+                continue
+            head_mask = self._hit_mask(head)
             if head_mask is not None:
-                # Todas as partes vivem na MESMA tela de 64×64 escalada, então a
-                # união é offset (0, 0) — nenhum alinhamento a calcular.
                 combined.draw(head_mask, (0, 0))
 
         self._mask_cache[key] = combined
         return combined
+
+    def _wide_mask(self) -> "tuple[pygame.mask.Mask, tuple[int, int]] | None":
+        """Área de colisão quando uma parte está LONGE do corpo (Fase 3).
+
+        O contrato de colisão do jogo é UMA máscara com UMA origem
+        (`collision_physics.get_enemy_collision_mask_data`), e a tela da arte tem
+        320px de lado — uma Voz em órbita a ~200px não cabe nela. A saída é uma
+        segunda tela, larga o bastante para o corpo mais o alcance da órbita, com
+        cada parte desenhada no MESMO deslocamento que o `draw` usa.
+
+        Custo controlado por duas decisões (§7):
+
+        * o buffer é alocado UMA vez e reusado com `clear()` — a posição das
+          Vozes é contínua, então cachear por chave só encheria memória;
+        * a remontagem é UMA por frame, não uma por projétil: o `update` marca
+          `_wide_dirty` e a primeira consulta do frame reconstrói. Sem isso, uma
+          rajada de trinta balas remontaria a máscara trinta vezes no frame.
+        """
+        crown_mask = self._crown.mask(self._frame_index, self._crown_attacking)
+        if crown_mask is None:
+            return None
+        pad = self._wide_pad
+        base = self._blit_origin()
+        origem = (base[0] - pad, base[1] - pad)
+        if not self._wide_dirty and self._wide_buffer is not None:
+            return self._wide_buffer, origem
+
+        if self._wide_buffer is None:
+            lado = pmap.FRAME * pmap.PIXEL_SCALE + pad * 2
+            self._wide_buffer = pygame.mask.Mask((lado, lado))
+        buffer = self._wide_buffer
+        buffer.clear()
+        buffer.draw(crown_mask, (pad, pad))
+        for head in self.heads:
+            head_mask = self._hit_mask(head)
+            if head_mask is None:
+                continue
+            dx, dy = self._head_shift(head)
+            buffer.draw(head_mask, (pad + dx, pad + dy))
+        self._wide_dirty = False
+        return buffer, origem
 
     def get_collision_mask_data(self) -> tuple[pygame.mask.Mask, tuple[int, int]] | None:
         """Contrato de colisão por pixel (`collision_physics.get_enemy_collision_mask_data`).
@@ -487,6 +681,8 @@ class TriadBoss(BossHitMixin):
         PNG e ignorar rect/círculos: o tiro só acerta onde há pixel desenhado.
         Vale para projéteis do jogador e para o contato da nave.
         """
+        if self._detached():
+            return self._wide_mask()
         mask = self._combined_mask()
         if mask is None:
             return None
@@ -494,6 +690,10 @@ class TriadBoss(BossHitMixin):
 
     def _part_at(self, px: float, py: float) -> "TriadHead | TriadBoss | None":
         """Qual parte tem PIXEL desenhado no ponto do impacto.
+
+        Cada parte é testada na origem DELA — o soquete mais o deslocamento que o
+        `draw` aplica —, então a conta vale igual com a cabeça em casa e com ela
+        em órbita, sem um caminho para cada caso.
 
         As laterais são testadas primeiro: elas e o tronco se sobrepõem em 2
         pixels na arte, e nesse empate a Voz deve ganhar (é o alvo obrigatório).
@@ -503,13 +703,17 @@ class TriadBoss(BossHitMixin):
         ox, oy = self._blit_origin()
         lx, ly = int(px - ox), int(py - oy)
         size = pmap.FRAME * pmap.PIXEL_SCALE
-        if not (0 <= lx < size and 0 <= ly < size):
-            return None
 
         for head in self.heads:
-            head_mask = head.current_mask()
-            if head_mask is not None and head_mask.get_at((lx, ly)):
+            head_mask = self._hit_mask(head)
+            if head_mask is None:
+                continue
+            dx, dy = self._head_shift(head)
+            hx, hy = lx - dx, ly - dy
+            if 0 <= hx < size and 0 <= hy < size and head_mask.get_at((hx, hy)):
                 return head
+        if not (0 <= lx < size and 0 <= ly < size):
+            return None
         crown_mask = self._crown.mask(self._frame_index, self._crown_attacking)
         if crown_mask is not None and crown_mask.get_at((lx, ly)):
             return self
@@ -545,6 +749,15 @@ class TriadBoss(BossHitMixin):
                 self._trigger_miss(hit_x, hit_y)
                 return NO_HIT
             return self._damage_crown(damage)
+        if target.shielding:
+            # ESCUDO (Fase 3): o tiro PARA na Voz e não fere ninguém. O mesmo
+            # feedback da Coroa intangível — "acertou, não contou" —, porque é a
+            # mesma informação e o jogador já a aprendeu na Fase 1. Dar som e
+            # faísca de dano aqui seria pior que o silêncio: prometeria progresso
+            # que não existe.
+            self._trigger_miss(hit_x, hit_y)
+            target.flash()
+            return NO_HIT
         return self._damage_head(target, damage)
 
     def _fallback_target(self, px: float, py: float) -> "TriadHead | TriadBoss | None":
@@ -585,7 +798,13 @@ class TriadBoss(BossHitMixin):
         best: "TriadHead | None" = None
         best_d = float("inf")
         for head in self.heads:
-            if not head.damageable:
+            # Quem entra na disputa é quem PARA o tiro, não quem o recebe: uma
+            # Voz em escudo (Fase 3) é dona do impacto que aconteceu nela, e
+            # quem decide que aquilo não fere é o `on_hit`. Filtrando por
+            # `damageable`, o tiro que caía num furo do rosto dela era creditado
+            # à Coroa — o escudo virava um amplificador de dano, exatamente o
+            # oposto do que ele é.
+            if self._hit_mask(head) is None:
                 continue
             d = math.hypot(px - head.center_x, py - head.center_y) - head.radius
             if d < best_d:
@@ -708,6 +927,8 @@ class TriadBoss(BossHitMixin):
             return []
 
         self._time += dt
+        # A área de colisão larga vale por frame: as partes acabaram de andar.
+        self._wide_dirty = True
         self._hit_flash = max(0.0, self._hit_flash - dt)
         self._miss_timer = max(0.0, self._miss_timer - dt)
         self._pulse_flash = max(0.0, self._pulse_flash - dt / _PULSO_BEAT)
@@ -717,9 +938,13 @@ class TriadBoss(BossHitMixin):
         elif self._state == _SENTENCA:
             self._update_sentenca(dt)
         else:
+            if self._resync > 0.0:
+                self._resync = max(0.0, self._resync - dt)
             self._update_drift(dt)
             if self._phase >= 3:
                 self._update_orbit(dt)
+            else:
+                self._ease_heads_home(dt)
             self._check_phase_gate()
 
         # O portão PARA durante a Sentença. As cabeças estão destacadas, voando
@@ -730,6 +955,7 @@ class TriadBoss(BossHitMixin):
         if self._state != _SENTENCA:
             self._update_gate(dt)
 
+        self._advance_veil(dt)
         self._frame_index = int(self._time * pmap.ANIM_FPS)
         for head in self.heads:
             head.update(
@@ -780,12 +1006,75 @@ class TriadBoss(BossHitMixin):
         O sobe-e-desce continua: ele é a respiração do corpo, não muda a origem
         dos anéis o bastante para importar, e travar tudo faria o chefe parecer
         pausado em vez de concentrado.
+
+        Na volta da Sentença a posição é ALCANÇADA, não assumida — a coreografia
+        deixou o corpo em outro lugar e o seno não sabe disso (`_RESYNC_TIME`).
         """
         if not self._pulsing:
             self._drift_t += dt
+        alvo_x, alvo_y = self._drift_target()
+        k = self._resync_k()
+        self.x = alvo_x + self._body_slack[0] * k
+        self.y = alvo_y + self._body_slack[1] * k
+
+    def _drift_target(self) -> tuple[float, float]:
+        """Onde o corpo estaria agora se a Sentença nunca tivesse acontecido."""
         span = Config.SCREEN_WIDTH * _DRIFT_AMPLITUDE
-        self.x = self._home_x + math.sin(self._drift_t * _DRIFT_SPEED) * span
-        self.y = self._home_y + math.sin(self._time * _BOB_SPEED) * _BOB_AMPLITUDE
+        return (
+            self._home_x + math.sin(self._drift_t * _DRIFT_SPEED) * span,
+            self._home_y + math.sin(self._time * _BOB_SPEED) * _BOB_AMPLITUDE,
+        )
+
+    def _resync_k(self) -> float:
+        """Peso do desvio congelado: 1 no fim da Sentença, 0 no fim do reencaixe."""
+        if self._resync <= 0.0:
+            return 0.0
+        return _smoothstep(self._resync / _RESYNC_TIME)
+
+    def _begin_resync(self) -> None:
+        """Congela o desvio entre onde a coreografia deixou o CORPO e onde o
+        estado normal o quer. Chamado com a fase e os relógios JÁ atualizados.
+
+        As cabeças só entram nesta conta quando o destino delas é a ÓRBITA da
+        Fase 3, que é um alvo em movimento — desvio decaindo é o único jeito de
+        chegar exato num alvo que anda. Para o soquete, que é alvo parado, quem
+        as leva é o `_ease_heads_home`, com a aproximação da primeira leva.
+        """
+        self._resync = _RESYNC_TIME
+        alvo_x, alvo_y = self._drift_target()
+        self._body_slack = (self.x - alvo_x, self.y - alvo_y)
+        self._head_slack = []
+        for i, head in enumerate(self.heads):
+            if self._phase < 3:
+                self._head_slack.append((0.0, 0.0))
+                continue
+            alvo_ox, alvo_oy = self._orbit_target(i)
+            self._head_slack.append((head.offset_x - alvo_ox, head.offset_y - alvo_oy))
+
+    def _ease_heads_home(self, dt: float) -> None:
+        """Voz fora do soquete volta por aproximação, nunca por corte.
+
+        É a MESMA aproximação que devolvia a cabeça entre as salvas da Sentença
+        (`_HEAD_RETURN_SPEED`) — a movimentação que ficou boa. O que mudou foi o
+        MOMENTO: ela roda uma vez só, no fim da coreografia, em vez de a cada
+        salva. Nada é reposicionado na mão em lugar nenhum.
+
+        Quando já estão em casa (o caso comum, todo frame da luta) o laço só
+        compara e sai.
+        """
+        vel = min(1.0, _HEAD_RETURN_SPEED * dt)
+        for i, head in enumerate(self.heads):
+            casa_x, casa_y = self._home_offsets[i]
+            if not head.at_home:
+                head.offset_x = _approach(head.offset_x, casa_x, vel)
+                head.offset_y = _approach(head.offset_y, casa_y, vel)
+            # O limiar do encaixe é o MESMO que a colisão usa (`at_home`): uma
+            # aproximação exponencial converge sem nunca igualar, e se os dois
+            # números divergissem haveria frames em que a Voz conta como
+            # encaixada para a máscara e ainda escorrega para o render. O teste
+            # é DEPOIS de mover, senão o encaixe exato fica um frame atrasado.
+            if head.at_home:
+                head.offset_x, head.offset_y = casa_x, casa_y
 
     def _update_gate(self, dt: float) -> None:
         """Avança o portão e faz o corpo das cabeças seguir o estado dele."""
@@ -834,10 +1123,22 @@ class TriadBoss(BossHitMixin):
         self._act_timer -= dt
         if self._act_timer > 0.0:
             return []
-        if self._phase >= 3 and self.health <= self.max_health * _DESPERATION:
+        if (
+            not self._desperate
+            and self._phase >= 3
+            and self.health <= self.max_health * _DESPERATION
+        ):
             # Desespero: o respiro encurta no trecho final. Nenhuma mecânica
             # nova — só o mesmo vocabulário chegando mais rápido.
+            #
+            # A virada é ANUNCIADA. Sem o tranco, a cadência simplesmente muda no
+            # meio da luta e o jogador só percebe levando dano: era a única
+            # mudança de ritmo do encontro sem nenhum sinal, num chefe que
+            # telegrafa tudo o resto. Uma vez só — a flag existe para isso, já
+            # que a condição continua verdadeira até o fim.
+            self._desperate = True
             self._breather = _BREATHER_FLOOR
+            self._emit_shake(0.35, 6)
 
         sobra = -self._act_timer  # quanto o timer passou de zero neste frame
 
@@ -882,8 +1183,13 @@ class TriadBoss(BossHitMixin):
         self._turn = self._plan_turn()
         self._actor, self._attack = self._turn[0]
         self._act_state = _ACT_WINDUP
-        for actor, _atk in self._turn:
-            if actor == _CROWN_ACTOR:
+        for actor, atk in self._turn:
+            if atk in _ATAQUES_CORAIS:
+                # Nasce das três: as três avisam (ver `_ATAQUES_CORAIS`).
+                self._crown_attacking = True
+                for head in self.heads:
+                    head.attacking = True
+            elif actor == _CROWN_ACTOR:
                 self._crown_attacking = True
             else:
                 self.heads[actor].attacking = True
@@ -894,8 +1200,7 @@ class TriadBoss(BossHitMixin):
             return self._plan_unisono()
         if self._phase == 2:
             return self._plan_combo()
-        actor = self._pick_actor()
-        return [(actor, self._pick_attack(actor))]
+        return self._plan_solo()
 
     def _plan_combo(self) -> List[tuple[int, str]]:
         """Fase 2: um combo, sem repetir o anterior.
@@ -904,7 +1209,18 @@ class TriadBoss(BossHitMixin):
         parecer curta — o jogador vê quatro ideias e sente duas.
         """
         opcoes = [c for c in _COMBOS if c[0] != self._last_combo] or list(_COMBOS)
-        nome, partes = random.choice(opcoes)
+        # Mesma regra da Fase 1: combo com um ataque ainda em cena sai da roda.
+        disponiveis = [
+            c for c in opcoes if all(self._livre(a) for _ator, a in c[1])
+        ]
+        if not disponiveis:
+            # Nenhum combo livre: cai no PULSO, que é isento. Disparar um combo
+            # bloqueado mesmo assim (o fallback anterior) anulava a regra
+            # justamente quando ela mais importava — medido, deixava até nove
+            # esferas da Parede anterior em cena quando a próxima nascia.
+            self._last_combo = None
+            return [(_CROWN_ACTOR, _ATK_PULSO)]
+        nome, partes = random.choice(disponiveis)
         self._last_combo = nome
         # Cabeça fora de cena não age; se sobrar só a Coroa, ela assume o pulso.
         turno = [
@@ -920,57 +1236,131 @@ class TriadBoss(BossHitMixin):
         return turno
 
     def _plan_unisono(self) -> List[tuple[int, str]]:
-        """Fase 3: as três agem como UMA. Sem turnos, sem revezamento."""
-        escolha = random.random()
-        if escolha < 0.34:
-            return [(_CROWN_ACTOR, _ATK_UNISSONO)]
-        if escolha < 0.67:
-            return [(_CROWN_ACTOR, _ATK_DILUVIO)]
-        return [(_CROWN_ACTOR, _ATK_CONVERGENCIA)]
+        """Fase 3: as três agem como UMA. Sem turnos, sem revezamento.
+
+        O sorteio segue as MESMAS duas regras das fases anteriores, que aqui
+        faltavam: não repetir o ataque imediatamente anterior e não relançar um
+        ataque cuja leva ainda está na arena (`_livre`). A fase com o vocabulário
+        mais curto — três ataques — era a única sem anti-repetição, e é
+        justamente a que mais precisa dela.
+
+        Medido antes (12 corridas de 120s, agressividade 1,0): **35% dos turnos
+        repetiam o anterior** e 12% eram o terceiro seguido igual; a arena vivia
+        com 32,6 esferas em média contra um teto de 52, e **43% dos Uníssonos
+        nasciam cortados** pelo teto — o corte tira as últimas da lista, que são
+        o terceiro anel inteiro, ou seja, a premissa do ataque ("três anéis
+        desalinhados") sumia em quase metade das vezes, em silêncio.
+
+        A Convergência pede a arena SUJA, e isso é conteúdo, não otimização: ela
+        existe para RECOLHER. Com a arena limpa ela degenera num anel a mais,
+        indistinguível do Uníssono, e gasta um dos três turnos da fase.
+
+        Depois (mesma medição): 26% Uníssono / 24% Dilúvio / 18% Convergência /
+        32% Pulso, **1,6% de repetição imediata** fora o Pulso, e nenhum
+        Uníssono ou Convergência cortado. O Pulso em um terço dos turnos é o
+        preço de os outros três esperarem a própria leva sair — e é o preço
+        certo: ele é o padrão mais leve, então a fase passou a alternar pesado e
+        leve sozinha, como a Fase 2 já fazia.
+        """
+        opcoes = [
+            atk for atk in _UNISONO_POOL
+            if atk != self._last_unisono and self._livre(atk)
+        ]
+        if len(self._coletaveis()) < _CONVERGENCIA_ALVOS and _ATK_CONVERGENCIA in opcoes:
+            opcoes.remove(_ATK_CONVERGENCIA)
+        # Sem opção livre, o PULSO assume — o mesmo isento das fases 1 e 2, agora
+        # em laranja. O chefe nunca fica mudo, e o vocabulário que ele já ensinou
+        # voltando mais rápido é a leitura certa do trecho final da luta.
+        escolha = random.choice(opcoes) if opcoes else _ATK_PULSO
+        self._last_unisono = escolha
+        return [(_CROWN_ACTOR, escolha)]
+
+    def _coletaveis(self) -> List[TriadOrb]:
+        """Esferas que a Convergência recolheria agora. Fonte única do critério."""
+        self._prune_orbs()
+        return [o for o in self._orbs if o.is_collectible]
 
     def _clear_telegraph(self) -> None:
         self._crown_attacking = False
         for head in self.heads:
             head.attacking = False
 
-    def _pick_actor(self) -> int:
-        """Round-robin entre quem PODE agir, sem repetir o ator anterior.
+    def _livre(self, ataque: str) -> bool:
+        """True se a salva ANTERIOR deste ataque já saiu de cena.
 
-        Cabeça derrubada ou em brasa não ataca — ela não está lá. Com as duas
-        fora, a Coroa fica sozinha em cena e age em todo turno, o que é a leitura
-        certa: é o momento em que ela está exposta e pressionando sozinha.
+        A regra: **não repetir um ataque enquanto os projéteis dele ainda estão
+        na arena.** Sem ela as levas se empilham e a fase perde a leitura de
+        ondas — medido, o teleguiado nascia a cada 1,70s e ficava 7,15s em cena,
+        então quatro levas coexistiam o tempo todo.
+
+        É um FILTRO DE ESCOLHA, não uma espera. O chefe troca de ataque em vez de
+        ficar parado: esperar a arena limpar antes de qualquer ataque daria
+        ciclos de 8,2s na Fase 1 e 15,9s na Fase 2 (a Parede sozinha ocupa 15,8s,
+        porque atravessa a arena devagar de propósito), e o chefe passaria a luta
+        inteira ocioso — trocaria um defeito real por um pior.
+
+        Isentos em `_ATAQUES_SEM_ESPERA`: o Pulso e o Uníssono são anéis radiais
+        que saem sozinhos e cuja graça é justamente a batida contínua; as minas
+        são PERMANENTES por design, e cobrá-las aqui travaria o chefe para sempre.
         """
-        candidatos = [h.slot for h in self.heads if self.gate.is_solid(h.slot)]
-        candidatos.append(_CROWN_ACTOR)
-        if len(candidatos) > 1 and self._last_actor in candidatos:
-            candidatos.remove(self._last_actor)
-        escolhido = candidatos[0] if len(candidatos) == 1 else random.choice(candidatos)
-        self._last_actor = escolhido
-        return escolhido
+        if ataque in _ATAQUES_SEM_ESPERA:
+            return True
+        self._prune_orbs()
+        return not any(o.origin == ataque for o in self._orbs)
 
-    def _pick_attack(self, actor: int) -> str:
-        """Coroa alterna Pulso e Chuva; as Vozes fazem Cadência.
+    def _plan_solo(self) -> List[tuple[int, str]]:
+        """Fase 1: um ator, um ataque, entre os que ainda não estão em cena.
 
         A divisão é de IDENTIDADE, não de variedade: a Coroa semeia a arena
         (anéis do núcleo, chuva de tela cheia) e as Vozes fazem pressão direta
         (perseguidoras). O jogador aprende de quem esperar o quê, e é isso que
         torna o telégrafo laranja informativo — saber QUEM vai agir passa a
         dizer O QUE vem.
+
+        Cabeça derrubada ou em brasa não age: ela não está lá. Com as duas fora,
+        a Coroa fica sozinha em cena e age em todo turno, que é a leitura certa
+        do momento em que ela está exposta e pressionando sozinha.
         """
-        if actor == _CROWN_ACTOR:
-            self._last_crown_attack = (
-                _ATK_CHUVA if self._last_crown_attack == _ATK_PULSO else _ATK_PULSO
-            )
-            return self._last_crown_attack
-        return _ATK_CADENCIA
+        opcoes: List[tuple[int, str]] = []
+        if self._livre(_ATK_CADENCIA):
+            opcoes += [
+                (h.slot, _ATK_CADENCIA) for h in self.heads if self.gate.is_solid(h.slot)
+            ]
+        coroa = self._proximo_da_coroa()
+        if coroa is not None:
+            opcoes.append((_CROWN_ACTOR, coroa))
+        if not opcoes:
+            # O Pulso nunca bloqueia, então o chefe sempre tem o que fazer.
+            opcoes = [(_CROWN_ACTOR, _ATK_PULSO)]
+
+        alternativas = [o for o in opcoes if o[0] != self._last_actor] or opcoes
+        escolha = random.choice(alternativas)
+        self._last_actor = escolha[0]
+        if escolha[0] == _CROWN_ACTOR:
+            self._last_crown_attack = escolha[1]
+        return [escolha]
+
+    def _proximo_da_coroa(self) -> "str | None":
+        """Alterna Pulso e Chuva, pulando o que ainda estiver em cena."""
+        preferido = _ATK_CHUVA if self._last_crown_attack == _ATK_PULSO else _ATK_PULSO
+        if self._livre(preferido):
+            return preferido
+        outro = _ATK_PULSO if preferido == _ATK_CHUVA else _ATK_CHUVA
+        return outro if self._livre(outro) else None
 
     # ── Emissões ─────────────────────────────────────────────────────────────
     def _fire_current_attack(self, player_pos: tuple[float, float]) -> List[TriadOrb]:
-        self._prune_orbs()
-        livres = _MAX_LIVE_ORBS - len(self._orbs)
-        if livres <= 0:
-            return []
+        """Dispara o turno e cobra o teto de esferas em cena.
 
+        O teto é medido **depois** do disparo, e a diferença não é cosmética: a
+        Convergência RECOLHE a arena antes de devolver o estouro, então o espaço
+        que ela usa é espaço que ela mesma acabou de abrir. Medindo antes, ela
+        era cortada por uma lotação que já não existia — medido: 89% dos
+        estouros saíam mutilados e, com a arena no teto, o `livres <= 0` fazia o
+        ataque sugar tudo e **não devolver nada**. O telégrafo laranja acendia,
+        a arena era engolida e o troco não vinha: exatamente o contrário do que
+        o ataque promete.
+        """
         # Zerado ANTES do despacho: só o ataque deste turno pode armar a
         # sustentação. Sem isto, um `_pulse_left` sobrando de um Pulso
         # interrompido (pela Sentença, por exemplo) faria o ataque SEGUINTE —
@@ -979,11 +1369,42 @@ class TriadBoss(BossHitMixin):
         orbs: List[TriadOrb] = []
         for actor, ataque in self._turn or [(self._actor, self._attack)]:
             self._actor, self._attack = actor, ataque
-            orbs.extend(self._fire_one(ataque, player_pos))
+            novas = self._fire_one(ataque, player_pos)
+            for orb in novas:
+                orb.origin = ataque
+            orbs.extend(novas)
 
-        orbs = orbs[:livres]
+        orbs = orbs[:self._vagas()]
+        self._sortear_premio(orbs)
         self._orbs.extend(orbs)
         return orbs
+
+    def _vagas(self) -> int:
+        """Quantas esferas ainda cabem em cena. Nunca negativo."""
+        self._prune_orbs()
+        return max(0, _MAX_LIVE_ORBS - len(self._orbs))
+
+    def _sortear_premio(self, orbs: List[TriadOrb]) -> None:
+        """Marca no máximo UMA esfera da salva como premiada.
+
+        Uma só, e uma só **em toda a arena** — não uma por salva. Duas de cor
+        diferente ao mesmo tempo deixam de ser "a exceção" e viram um segundo
+        grupo: o jogador para de procurar e começa a contar, e a recompensa
+        perde o que ela tem de melhor, que é ser um alvo único e óbvio.
+
+        Por isso o sorteio só acontece com a arena limpa de premiadas. O teto é
+        cobrado ANTES do dado: sortear e depois descartar desperdiçaria a chance
+        e faria o prêmio rarear sem ninguém ter decidido isso.
+        """
+        if not orbs:
+            return
+        if any(o.prize and o.is_collectible for o in self._orbs):
+            return
+        if random.random() >= _PREMIO_CHANCE:
+            return
+        premiada = random.choice(orbs)
+        premiada.prize = True
+        premiada.color = pmap.CYAN if self._phase >= 3 else pmap.ORANGE
 
     def _fire_one(self, ataque: str, player_pos: tuple[float, float]) -> List[TriadOrb]:
         """Despacho por MAPA, não por cascata de `if` (§5).
@@ -1131,14 +1552,17 @@ class TriadBoss(BossHitMixin):
         pares = _CHUVA_COUNT // 2
         postos: List[tuple[float, float]] = []
         for k in range(pares):
-            # k=0 é o par mais próximo do centro.
+            # k=0 é o par mais próximo do centro — e o mais ALTO. O leque abre
+            # para baixo nas pontas: assim o par central passa por cima do halo
+            # do chefe em vez de pousar sobre ele, e a formação continua legível
+            # contra o corpo dele.
             t = (k + 1) / pares
             dx = (sw * _CHUVA_SPAN[1] - meio) * t
-            ty = _CHUVA_TOPO[0] + (_CHUVA_TOPO[1] - _CHUVA_TOPO[0]) * (1.0 - t)
+            ty = _CHUVA_TOPO[0] + (_CHUVA_TOPO[1] - _CHUVA_TOPO[0]) * t
             postos.append((meio - dx, sh * ty))
             postos.append((meio + dx, sh * ty))
         if _CHUVA_COUNT % 2:
-            postos.append((meio, sh * _CHUVA_TOPO[1]))
+            postos.append((meio, sh * _CHUVA_TOPO[0]))
         return postos
 
     def _fire_pulso_arg(self, _player_pos: tuple[float, float]) -> List[TriadOrb]:
@@ -1156,8 +1580,11 @@ class TriadBoss(BossHitMixin):
     def _fire_pulse_wave(self) -> List[TriadOrb]:
         """Batida seguinte: o anel sai defasado meio passo."""
         self._pulse_turn += 1
-        anel = self._emit_pulse_ring()
-        self._prune_orbs()
+        # As batidas 2 e 3 nasciam FORA do teto: elas não passam pelo
+        # `_fire_current_attack`, e a arena chegou a 64 esferas com o teto em 52
+        # (medido na Fase 3). O teto existe para a tela continuar legível — uma
+        # batida do Pulso não é exceção a ele.
+        anel = self._emit_pulse_ring()[:self._vagas()]
         self._orbs.extend(anel)
         return anel
 
@@ -1354,7 +1781,18 @@ class TriadBoss(BossHitMixin):
         passo = math.tau / _PULSO_SLOTS
         cor = self._palette(_ATK_UNISSONO)
         base = random.randrange(_PULSO_SLOTS)
+        # O teto de esferas é cobrado por ANEL INTEIRO, não por esfera. Um anel
+        # a menos ainda é um padrão radial legível; meio anel é um leque, e o
+        # jogador lê "tem saída aqui" onde não tem. O corte cru pela fatia final
+        # tirava em média 12,6 das 21 esferas quando batia no teto — deixava um
+        # anel e meio. A Coroa é preservada primeiro: ela é o núcleo do ataque,
+        # e um Uníssono reduzido a um anel só lê como um Pulso laranja, que é
+        # vocabulário que o jogador já tem.
+        por_anel = _PULSO_SLOTS - _UNISSONO_GAP
+        vagas = self._vagas()
         for i, (ox, oy) in enumerate(origens):
+            if len(orbs) + por_anel > vagas:
+                break
             # Desalinhamento deliberado: cada anel abre a brecha noutro setor.
             inicio = (base + i * (_PULSO_SLOTS // 3)) % _PULSO_SLOTS
             brecha = {(inicio + k) % _PULSO_SLOTS for k in range(_UNISSONO_GAP)}
@@ -1390,21 +1828,34 @@ class TriadBoss(BossHitMixin):
         O ataque cobra pelo que o jogador deixou vivo, então limpar a arena deixa
         de ser opcional e vira leitura de risco.
         """
+        ox, oy = self._actor_origin_of(_CROWN_ACTOR)
         recolhidas = 0
         for orb in self._orbs:
-            if not orb.dead:
-                orb.begin_death()
+            if orb.is_collectible:
+                # SUGADA, não apagada. Matá-las no lugar fazia a arena inteira
+                # "sumir" de um frame para o outro, e em playtest isso leu como
+                # bug — pior, leu como bug CAUSADO PELO DANO, porque a
+                # Convergência sai em 1 de cada 3 turnos da Fase 3 e o jogador
+                # estava sempre acertando o chefe quando ela vinha. O ataque
+                # existe para RECOLHER: ver a esfera ser engolida é a metade da
+                # informação que faltava.
+                orb.pull_to((ox, oy))
                 recolhidas += 1
         self._orbs.clear()
 
         total = max(_CONVERGENCIA_MIN, min(_PULSO_SLOTS + 6, _CONVERGENCIA_MIN + recolhidas))
-        ox, oy = self._actor_origin_of(_CROWN_ACTOR)
         passo = math.tau / total
         giro = random.uniform(0.0, passo)
         cor = self._palette(_ATK_CONVERGENCIA)
         self._emit_shake(0.25, 5)
+        # Nascimento igual ao tempo de sucção: o anel se monta no núcleo enquanto
+        # as esferas convergem e estoura no instante em que a última é engolida.
+        # A causa fica visível sem o boss precisar de estado novo na FSM.
         return [
-            TriadOrb(ox, oy, OrbBehavior.RING, angle=giro + i * passo, color=cor)
+            TriadOrb(
+                ox, oy, OrbBehavior.RING, angle=giro + i * passo, color=cor,
+                birth=VACUUM_TIME,
+            )
             for i in range(total)
         ]
 
@@ -1458,13 +1909,22 @@ class TriadBoss(BossHitMixin):
         máquina só e não três peças soltas.
         """
         self._orbit_t += dt
+        # A órbita abre a ~200px do soquete e é posição ABSOLUTA por frame:
+        # entrar na Fase 3 assumindo-a direto arremessava as duas Vozes no frame
+        # da virada. O desvio congelado do reencaixe as faz ABRIR até lá.
+        k = self._resync_k()
+        for i, head in enumerate(self.heads):
+            alvo_x, alvo_y = self._orbit_target(i)
+            head.offset_x = alvo_x + self._head_slack[i][0] * k
+            head.offset_y = alvo_y + self._head_slack[i][1] * k
+
+    def _orbit_target(self, i: int) -> tuple[float, float]:
+        """Ponto da órbita da Voz `i` no instante atual. Lido também pelo reencaixe."""
         raio = Config.SCREEN_WIDTH * _ORBIT_RADIUS
         raio *= 1.0 + _ORBIT_BREATH * math.sin(self._orbit_t * 0.9)
         base_x, base_y = pmap.CROWN_HEAD_CENTER
-        for i, head in enumerate(self.heads):
-            ang = self._orbit_t * _ORBIT_SPEED + i * math.pi
-            head.offset_x = base_x + math.cos(ang) * raio
-            head.offset_y = base_y + math.sin(ang) * raio * 0.62
+        ang = self._orbit_t * _ORBIT_SPEED + i * math.pi
+        return base_x + math.cos(ang) * raio, base_y + math.sin(ang) * raio * 0.62
 
     # ── A SENTENÇA ───────────────────────────────────────────────────────────
     def _check_phase_gate(self) -> None:
@@ -1510,7 +1970,10 @@ class TriadBoss(BossHitMixin):
         # ocorrência. São duas montagens por luta: custo irrelevante.
         escala = self._sent_scale()
         self._sent_schedule, self._sent_fim = score.build_schedule(
-            float(Config.SCREEN_WIDTH), float(Config.SCREEN_HEIGHT), escala
+            float(Config.SCREEN_WIDTH),
+            float(Config.SCREEN_HEIGHT),
+            escala,
+            score.folga_por_agressividade(self.aggressiveness_multiplier),
         )
         self._sent_next = 0
         self._act_state = _ACT_BREATHER
@@ -1533,6 +1996,7 @@ class TriadBoss(BossHitMixin):
 
         self._launch_due()
         self._advance_casters(dt)
+        self._sound_beams()
 
         if self._sent_t >= self._sent_fim:
             self._end_sentenca()
@@ -1555,9 +2019,16 @@ class TriadBoss(BossHitMixin):
         feixe nasce na frente do rosto e não no meio do espaço negativo do PNG.
         """
         carga, letal = score.scaled_shot(shot, escala)
-        head = self.heads[shot.voice] if shot.voice is not None else None
+        # `shot.voice` agora escolhe só o ROSTO da aparição: as Vozes reais estão
+        # dissolvidas no corpo durante a coreografia inteira (`_VOICE_FADE`), e
+        # quem ocupa a arena são os ecos — todos eles. Mantém-se a leitura de que
+        # a abertura e o fecho são "as cabeças do boss" sem que peça nenhuma do
+        # corpo precise viajar, sumir no meio e voltar.
+        rosto = (
+            self.heads[shot.voice].part_key if shot.voice is not None else shot.part
+        )
         caster = TriadCaster(
-            head.part_key if head is not None else shot.part,
+            rosto,
             shot.x,
             shot.y,
             shot.aim,
@@ -1565,7 +2036,6 @@ class TriadBoss(BossHitMixin):
             letal,
             path=shot.path,
             swing=shot.swing,
-            head=head,
         )
         self._sent_casters.append(caster)
         self._emit_beam(
@@ -1579,37 +2049,60 @@ class TriadBoss(BossHitMixin):
         )
 
     def _advance_casters(self, dt: float) -> None:
-        """Avança os casters, copia a pose para as Vozes e recolhe os mortos."""
-        ocupadas: set[int] = set()
+        """Avança os casters e recolhe os mortos.
+
+        Nenhum deles toca nas Vozes: durante a coreografia elas estão
+        dissolvidas (`_VOICE_FADE`) e o que a arena vê são aparições — o caster
+        desenha a si mesmo. É por isso que este laço não converte mundo em
+        offset, não guarda posição de guarda e não devolve ninguém para casa.
+        """
         i = 0
         while i < len(self._sent_casters):
             caster = self._sent_casters[i]
             caster.update(dt)
-            head = caster.head
-            if head is not None and not caster.dead:
-                # A conversão mundo→offset é do boss, que é quem conhece o (x, y)
-                # dele; o caster não escreve no estado de um objeto irmão (§1).
-                head.place(caster.x, caster.y, self.x, self.y)
-                head.aim = caster.aim
-                ocupadas.add(head.slot)
             if caster.dead:
                 self._sent_casters[i] = self._sent_casters[-1]
                 self._sent_casters.pop()
                 continue
             i += 1
 
-        # Voz sem tiro em curso volta para o soquete e desfaz a pose de mira. Ela
-        # fica ali de espectadora enquanto os ecos trabalham — voltar ao corpo é
-        # o que faz a reabertura do fecho ler como "as cabeças voltaram".
-        for i, head in enumerate(self.heads):
-            if head.slot in ocupadas:
-                continue
-            head.rest_pose()
-            head.attacking = False
-            casa = self._home_offsets[i]
-            vel = min(1.0, 4.2 * dt)
-            head.offset_x += (casa[0] - head.offset_x) * vel
-            head.offset_y += (casa[1] - head.offset_y) * vel
+    def _advance_veil(self, dt: float) -> None:
+        """Fecha o véu ao entrar na Sentença e abre ao sair. Um relógio só.
+
+        O alvo é o ESTADO (dissolvida na coreografia, presente fora dela), então
+        não há começo e fim a agendar: entrar na Sentença já é o fade-out e sair
+        já é o fade-in, inclusive se a fase mudar no meio.
+        """
+        alvo = 0.0 if self._state == _SENTENCA else 1.0
+        if self._voice_veil != alvo:
+            passo = dt / _VOICE_FADE
+            if self._voice_veil < alvo:
+                self._voice_veil = min(alvo, self._voice_veil + passo)
+            else:
+                self._voice_veil = max(alvo, self._voice_veil - passo)
+        for head in self.heads:
+            head.fade = self._voice_veil
+
+    def _sound_beams(self) -> None:
+        """Um som por SALVA, no frame em que os feixes passam a ferir.
+
+        Por salva e não por feixe: o Cerco acende oito de uma vez, e oito
+        disparos empilhados no mesmo frame viram um estalo sujo em vez de um
+        golpe. Um som só, no instante do dano, é o que marca a batida.
+
+        O momento é o DISPARO, não a carga: a carga já tem telégrafo visual
+        (o fio piscando, a cabeça materializando), e sonorizá-la também tiraria
+        do disparo o destaque que ele precisa ter.
+
+        Vai pelo `EventBus` (§2) — a entidade emite, o `SoundSystem` reage.
+        """
+        if self._bus is None:
+            return
+        if not any(beam.fired_this_frame for beam in self._sent_beams):
+            return
+        from ....events import game_events as events
+
+        self._bus.emit(events.PlaySound(sound_name="boss_laser_fire"))
 
     def _emit_beam(self, beam: TriadBeam) -> None:
         self._pending_beams.append(beam)
@@ -1627,8 +2120,13 @@ class TriadBoss(BossHitMixin):
         self._phase = min(3, self._phase + 1)
         self._apply_phase()
         self._state = _ACTIVE
-        for i, head in enumerate(self.heads):
-            head.offset_x, head.offset_y = self._home_offsets[i]
+        # A deriva é REANCORADA na fase zero (seno = 0 → x = `_home_x`), que é
+        # exatamente onde a coreografia deixou o corpo: assim a volta é só em y
+        # e a lateral não tem de onde saltar. O reencaixe cuida do resto — nada
+        # aqui reposiciona corpo ou cabeça na mão (ver `_RESYNC_TIME`).
+        self._drift_t = 0.0
+        self._begin_resync()
+        for head in self.heads:
             head.rest_pose()
             head.attacking = False
         # Entra na fase nova por um RESPIRO, nunca por um ataque imediato: a

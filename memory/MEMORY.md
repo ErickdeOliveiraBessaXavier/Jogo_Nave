@@ -41,6 +41,7 @@ Versionado junto com o repositório.
 - [progression-refactor-closed](progression-refactor-closed.md) — refactor de fonte única de boss ENCERRADO (Fases 1-2 feitas); Fase 3 ThemeProfile adiada até adicionar tema novo.
 - [orbital-turret-zoneamento](orbital-turret-zoneamento.md) — OrbitalTurret de zoneamento (olho + 3 esferas, orbes destrutíveis → campos elétricos com paralisia).
 - [metropolis-overlord-city-boss](metropolis-overlord-city-boss.md) — 1º boss nativo do CITY (nível 30); FSM escudo vai-e-volta, Fase 2 minas + lasers, Fase 3 segmentação.
+- [boss-partes-fora-do-soquete](boss-partes-fora-do-soquete.md) — parte que sai do corpo (Sentença/órbita da Tríade): volta por reencaixe de DESVIO (nunca reatribuir o seno); máscara de união só vale no soquete — fora dele, buffer largo 1×/frame; "para o tiro" ≠ "recebe dano".
 - [city-mine-neon-residue](city-mine-neon-residue.md) — CityMine = subclasse ExplosiveMine + flag spawns_neon_residue; secundárias via ExplosiveEffect estendido.
 - [city-neon-design-intent](city-neon-design-intent.md) — decisões deliberadas do tema City Neon (Mundo 3, níveis 26-35); não tratar como bugs.
 

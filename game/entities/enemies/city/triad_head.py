@@ -81,6 +81,17 @@ class TriadHead:
         self._alpha_scale: float = 1.0
         self._visible: bool = True
         self._damageable: bool = True
+        # DISSOLUÇÃO (0 = sumida, 1 = presente). É o véu da Sentença: as Vozes
+        # não vão para a arena disparar, elas SOMEM enquanto a coreografia roda e
+        # voltam no fim. Separado do `_alpha_scale`, que é a barra de progresso
+        # da brasa remontando — os dois se multiplicam sem se atropelar.
+        self.fade: float = 1.0
+        # ESCUDO: a cabeça para o tiro mas não recebe dano. É o estado da Fase 3
+        # — ver `enter_orbiting`. Separado de `_damageable` de propósito: quem
+        # decide o que o tiro FAZ é o roteamento de dano do boss; quem decide se
+        # o tiro CHEGA é a área de colisão. Fundir os dois foi o que deixou as
+        # Vozes em órbita atravessáveis.
+        self.shielding: bool = False
         # Espelho do estado que o CORPO já assumiu. O portão é a fonte de
         # verdade; isto é só o "onde eu já estou", para o boss saber o que ainda
         # precisa aplicar. Sem ele, a transição REMAT→SOLID não tem borda
@@ -93,6 +104,7 @@ class TriadHead:
         self.hp = 0.0
         self._visible = False
         self._damageable = False
+        self.shielding = False
         self._alpha_scale = 0.0
         self.attacking = False
         self.body_state = HeadState.DOWN
@@ -102,6 +114,7 @@ class TriadHead:
         self.hp = max(1.0, self.max_hp * self.EMBER_HP_FRACTION)
         self._visible = True
         self._damageable = True
+        self.shielding = False
         self.attacking = False
         self._alpha_scale = 0.25
         self.body_state = HeadState.REMAT
@@ -111,20 +124,32 @@ class TriadHead:
         self.hp = max(1.0, self.max_hp * hp_fraction)
         self._visible = True
         self._damageable = True
+        self.shielding = False
         self._alpha_scale = 1.0
         self.body_state = HeadState.SOLID
 
     def enter_orbiting(self) -> None:
-        """Fase 3: visível e atacando, mas NÃO é mais alvo.
+        """Fase 3: vira ESCUDO — para o tiro do jogador, mas não recebe dano.
 
-        O portão caiu — as Vozes pararam de proteger a Coroa e viraram atacantes
-        puras. Deixá-las atacáveis reabriria o ciclo de ressonância que a fase
-        existe justamente para ENCERRAR: a pergunta passa a ser "aguento a
-        pressão?", não "consigo abrir a janela?".
+        O portão caiu: as Vozes pararam de proteger a Coroa por REGRA (enquanto
+        sólidas, a Coroa era intangível) e passaram a protegê-la por PRESENÇA —
+        elas orbitam na frente do alvo e o tiro morre nelas. A pergunta da fase
+        deixa de ser "consigo abrir a janela?" e vira "consigo acertar o núcleo
+        com duas cabeças girando na frente?".
+
+        `_damageable` fica falso e `shielding` verdadeiro, e a distinção é o
+        ponto todo: **atacável** decide o que o tiro faz ao chegar, **escudo**
+        decide se ele chega. Enquanto o escudo não existia, as duas coisas eram
+        o mesmo flag, e a única forma de a Voz não tomar dano era o projétil
+        atravessá-la — ela orbitava ameaçadoramente sem nenhuma consequência.
+
+        Voltar a torná-las atacáveis está fora de questão: reabriria o ciclo de
+        ressonância que a fase existe para ENCERRAR.
         """
         self.hp = float(self.max_hp)
         self._visible = True
         self._damageable = False
+        self.shielding = True
         self._alpha_scale = 1.0
         self.body_state = HeadState.SOLID
 
@@ -149,20 +174,52 @@ class TriadHead:
         return self._damageable
 
     @property
+    def at_home(self) -> bool:
+        """A cabeça está no soquete da arte?
+
+        Quem pergunta é a COLISÃO do boss: a máscara combinada das partes é uma
+        união em offset (0, 0), válida só enquanto cada peça está onde a arte a
+        desenhou. Fora de casa (Sentença, órbita da Fase 3) a máscara mentiria.
+        O limiar é de um pixel — a volta é por aproximação e não termina em
+        igualdade exata de float.
+        """
+        return (
+            abs(self.offset_x - self.home_offset_x) < 1.0
+            and abs(self.offset_y - self.home_offset_y) < 1.0
+        )
+
+    @property
     def hp_ratio(self) -> float:
         return max(0.0, min(1.0, self.hp / self.max_hp))
 
     def collision_circle(self) -> tuple[float, float, float]:
         return self.center_x, self.center_y, self.radius
 
-    def current_mask(self) -> "pygame.mask.Mask | None":
-        """Máscara do frame que está na tela, ou None se a cabeça não é alvo.
+    @property
+    def blocks_shots(self) -> bool:
+        """A cabeça PARA o tiro? Atacável ou em escudo — nos dois casos, sim.
 
-        É a área de dano da Voz: só os pixels desenhados do PNG. Uma cabeça no
-        DOWN devolve None e some da máscara combinada do boss — tiro naquele
-        soquete atravessa, que é o comportamento certo.
+        É a pergunta da COLISÃO, e ela não é a mesma de `damageable`, que é a
+        pergunta do DANO. Uma Voz em órbita responde True aqui e False lá.
+
+        Uma cabeça que está dissolvendo (ou dissolvida) responde NÃO em qualquer
+        estado: ela não está em cena. Enquanto o véu não fecha, o tiro pararia
+        num fantasma translúcido.
         """
-        if not self._damageable:
+        if self.fade < 1.0:
+            return False
+        return self._damageable or self.shielding
+
+    def current_mask(self) -> "pygame.mask.Mask | None":
+        """Máscara do frame que está na tela, ou None se o tiro atravessa.
+
+        É a área de COLISÃO da Voz: só os pixels desenhados do PNG. Uma cabeça
+        no DOWN devolve None e some da máscara combinada do boss — tiro naquele
+        soquete atravessa, que é o comportamento certo. Uma cabeça em escudo
+        devolve a máscara: o tiro para nela, e é o `on_hit` do boss que decide
+        que ele não fere.
+        """
+        if not self.blocks_shots:
             return None
         return self._sprites.mask(self._frame_index, self.attacking)
 
@@ -172,6 +229,15 @@ class TriadHead:
         return pygame.Rect(int(self.center_x - r), int(self.center_y - r), r * 2, r * 2)
 
     # ── Dano ─────────────────────────────────────────────────────────────────
+    def flash(self) -> None:
+        """Pisca sem receber dano — o impacto absorvido pelo ESCUDO.
+
+        O flash é o mesmo do dano de propósito: o jogador precisa ver QUE
+        acertou. O que muda é o resto (nenhum HP sai, nenhum som de dano toca) e
+        o "MISS" que o boss desenha por cima, que é quem diz que não contou.
+        """
+        self._hit_flash = self._HIT_FLASH_TIME
+
     def take_damage(self, amount: float) -> bool:
         """Aplica dano. Devolve True se ESTE hit derrubou a cabeça.
 
@@ -216,7 +282,7 @@ class TriadHead:
         para a borda da arena — o sprite tem que ir junto: a posição dela na
         tela compartilhada é fixa na arte, e só este deslocamento a move.
         """
-        if not self._visible:
+        if not self._visible or self.fade <= 0.01:
             return
         white = self._hit_flash > 0.0
         if self.aim is not None:
@@ -229,14 +295,16 @@ class TriadHead:
             origin[0] + int(self.offset_x - self.home_offset_x),
             origin[1] + int(self.offset_y - self.home_offset_y),
         )
-        if self._alpha_scale >= 1.0:
+        alpha = self._alpha_scale * self.fade
+        if alpha >= 1.0:
             surface.blit(frame, origin)
             return
         # `set_alpha` na surface COMPARTILHADA do cache contaminaria as outras
         # instâncias e os frames seguintes; a cópia é paga só enquanto a brasa
-        # remonta (3s por ciclo), nunca no estado estável.
+        # remonta (3s por ciclo) ou enquanto o véu da Sentença abre e fecha,
+        # nunca no estado estável.
         faded = frame.copy()
-        faded.set_alpha(int(255 * max(0.0, min(1.0, self._alpha_scale))))
+        faded.set_alpha(int(255 * max(0.0, min(1.0, alpha))))
         surface.blit(faded, origin)
 
     def _draw_aimed(self, surface: pygame.Surface, white: bool) -> None:
@@ -256,9 +324,10 @@ class TriadHead:
             sprite = sprite.copy()
             sprite.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
         pos = (int(self.center_x + ox), int(self.center_y + oy))
-        if self._alpha_scale >= 1.0:
+        alpha = self._alpha_scale * self.fade
+        if alpha >= 1.0:
             surface.blit(sprite, pos)
             return
         faded = sprite.copy()
-        faded.set_alpha(int(255 * max(0.0, min(1.0, self._alpha_scale))))
+        faded.set_alpha(int(255 * max(0.0, min(1.0, alpha))))
         surface.blit(faded, pos)

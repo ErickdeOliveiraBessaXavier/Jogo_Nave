@@ -113,6 +113,10 @@ class TriadBeam(BossLaser):
 
         self._phase = _CHARGING
         self._phase_t = 0.0
+        # Verdadeiro no frame em que o feixe passa a FERIR, e só nele. Quem toca
+        # o som é o boss (§2 — quem sabe do EventBus), e ele precisa da borda:
+        # ler `is_lethal` daria um som por frame enquanto o feixe existe.
+        self.fired_this_frame = False
         self._visual_w = 0.0
         self._flare = 0.0
         self._anim = 0.0
@@ -146,6 +150,7 @@ class TriadBeam(BossLaser):
     def update(self, dt: float) -> None:
         if dt <= 0.0 or self.dead:
             return
+        self.fired_this_frame = False
         self._anim += dt
         self._phase_t += dt
 
@@ -165,6 +170,7 @@ class TriadBeam(BossLaser):
             self.w = 0.0  # TELÉGRAFO: visível e inofensivo
             if self._phase_t >= self._charge_time:
                 self._phase, self._phase_t = _ACTIVE, 0.0
+                self.fired_this_frame = True
         elif self._phase == _ACTIVE:
             respiro = math.sin(self._anim * 6.1) + 0.4 * math.sin(self._anim * 11.3)
             self._visual_w = self.max_w + scaled(1.8) * respiro

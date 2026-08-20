@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 import random
 
+import pygame
 import pytest
 
 from game.entities.enemies.city.triad_boss import _CROWN_ACTOR as _CROWN
@@ -717,6 +718,23 @@ def _passo_sentenca(boss: TriadBoss, feixes: list, dt: float = DT) -> None:
         beam.update(dt)
 
 
+def _boss_hardcore() -> TriadBoss:
+    """Chefe com a agressividade do Hardcore (1,20).
+
+    Os tempos escritos na partitura são os DESSE preset — nas dificuldades
+    menores a coreografia ganha folga entre as salvas (`folga_por_agressividade`).
+    Quem cobra a duração de referência tem que fixar o preset, senão o número
+    muda junto com o balanceamento e o teste vira uma cópia da constante.
+    """
+    b = TriadBoss(aggressiveness_multiplier=1.20)
+    for _ in range(600):
+        b.update(DT)
+        if b.active:
+            break
+    assert b.active
+    return b
+
+
 def _rodar_sentenca(boss: TriadBoss, dt: float = DT):
     """Roda a Sentença inteira; devolve (duração, feixes emitidos)."""
     from game.entities.enemies.city.triad_boss import _SENTENCA
@@ -751,17 +769,30 @@ def test_sentenca_entrega_quinze_segundos_de_desvio(boss: TriadBoss):
     parar de ferir —, não a duração total: chamada e rabo são coreografia sem
     perigo e inflariam o número sem o jogador desviar de nada.
     """
-    _entrar_na_sentenca(boss)
-    duracao, feixes = _rodar_sentenca(boss)
+    duro = _boss_hardcore()
+    _entrar_na_sentenca(duro)
+    duracao, feixes = _rodar_sentenca(duro)
 
-    letais = [(b, i) for i, b in enumerate(feixes)]
-    assert len(letais) >= 30, f"coreografia rala demais: {len(feixes)} feixes"
+    assert len(feixes) >= 30, f"coreografia rala demais: {len(feixes)} feixes"
     assert 16.5 < duracao < 18.5, f"duração fora do previsto: {duracao:.2f}s"
-    assert boss._phase == 2 and boss._sent_count == 1
+    assert duro._phase == 2 and duro._sent_count == 1
+
+    # E o modo fácil dura MAIS: a folga entre salvas é tempo a mais na arena.
+    facil = TriadBoss(aggressiveness_multiplier=0.85)
+    for _ in range(600):
+        facil.update(DT)
+        if facil.active:
+            break
+    _entrar_na_sentenca(facil)
+    dur_facil, _ = _rodar_sentenca(facil)
+    assert dur_facil > duracao + 2.0, (
+        f"o modo fácil não ganhou tempo ({duracao:.2f}s → {dur_facil:.2f}s)"
+    )
 
 
 def test_janela_de_ameaca_cobre_quase_toda_a_sentenca(boss: TriadBoss):
     """Entre a primeira e a última ameaça o jogador quase não tem folga."""
+    boss = _boss_hardcore()
     _entrar_na_sentenca(boss)
     from game.entities.enemies.city.triad_boss import _SENTENCA
 
@@ -854,16 +885,21 @@ def test_o_feixe_nasce_na_boca_da_cabeca_que_o_disparou(boss: TriadBoss):
 
 
 def test_o_rosto_acompanha_a_direcao_do_feixe(boss: TriadBoss):
-    """A cabeça OLHA para onde atira. Vale para os ecos e para as Vozes.
+    """A cabeça OLHA para onde atira, e os dois rostos do boss aparecem.
 
-    Sem isso o sprite fica sempre de frente e o feixe sai de lado — a leitura
+    Sem a mira o sprite fica sempre de frente e o feixe sai de lado — a leitura
     "aquela cabeça está mirando em mim" desaparece, e ela é o telégrafo.
+
+    Quem executa a coreografia são todos ECOS: as Vozes reais dissolvem no corpo
+    enquanto ela roda (`_VOICE_FADE`). A marcação `Shot.voice` da partitura
+    sobreviveu como escolha de ROSTO, e é isso que este teste cobra — a abertura
+    e o fecho continuam sendo "as cabeças do boss" aos olhos do jogador.
     """
     _entrar_na_sentenca(boss)
     from game.entities.enemies.city.triad_boss import _SENTENCA
 
     girou = set()
-    vozes_miraram = 0
+    rostos = set()
     t = 0.0
     feixes: list = []
     while boss._state == _SENTENCA and t < 30.0:
@@ -887,12 +923,13 @@ def test_o_rosto_acompanha_a_direcao_do_feixe(boss: TriadBoss):
             desvio = abs((rumo - caster.aim + math.pi) % math.tau - math.pi)
             assert desvio < 1e-6, f"rosto a {math.degrees(desvio):.1f}° do feixe"
             girou.add(round(caster.aim, 2))
-            if caster.head is not None:
-                assert caster.head.aim is not None, "Voz disparando sem pose de mira"
-                vozes_miraram += 1
+            rostos.add(caster.part)
 
     assert len(girou) >= 12, f"só {len(girou)} direções distintas — falta variedade"
-    assert vozes_miraram > 0, "nenhuma Voz participou da coreografia"
+    esperados = {h.part_key for h in boss.heads}
+    assert esperados <= rostos, (
+        f"os rostos das Vozes sumiram da coreografia: {rostos}"
+    )
 
 
 def test_a_boca_fica_na_frente_e_ABAIXO_da_ancora():
@@ -1168,12 +1205,51 @@ def test_as_vozes_voltam_para_casa_no_fim_da_sentenca(boss: TriadBoss):
     _entrar_na_sentenca(boss)
     _rodar_sentenca(boss)
 
+    assert not boss._sent_casters, "sobraram ecos depois do fim da Sentença"
     for i, head in enumerate(boss.heads):
-        casa = boss._home_offsets[i]
         assert head.aim is None, "Voz ficou com pose de mira depois da Sentença"
         assert not head.attacking, "Voz ficou em telégrafo depois da Sentença"
-        assert (head.offset_x, head.offset_y) == casa, "Voz não voltou ao soquete"
-    assert not boss._sent_casters, "sobraram ecos depois do fim da Sentença"
+        assert (head.offset_x, head.offset_y) == boss._home_offsets[i]
+
+
+def test_o_corpo_nao_salta_ao_sair_da_sentenca(boss: TriadBoss):
+    """A volta da coreografia é contínua: nenhum frame move o corpo mais que a
+    deriva moveria.
+
+    A deriva ATRIBUI `x`/`y` a partir de um seno cujo relógio ficou parado
+    durante a Sentença, e a coreografia levou o corpo para o topo-centro. Sem o
+    reencaixe, o primeiro frame de volta reassumia o seno inteiro — a 720p isso
+    é um teleporte de até ~205px em x, lido em playtest como "o boss deu um
+    salto". O teto de 6px/frame aqui é folgado para a deriva legítima
+    (~1,2px/frame no pico) e apertado para qualquer corte.
+    """
+    _entrar_na_sentenca(boss)
+    _rodar_sentenca(boss)
+
+    anterior = (boss.x, boss.y)
+    for _ in range(240):
+        boss.update(DT, _PLAYER)
+        passo = math.hypot(boss.x - anterior[0], boss.y - anterior[1])
+        assert passo < 6.0, f"corpo saltou {passo:.1f}px num frame ao sair da Sentença"
+        anterior = (boss.x, boss.y)
+
+
+def test_as_vozes_abrem_para_a_orbita_sem_teleporte(boss: TriadBoss):
+    """Entrar na Fase 3 ABRE as Vozes até a órbita; não as arremessa.
+
+    A órbita nasce a ~200px do soquete e é lida como posição absoluta por frame.
+    Assumi-la no frame da virada teleportava as duas cabeças de uma vez, no
+    exato momento em que o jogador está lendo a mudança de fase.
+    """
+    _levar_ate_fase(boss, 3)
+
+    anterior = [(h.offset_x, h.offset_y) for h in boss.heads]
+    for _ in range(240):
+        boss.update(DT, _PLAYER)
+        for i, head in enumerate(boss.heads):
+            passo = math.hypot(head.offset_x - anterior[i][0], head.offset_y - anterior[i][1])
+            assert passo < 8.0, f"Voz {i} saltou {passo:.1f}px num frame na órbita"
+            anterior[i] = (head.offset_x, head.offset_y)
 
 
 # ── Fases 2 e 3 ──────────────────────────────────────────────────────────────
@@ -1269,12 +1345,23 @@ def test_fase2_nao_repete_o_combo_anterior(boss: TriadBoss):
     # a repetição do combo, que é o que este teste existe para pegar.
     from game.entities.enemies.city.triad_boss import _ATK_ANCORA
 
+    from game.entities.enemies.city.triad_boss import _ATK_PULSO
+
     assinaturas = [
         tuple(a for _ator, a in t if a != _ATK_ANCORA) for t in turnos
     ]
     assert len(set(assinaturas)) >= 3, f"pouca variedade de combo: {set(assinaturas)}"
+
+    # O Pulso solo NÃO é um combo: é o recurso de quando todo combo está
+    # bloqueado (a leva anterior dele ainda em cena). Ele pode e deve sair
+    # seguidas vezes — é o que mantém o chefe agindo enquanto a arena esvazia.
+    # Cobrar não-repetição dele obrigaria o chefe a disparar um combo bloqueado,
+    # que é exatamente o que a regra de uma-leva-por-vez veio impedir.
+    fallback = (_ATK_PULSO,)
     seguidos = [
-        i for i in range(1, len(assinaturas)) if assinaturas[i] == assinaturas[i - 1]
+        i
+        for i in range(1, len(assinaturas))
+        if assinaturas[i] == assinaturas[i - 1] and assinaturas[i] != fallback
     ]
     assert not seguidos, "um combo repetiu imediatamente o anterior"
 
@@ -1300,6 +1387,58 @@ def test_fase3_derruba_o_portao_e_as_vozes_param_de_ser_alvo(boss: TriadBoss):
         assert head._visible, "a Voz sumiu em vez de virar orbital"
 
 
+def test_fase3_as_vozes_param_o_tiro_sem_receber_dano(boss: TriadBoss):
+    """ESCUDO: o tiro morre na Voz em órbita e não fere ninguém.
+
+    Duas metades, e as duas precisam valer:
+
+    * o projétil COLIDE — antes, `damageable=False` tirava a Voz da máscara e a
+      bala atravessava a cabeça como se ela não estivesse lá;
+    * o impacto não vira dano, nem nela nem na Coroa. O segundo é o que mais
+      arriscava passar despercebido: sem parte sob o pixel, o roteamento cai no
+      fallback por distância, e enquanto ele filtrava por `damageable` o tiro que
+      caía num furo do rosto era creditado ao núcleo — o escudo ficava sendo um
+      atalho para o dano em vez de uma barreira.
+    """
+    from game.systems.collision_physics import CollisionPhysics
+
+    _levar_ate_fase(boss, 3)
+    for _ in range(90):
+        boss.update(DT, _PLAYER)
+
+    voz = boss.heads[0]
+    assert not voz.damageable and voz.shielding, "a Voz da Fase 3 não é escudo"
+    assert not voz.at_home, "a Voz não saiu para a órbita"
+
+    bala = pygame.Rect(int(voz.center_x) - 2, int(voz.center_y) - 4, 4, 8)
+    assert CollisionPhysics().check_mask_collision(bala, None, boss, bala.x, bala.y), (
+        "o tiro atravessou a Voz em escudo"
+    )
+
+    hp = boss.health
+    resultado = boss.on_hit(50, float(bala.centerx), float(bala.centery))
+    assert boss.health == hp, "o escudo virou dano na Coroa"
+    assert not resultado.killed and resultado.points == 0
+    assert voz.hp == voz.max_hp, "a Voz em escudo recebeu dano"
+
+
+def test_fase3_o_nucleo_continua_atingivel(boss: TriadBoss):
+    """O escudo não pode fechar a luta: o tiro no núcleo tem que continuar valendo."""
+    from game.systems.collision_physics import CollisionPhysics
+
+    _levar_ate_fase(boss, 3)
+    for _ in range(90):
+        boss.update(DT, _PLAYER)
+
+    cx, cy, _r = boss._crown_circle()
+    bala = pygame.Rect(int(cx) - 2, int(cy) - 4, 4, 8)
+    assert CollisionPhysics().check_mask_collision(bala, None, boss, bala.x, bala.y)
+
+    hp = boss.health
+    boss.on_hit(50, cx, cy)
+    assert boss.health == hp - 50, "o núcleo parou de receber dano na Fase 3"
+
+
 def test_fase3_orbita_e_pinta_as_esferas_de_laranja(boss: TriadBoss):
     from game.entities.enemies.city import triad_pixel_map as pmap
 
@@ -1314,13 +1453,186 @@ def test_fase3_orbita_e_pinta_as_esferas_de_laranja(boss: TriadBoss):
 
 
 def test_fase3_so_usa_os_ataques_dela(boss: TriadBoss):
+    """O vocabulário da Fase 3 são os três ataques dela mais o Pulso.
+
+    O Pulso é o ISENTO — o recurso de quando os três estão bloqueados pela
+    própria leva ainda em cena, exatamente como nas Fases 1 e 2. Ele não é
+    conteúdo novo: é o primeiro padrão que o chefe ensinou, voltando em laranja
+    e mais rápido.
+    """
+    from game.entities.enemies.city.triad_boss import _ATK_PULSO
+
     _levar_ate_fase(boss, 3)
     turnos = _colher_turnos(boss, 34.0)
     ataques = {a for t in turnos for _ator, a in t}
 
     assert ataques, "a Fase 3 não atacou"
-    assert ataques <= {"unissono", "diluvio", "convergencia"}, ataques
+    assert ataques <= {"unissono", "diluvio", "convergencia", _ATK_PULSO}, ataques
 
+
+def test_fase3_nao_repete_o_ataque_anterior(boss: TriadBoss):
+    """A fase de vocabulário mais curto é a que mais precisa de anti-repetição.
+
+    Antes desta regra a Fase 3 era o único sorteio sem memória do jogo: 35% dos
+    turnos repetiam o anterior e 12% eram o terceiro seguido igual. O Pulso está
+    fora da cobrança pelo mesmo motivo da Fase 2 — ele é o fallback, e exigir
+    que ele alterne obrigaria o chefe a relançar um ataque ainda em cena.
+    """
+    from game.entities.enemies.city.triad_boss import _ATK_PULSO
+
+    _levar_ate_fase(boss, 3)
+    turnos = _colher_turnos(boss, 60.0, seed=31)
+    seq = [t[0][1] for t in turnos if t]
+
+    assert len(seq) > 10, f"turnos demais de menos para julgar: {len(seq)}"
+    seguidos = [
+        i for i in range(1, len(seq))
+        if seq[i] == seq[i - 1] and seq[i] != _ATK_PULSO
+    ]
+    assert not seguidos, f"ataque repetiu imediatamente o anterior: {seq}"
+
+
+def test_unissono_acende_as_tres_cabecas(boss: TriadBoss):
+    """Laranja não mente por OMISSÃO: o Uníssono nasce das três origens.
+
+    Dois dos três anéis saem das Vozes. Com o telégrafo só na Coroa, o jogador
+    recebia dois anéis de cabeças que não avisaram nada.
+    """
+    from game.entities.enemies.city.triad_boss import (
+        _ACT_WINDUP,
+        _ATK_UNISSONO,
+        _CROWN_ACTOR,
+    )
+
+    _levar_ate_fase(boss, 3)
+    boss._turn = [(_CROWN_ACTOR, _ATK_UNISSONO)]
+    boss._act_state = _ACT_WINDUP
+    boss._clear_telegraph()
+    boss._plan_turn = lambda: [(_CROWN_ACTOR, _ATK_UNISSONO)]
+    boss._begin_windup()
+
+    assert boss._crown_attacking, "a Coroa não acendeu no Uníssono"
+    for head in boss.heads:
+        assert head.attacking, "uma Voz disparou o Uníssono sem telegrafar"
+
+
+def test_convergencia_devolve_o_estouro_com_a_arena_no_teto(boss: TriadBoss):
+    """Ela ABRE o espaço que usa — o teto não pode cobrá-la pela lotação antiga.
+
+    O teto era medido antes do disparo, e a Convergência recolhe a arena DENTRO
+    dele: com a arena cheia, o ataque engolia tudo e devolvia nada. O telégrafo
+    acendia, a tela limpava e o troco não vinha.
+    """
+    from game.entities.enemies.city.triad_boss import (
+        _ATK_CONVERGENCIA,
+        _CROWN_ACTOR,
+        _MAX_LIVE_ORBS,
+    )
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    boss._phase = 3
+    boss._orbs = [
+        TriadOrb(100.0 + i, 200.0, OrbBehavior.ANCHOR) for i in range(_MAX_LIVE_ORBS)
+    ]
+    boss._turn = [(_CROWN_ACTOR, _ATK_CONVERGENCIA)]
+    boss._actor, boss._attack = _CROWN_ACTOR, _ATK_CONVERGENCIA
+
+    saida = boss._fire_current_attack(_PLAYER)
+
+    assert saida, "a Convergência recolheu a arena e não devolveu nada"
+    assert len(boss._orbs) <= _MAX_LIVE_ORBS
+
+
+def test_pulso_sustentado_respeita_o_teto(boss: TriadBoss):
+    """As batidas 2 e 3 não passam pelo `_fire_current_attack` — e nasciam fora
+    do teto por isso. Medido na Fase 3: 64 esferas em cena com o teto em 52."""
+    from game.entities.enemies.city.triad_boss import _MAX_LIVE_ORBS
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    boss._orbs = [
+        TriadOrb(100.0 + i, 200.0, OrbBehavior.ANCHOR) for i in range(_MAX_LIVE_ORBS)
+    ]
+    boss._fire_pulse_wave()
+
+    assert len(boss._orbs) <= _MAX_LIVE_ORBS, "a batida do Pulso furou o teto"
+
+
+def test_a_voz_dissolvida_nao_deixa_hitbox(boss: TriadBoss):
+    """Cabeça sumindo sai da área de colisão junto com o desenho.
+
+    A máscara do boss é uma união em offset (0, 0) — ela não sabe de alpha. Sem
+    esta regra, a Voz dissolvida continuaria parando o tiro e matando a nave por
+    contato num lugar onde o jogador não vê nada: a pior hitbox possível, porque
+    é invisível por construção.
+    """
+    _entrar_na_sentenca(boss)
+    for _ in range(int(1.0 / DT)):
+        boss.update(DT, _PLAYER)
+
+    for head in boss.heads:
+        assert head.fade == 0.0, "a Voz não dissolveu durante a coreografia"
+        assert not head.blocks_shots, "Voz dissolvida ainda para o tiro"
+        assert boss._hit_mask(head) is None, "Voz dissolvida ainda tem máscara"
+
+
+def test_o_veu_fecha_antes_do_primeiro_feixe_e_abre_depois_do_ultimo(boss: TriadBoss):
+    """O fade É a transição: ele fecha antes dos lasers e abre depois deles.
+
+    Se o véu ainda estivesse fechando quando o primeiro feixe acende, o fade
+    disputaria a atenção com o telégrafo do laser e deixaria de ler como
+    "começou outra coisa" — vira só uma cabeça piscando no meio do ataque. A
+    partitura reserva a INTRO justamente para isto (`score.INTRO`).
+    """
+    from game.entities.enemies.city.triad_boss import _SENTENCA, _VOICE_FADE
+    from game.entities.enemies.city import triad_score as score
+
+    assert _VOICE_FADE < score.INTRO, "o véu não cabe na abertura da partitura"
+
+    _entrar_na_sentenca(boss)
+    feixes: list = []
+    t = 0.0
+    while boss._state == _SENTENCA and t < 40.0:
+        _passo_sentenca(boss, feixes)
+        t += DT
+        if feixes:
+            break
+    assert feixes, "nenhum feixe nasceu"
+    for head in boss.heads:
+        assert head.fade == 0.0, (
+            f"o primeiro feixe nasceu com a Voz a {head.fade:.2f} de presença"
+        )
+
+
+def test_as_vozes_voltam_por_fade_in_e_nunca_saem_do_soquete(boss: TriadBoss):
+    """O fim da coreografia devolve as cabeças ACENDENDO, não movendo.
+
+    Nenhum offset é tocado pela Sentença: a peça fica onde a arte a desenhou e
+    só a presença dela varia. É o que faz a volta ser sempre precisa — não há
+    posição para reencontrar.
+    """
+    _entrar_na_sentenca(boss)
+    casa = [(h.offset_x, h.offset_y) for h in boss.heads]
+    _rodar_sentenca(boss)
+
+    for i, head in enumerate(boss.heads):
+        assert (head.offset_x, head.offset_y) == casa[i], "a Voz saiu do soquete"
+        # O fade-in já pode ter começado no frame da virada; o que não pode é a
+        # Voz estar de volta antes de a coreografia acabar.
+        assert head.fade < 0.2, "a coreografia acabou com a Voz já visível"
+
+    presenca = []
+    for _ in range(int(1.5 / DT)):
+        boss.update(DT, _PLAYER)
+        presenca.append(boss.heads[0].fade)
+        if presenca[-1] >= 1.0:
+            break
+
+    assert presenca[-1] == 1.0, "a Voz não voltou depois da Sentença"
+    assert presenca[0] < presenca[len(presenca) // 2] < presenca[-1], (
+        "o retorno não foi gradual"
+    )
+    for i, head in enumerate(boss.heads):
+        assert (head.offset_x, head.offset_y) == casa[i]
 
 def test_convergencia_cobra_pelo_que_ficou_vivo(boss: TriadBoss):
     """Recompensa RETROATIVA: quem limpou a arena leva um estouro fraco.
@@ -1887,3 +2199,601 @@ def test_parede_vem_dos_dois_lados_com_alturas_intercaladas(boss: TriadBoss):
     assert all(a != b for a, b in zip(lados, lados[1:])), (
         "as duas frentes nascem nas mesmas alturas — elas se cancelam"
     )
+
+
+# ── Uma leva por vez: o ataque não repete com a anterior em cena ─────────────
+def _emissoes_com_cena(boss: TriadBoss, segundos: float, seed: int):
+    """Roda o ciclo e devolve `(ataque, esferas_do_mesmo_ataque_ja_vivas)`."""
+    random.seed(seed)
+    vivos: list = []
+    registro = []
+    t = 0.0
+    while t < segundos:
+        novos = boss.update(DT, _PLAYER)
+        if novos:
+            registro.append(
+                (
+                    boss._attack,
+                    sum(1 for o in vivos if o.origin == boss._attack and not o.dead),
+                )
+            )
+            vivos.extend(novos)
+        for orb in vivos:
+            _tick(orb)
+        vivos = [o for o in vivos if not o.dead]
+        t += DT
+    return registro
+
+
+@pytest.mark.parametrize("fase", [1, 2])
+def test_um_ataque_nao_repete_com_a_leva_anterior_em_cena(boss: TriadBoss, fase: int):
+    """A leva anterior de um ataque tem que ter saído antes de vir a próxima.
+
+    Sem a regra as levas se empilham e a fase perde a leitura de ondas: medido,
+    o teleguiado nascia a cada 1,70s e ficava 7,15s em cena, então quatro levas
+    coexistiam o tempo todo — "quase sem deixar respirar", no relato do playtest.
+
+    É um filtro de ESCOLHA, não uma espera: o chefe troca de ataque em vez de
+    ficar ocioso. Esperar a arena limpar antes de qualquer ataque daria ciclos
+    de 8,2s na Fase 1 e 15,9s na Fase 2, e o chefe passaria a luta parado.
+    """
+    from game.entities.enemies.city.triad_boss import _ATAQUES_SEM_ESPERA
+
+    if fase >= 2:
+        _levar_ate_fase(boss, fase)
+
+    registro = _emissoes_com_cena(boss, 90.0, seed=5)
+    assert registro, "o chefe não atacou"
+
+    cobrados = [(atk, n) for atk, n in registro if atk not in _ATAQUES_SEM_ESPERA]
+    assert cobrados, "nenhum ataque sujeito à regra apareceu"
+    for atk, ja_vivas in cobrados:
+        assert ja_vivas == 0, (
+            f"{atk} nasceu com {ja_vivas} esferas da leva anterior ainda em cena"
+        )
+
+
+def test_os_isentos_continuam_podendo_empilhar(boss: TriadBoss):
+    """Pulso e minas não esperam — e é de propósito.
+
+    O Pulso é uma BATIDA: a graça é justamente os anéis se sucederem sem a arena
+    esvaziar entre eles. As minas são permanentes, então cobrá-las travaria o
+    chefe para sempre. A regra existe para dar ritmo, não para esterilizar.
+    """
+    from game.entities.enemies.city.triad_boss import _ATAQUES_SEM_ESPERA, _ATK_PULSO
+
+    assert _ATK_PULSO in _ATAQUES_SEM_ESPERA
+    registro = _emissoes_com_cena(boss, 60.0, seed=5)
+    pulsos = [n for atk, n in registro if atk == _ATK_PULSO]
+    assert pulsos and max(pulsos) > 0, (
+        "o Pulso deixou de empilhar — a batida contínua se perdeu"
+    )
+
+
+def test_o_teleguiado_desiste_e_vai_embora():
+    """Ao acabar a perseguição, ela acelera e sai — não fica flutuando.
+
+    O teleguiado passava a maior parte dos 7,15s em cena já resolvido, a 190
+    px/s (mais devagar que a nave), só sobrepondo as levas seguintes. Projétil
+    que já não oferece decisão e não sai do caminho é sujeira visual.
+    """
+    from game.entities.enemies.city.triad_orb import (
+        _SEEKER_COMMIT_SPEED,
+        _SEEKER_HOMING_TIME,
+        OrbBehavior,
+        TriadOrb,
+    )
+
+    orb = TriadOrb(640.0, 300.0, OrbBehavior.SEEKER, angle=0.0, birth=0.05)
+    _tick(orb, 0.10)
+
+    def _passo():
+        antes = (orb.x, orb.y)
+        _tick(orb, 0.1)
+        return math.hypot(orb.x - antes[0], orb.y - antes[1]) / 0.1
+
+    perseguindo = _passo()
+    for _ in range(int(_SEEKER_HOMING_TIME / 0.1) + 6):
+        _tick(orb, 0.1)
+    comprometida = _passo()
+
+    assert comprometida > perseguindo * 1.5, (
+        f"não acelerou ao desistir: {perseguindo:.0f} → {comprometida:.0f} px/s"
+    )
+    assert comprometida <= perseguindo * _SEEKER_COMMIT_SPEED * 1.3
+
+
+def test_a_chuva_entra_na_queda_sem_tranco():
+    """A virada "estagnada → caindo" tem que ser contínua em POSIÇÃO e VELOCIDADE.
+
+    Antes eram três descontinuidades no mesmo frame: a fase do serpenteio era
+    sorteada no construtor, então o primeiro frame da queda calculava
+    `sin(fase_aleatória)` e a esfera TELEPORTAVA até ±55px de lado; e as
+    velocidades lateral e vertical saltavam de zero para ~147 e 125 px/s. Era
+    isso que se via como um tranco.
+    """
+    from game.entities.enemies.city.triad_orb import (
+        _LOB_HOLD_TIME,
+        _LOB_RISE_TIME,
+        make_rain,
+    )
+
+    virada = _LOB_RISE_TIME + _LOB_HOLD_TIME
+    for alvo in (300.0, 980.0):
+        orb = make_rain(640.0, 380.0, (alvo, 150.0), (47, 212, 232), birth=0.02)
+        t = 0.0
+        antes = None
+        vel_antes = None
+        pior_salto = 0.0
+        pior_degrau = 0.0
+        while t < virada + 2.0:
+            _tick(orb)
+            t += DT
+            if antes is not None and t > virada:
+                v = ((orb.x - antes[0]) / DT, (orb.y - antes[1]) / DT)
+                pior_salto = max(pior_salto, math.hypot(orb.x - antes[0], orb.y - antes[1]))
+                if vel_antes is not None:
+                    pior_degrau = max(
+                        pior_degrau, math.hypot(v[0] - vel_antes[0], v[1] - vel_antes[1])
+                    )
+                vel_antes = v
+            antes = (orb.x, orb.y)
+
+        assert pior_salto < 12.0, f"salto de {pior_salto:.1f}px num frame — teleporte"
+        assert pior_degrau < 70.0, (
+            f"degrau de {pior_degrau:.0f} px/s por frame — tranco na virada"
+        )
+
+
+def test_a_chuva_cai_espelhada():
+    """Os pares mantêm a simetria DURANTE a queda, não só na formação parada.
+
+    Com todas serpenteando no mesmo sentido a formação escorrega junto e a
+    simetria — que é o ponto do ataque — se perde no meio do caminho.
+    """
+    from game.core.config import config as Config
+    from game.entities.enemies.city.triad_orb import (
+        _LOB_HOLD_TIME,
+        _LOB_RISE_TIME,
+        make_rain,
+    )
+
+    boss_x = float(Config.SCREEN_WIDTH) * 0.5
+    postos = TriadBoss()._postos_da_chuva()
+    orbs = [make_rain(boss_x, 380.0, p, (47, 212, 232), birth=0.02) for p in postos]
+    for _ in range(int((_LOB_RISE_TIME + _LOB_HOLD_TIME + 1.2) / DT)):
+        for orb in orbs:
+            _tick(orb)
+
+    pares = [(orbs[i], orbs[i + 1]) for i in range(0, len(orbs) - 1, 2)]
+    assert pares
+    for esq, dir_ in pares:
+        erro = abs((boss_x - esq.x) - (dir_.x - boss_x))
+        assert erro < 1.0, f"par fora de simetria por {erro:.1f}px na descida"
+
+
+def test_convergencia_suga_as_esferas_em_vez_de_apaga_las():
+    """A Convergência RECOLHE — o jogador tem que ver as esferas serem engolidas.
+
+    Matá-las no lugar fazia a arena inteira sumir de um frame para o outro. Em
+    playtest isso leu como bug, e pior: como bug CAUSADO PELO DANO, porque a
+    Convergência sai em 1 de cada 3 turnos da Fase 3 e o jogador está sempre
+    acertando o chefe quando ela vem.
+    """
+    from game.entities.enemies.city.triad_orb import (
+        VACUUM_TIME,
+        OrbBehavior,
+        TriadOrb,
+    )
+
+    boss = TriadBoss()
+    boss._phase = 3
+    nucleo = boss._actor_origin_of(-1)
+    boss._orbs = [
+        TriadOrb(200.0 + i * 130, 520.0, OrbBehavior.RING, angle=0.0, birth=0.9)
+        for i in range(8)
+    ]
+    soltas = list(boss._orbs)
+
+    anel = boss._fire_convergencia(_PLAYER)
+
+    # Nada morreu no ato: todas estão a caminho do núcleo, e inofensivas.
+    assert all(not o.dead for o in soltas), "a Convergência apagou as esferas"
+    assert all(o.behavior is OrbBehavior.VACUUM for o in soltas)
+    assert not any(o.causes_damage for o in soltas), (
+        "esfera sendo sugada ainda fere — dano sem esquiva"
+    )
+    # E o anel de volta ainda não é ameaça: ele nasce quando elas chegarem.
+    assert all(o.is_hatching for o in anel)
+    assert all(abs(o._birth_time - VACUUM_TIME) < 1e-6 for o in anel), (
+        "o estouro não está sincronizado com a chegada das esferas"
+    )
+
+    antes = [math.hypot(o.x - nucleo[0], o.y - nucleo[1]) for o in soltas]
+    for _ in range(int(VACUUM_TIME / DT)):
+        for orb in soltas:
+            _tick(orb)
+    depois = [math.hypot(o.x - nucleo[0], o.y - nucleo[1]) for o in soltas]
+    assert max(depois) < 2.0, f"as esferas não chegaram ao núcleo ({max(depois):.0f}px)"
+    assert min(antes) > 100.0, "o teste não exercitou distância nenhuma"
+
+
+def test_dano_no_chefe_nao_limpa_a_arena(boss: TriadBoss):
+    """Levar dano não pode reiniciar ataque nem apagar o que está em cena.
+
+    O relato de playtest ligava as duas coisas ("quando tremo de dano, tudo
+    some"), mas a causa era a Convergência, que sai em 1 de cada 3 turnos da
+    Fase 3. Este teste fixa que o caminho do DANO não mexe em nada disso — se
+    alguém acoplar os dois um dia, falha aqui.
+    """
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    boss._phase = 3
+    boss._apply_phase()
+    boss._orbs = [
+        TriadOrb(300.0 + i * 90, 400.0, OrbBehavior.RING, angle=0.0, birth=0.05)
+        for i in range(6)
+    ]
+    soltas = list(boss._orbs)
+    estado, timer = boss._act_state, boss._act_timer
+
+    for _ in range(12):
+        boss.on_hit(5, *boss._crown_circle()[:2])
+
+    assert boss.health < boss.max_health, "o dano nem foi aplicado"
+    assert all(o.is_collectible for o in soltas), "o dano apagou esferas em cena"
+    assert boss._act_state == estado and boss._act_timer == timer, (
+        "o dano reiniciou o ciclo de ataque"
+    )
+
+
+def test_a_pulsacao_nao_mexe_na_hitbox():
+    """A esfera respira no DESENHO; a área de dano é constante.
+
+    O raio é lido em dois lugares — colisão e render — e a pulsação entrou só no
+    render. Se ela vazar para a colisão, a mesma esquiva passa ou não passa
+    dependendo do frame, que é o tipo de injustiça que o jogador não tem como
+    diagnosticar.
+    """
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    orb = TriadOrb(400.0, 300.0, OrbBehavior.RING, angle=0.0, birth=0.05)
+    _tick(orb, 0.10)
+    raio = orb.collision_circle()[2]
+    assert raio > 0.0
+
+    for _ in range(40):
+        _tick(orb)
+        assert orb.collision_circle()[2] == raio, "a hitbox pulsou junto com o desenho"
+        assert orb.collision_circles()[0][2] == raio
+
+
+def test_a_area_da_esfera_acompanha_o_raio_de_classe():
+    """Colisão e desenho saem do MESMO raio, escalado pela resolução.
+
+    Guarda contra alguém engordar a esfera só no render: o halo já é maior que o
+    corpo, e o jogador julga o vão entre esferas pelo que vê.
+    """
+    from game.core.scale import gameplay_scale
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    comum = TriadOrb(400.0, 300.0, OrbBehavior.RING, angle=0.0)
+    mina = TriadOrb(400.0, 300.0, OrbBehavior.ANCHOR)
+    assert comum.radius == TriadOrb.RADIUS * gameplay_scale()
+    assert mina.radius == TriadOrb.ANCHOR_RADIUS * gameplay_scale()
+    assert mina.radius > comum.radius, "a mina deixou de ser a maior"
+
+
+# ── Som dos feixes ───────────────────────────────────────────────────────────
+def _sentenca_com_bus():
+    from game.core.events import EventBus
+    from game.entities.enemies.city.triad_boss import _SENTENCA
+    from game.events import game_events as ev
+
+    bus = EventBus()
+    sons: list = []
+    bus.on(ev.PlaySound, lambda e: sons.append(e.sound_name))
+    boss = TriadBoss(event_bus=bus)
+    boss.x, boss.y = boss._home_x, boss._home_y
+    boss._state = "active"
+    boss.active = True
+    boss._begin_sentenca()
+
+    feixes: list = []
+    letais = []
+    t = 0.0
+    while boss._state == _SENTENCA and t < 30.0:
+        antes = len(sons)
+        boss.update(DT, _PLAYER)
+        feixes.extend(boss._pending_beams)
+        boss._pending_beams.clear()
+        novos_letais = sum(1 for f in feixes if f.fired_this_frame)
+        for f in feixes:
+            f.update(DT)
+        feixes = [f for f in feixes if not f.dead]
+        letais.append((novos_letais, len(sons) - antes))
+        t += DT
+    return sons, letais
+
+
+def test_o_feixe_toca_som_ao_disparar():
+    """Som no DISPARO, um por salva, e nenhum durante a carga.
+
+    Um por salva porque o Cerco acende oito feixes no mesmo frame: oito disparos
+    empilhados viram um estalo sujo em vez de um golpe. E no disparo, não na
+    carga — a carga já tem telégrafo visual, e sonorizá-la tiraria do disparo o
+    destaque que ele precisa ter.
+    """
+    sons, letais = _sentenca_com_bus()
+
+    assert sons, "a Sentença não tocou som nenhum"
+    assert all(n == "boss_laser_fire" for n in sons)
+
+    for novos, tocados in letais:
+        if novos == 0:
+            assert tocados == 0, "tocou som sem nenhum feixe passar a ferir"
+        else:
+            assert tocados == 1, (
+                f"{novos} feixes ficaram letais no mesmo frame e saíram "
+                f"{tocados} sons — deveria ser 1"
+            )
+
+    # As cascatas escalonadas (onda, cruzado) soam uma vez CADA; as salvas
+    # simultâneas colapsam num golpe só. Daí o total ficar entre os dois.
+    assert 15 <= len(sons) <= 30, f"{len(sons)} sons para 40 feixes"
+
+
+def test_sem_event_bus_o_boss_nao_quebra():
+    """O bus é opcional (testes, previews). Sem ele, silêncio — não exceção."""
+    from game.entities.enemies.city.triad_boss import _SENTENCA
+
+    boss = TriadBoss(event_bus=None)
+    boss.x, boss.y = boss._home_x, boss._home_y
+    boss._state = "active"
+    boss.active = True
+    boss._begin_sentenca()
+    t = 0.0
+    while boss._state == _SENTENCA and t < 30.0:
+        boss.update(DT, _PLAYER)
+        boss._pending_beams.clear()
+        t += DT
+
+
+# ── Folga entre salvas por dificuldade ───────────────────────────────────────
+def test_a_folga_entre_salvas_cresce_nas_dificuldades_menores():
+    """A troca de formação é o momento mais duro da coreografia.
+
+    Os tempos escritos na partitura são os de HARDCORE — foi o que o playtest
+    aprovou como limite. Abaixo disso cada salva entra mais tarde que a anterior,
+    o que ALARGA o intervalo sem tocar no interior de salva nenhuma.
+    """
+    from game.entities.enemies.city import triad_score as score
+
+    dura = score.folga_por_agressividade(1.20)
+    normal = score.folga_por_agressividade(1.00)
+    facil = score.folga_por_agressividade(0.85)
+    pesadelo = score.folga_por_agressividade(1.45)
+
+    assert dura == 0.0 and pesadelo == 0.0, "Hardcore/Pesadelo ganharam folga"
+    assert 0.0 < normal < facil, f"escala errada: {normal} vs {facil}"
+    assert facil == score.FOLGA_MAX
+
+    def intervalos(folga: float):
+        marcos = []
+        for ordem, (inicio, construir) in enumerate(score.SCORE):
+            tiros = construir(1280.0, 720.0)
+            base = score.INTRO + inicio + ordem * folga
+            marcos.append(
+                (base + min(t.delay for t in tiros), base + max(t.end() for t in tiros))
+            )
+        return [marcos[i + 1][0] - marcos[i][1] for i in range(len(marcos) - 1)]
+
+    apertado = intervalos(dura)
+    folgado = intervalos(facil)
+    assert all(f > a for f, a in zip(folgado, apertado)), (
+        "o modo fácil não ganhou tempo em algum intervalo"
+    )
+    assert min(folgado) - min(apertado) == pytest.approx(facil, abs=1e-6)
+
+
+def test_a_folga_nao_mexe_dentro_da_salva():
+    """Só o INTERVALO muda. Cargas, durações e varreduras ficam idênticas.
+
+    Se a folga esticasse a salva, o modo fácil teria feixes mais lentos — outro
+    ataque, não o mesmo com mais ar entre um e outro.
+    """
+    from game.entities.enemies.city import triad_score as score
+
+    apertado, _ = score.build_schedule(1280.0, 720.0, 1.0, 0.0)
+    folgado, _ = score.build_schedule(1280.0, 720.0, 1.0, score.FOLGA_MAX)
+    assert len(apertado) == len(folgado)
+    for (_ta, a), (_tf, f) in zip(apertado, folgado):
+        assert (a.charge, a.lethal, a.aim) == (f.charge, f.lethal, f.aim)
+
+
+# ── Chuva: formação no topo ──────────────────────────────────────────────────
+def test_a_chuva_se_posiciona_no_topo_da_tela(boss: TriadBoss):
+    """A parte difícil da Chuva era o POSICIONAMENTO, não a queda.
+
+    A nave costuma estar no terço superior atirando no chefe, e a formação se
+    montava exatamente ali. Empurrada para o limite de cima, o jogador vê tudo
+    se posicionar sem estar embaixo — e ainda ganha 1s de pausa antes da queda.
+    """
+    from game.core.config import config as Config
+    from game.entities.enemies.city.triad_orb import _LOB_HOLD_TIME
+
+    sh = float(Config.SCREEN_HEIGHT)
+    postos = boss._postos_da_chuva()
+    assert postos
+    assert max(y for _x, y in postos) < sh * 0.16, (
+        "a formação ainda estagna na zona onde a nave atira"
+    )
+    assert _LOB_HOLD_TIME >= 1.0, "a pausa antes da queda encurtou"
+
+
+# ── Esfera premiada ──────────────────────────────────────────────────────────
+def _forcar_premiada(boss: TriadBoss, orbs: list):
+    boss._sortear_premio(orbs)
+    if not any(o.prize for o in orbs):
+        orbs[0].prize = True
+        orbs[0].color = pmap_cor(boss)
+    return next(o for o in orbs if o.prize)
+
+
+def pmap_cor(boss: TriadBoss):
+    from game.entities.enemies.city import triad_pixel_map as pmap
+
+    return pmap.CYAN if boss._phase >= 3 else pmap.ORANGE
+
+
+@pytest.mark.parametrize("fase", [1, 2, 3])
+def test_a_premiada_sai_na_cor_contraria_a_da_fase(boss: TriadBoss, fase: int):
+    """Nas Fases 1 e 2 tudo é ciano e a premiada é laranja; na 3, o inverso.
+
+    A cor é o contrato inteiro — "a diferente vale alguma coisa" se aprende no
+    primeiro tiro, e vale igual nas duas pontas da luta.
+    """
+    from game.entities.enemies.city import triad_pixel_map as pmap
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    boss._phase = fase
+    comuns = boss._palette("pulso")
+    orbs = [
+        TriadOrb(300.0 + i * 40, 300.0, OrbBehavior.RING, angle=0.0, color=comuns)
+        for i in range(6)
+    ]
+    premiada = _forcar_premiada(boss, orbs)
+
+    esperada = pmap.CYAN if fase >= 3 else pmap.ORANGE
+    assert premiada.color == esperada
+    assert premiada.color != comuns, "a premiada saiu na mesma cor das outras"
+    assert sum(1 for o in orbs if o.prize) == 1, "mais de uma premiada na salva"
+
+
+def test_a_premiada_larga_o_powerup_ao_ser_destruida(boss: TriadBoss):
+    """O prêmio paga a decisão de gastar tiro na esfera certa.
+
+    Nasce na posição dela, e não no topo da tela como o power-up de spawner: é o
+    vínculo entre "atirei naquela" e "caiu isto" que ensina o jogador a procurar.
+    """
+    from game.core.config import PowerUpType
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    orb = TriadOrb(430.0, 260.0, OrbBehavior.RING, angle=0.0, birth=0.05)
+    _tick(orb, 0.10)
+    orb.prize = True
+
+    resultado = None
+    for _ in range(orb.HEALTH):
+        resultado = orb.on_hit(1, 430.0, 260.0)
+    assert resultado is not None and resultado.killed
+    assert len(resultado.drops) == 1, "a premiada não largou nada"
+    pu = resultado.drops[0]
+    assert pu.type is PowerUpType.SPREAD_SHOT, "o prêmio não é o tiro 5×"
+    assert abs(pu.rect.centerx - 430) <= 2 and abs(pu.rect.centery - 260) <= 2, (
+        "o power-up não nasceu onde a esfera estava"
+    )
+    assert not resultado.fragments, "o drop foi por `fragments` — vira inimigo"
+
+
+def test_esfera_comum_nao_larga_nada():
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    orb = TriadOrb(430.0, 260.0, OrbBehavior.RING, angle=0.0, birth=0.05)
+    _tick(orb, 0.10)
+    for _ in range(orb.HEALTH):
+        r = orb.on_hit(1, 430.0, 260.0)
+    assert r.killed and not r.drops
+
+
+def test_o_premio_nao_sai_de_graca():
+    """Nem por contato com a nave, nem quando a Convergência a engole.
+
+    No contato o jogador levou dano, não venceu a esfera; na sucção ela nem
+    chegou a ser um alvo. Entregar o prêmio nesses casos apagaria a decisão que
+    ele existe para recompensar.
+    """
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    contato = TriadOrb(430.0, 260.0, OrbBehavior.RING, angle=0.0, birth=0.05)
+    _tick(contato, 0.10)
+    contato.prize = True
+    assert not contato.on_ship_contact(430.0, 260.0).drops
+
+    sugada = TriadOrb(430.0, 260.0, OrbBehavior.RING, angle=0.0, birth=0.05)
+    _tick(sugada, 0.10)
+    sugada.prize = True
+    sugada.pull_to((640.0, 300.0))
+    for _ in range(60):
+        _tick(sugada)
+    assert sugada.dead
+
+
+@pytest.mark.parametrize("fase", [1, 2, 3])
+def test_nunca_ha_duas_premiadas_ao_mesmo_tempo(boss: TriadBoss, fase: int):
+    """Uma premiada em TODA a arena, não uma por salva.
+
+    Duas de cor diferente ao mesmo tempo deixam de ser "a exceção" e viram um
+    segundo grupo: o jogador para de procurar e começa a contar, e a recompensa
+    perde o que tem de melhor — ser um alvo único e óbvio.
+    """
+    if fase >= 2:
+        _levar_ate_fase(boss, fase)
+
+    random.seed(9)
+    vivas: list = []
+    pico = 0
+    vistas = 0
+    t = 0.0
+    while t < 90.0:
+        novos = boss.update(DT, _PLAYER)
+        if novos:
+            vistas += sum(1 for o in novos if o.prize)
+            vivas.extend(novos)
+        for orb in vivas:
+            _tick(orb)
+        vivas = [o for o in vivas if not o.dead]
+        pico = max(pico, sum(1 for o in vivas if o.prize and o.is_collectible))
+        assert pico <= 1, "duas esferas premiadas em cena ao mesmo tempo"
+        t += DT
+
+    assert vistas > 0, "nenhuma premiada apareceu — o sorteio parou de rodar"
+
+
+def test_a_premiada_volta_a_ser_sorteada_depois_de_destruida(boss: TriadBoss):
+    """O teto é de esferas ATIVAS, não um limite por luta.
+
+    Se o bloqueio não soltasse depois da morte, o jogador teria um prêmio a luta
+    inteira — o incentivo de procurar a esfera diferente sumiria no primeiro tiro.
+    """
+    from game.entities.enemies.city.triad_orb import OrbBehavior, TriadOrb
+
+    def _salva():
+        return [
+            TriadOrb(300.0 + i * 40, 300.0, OrbBehavior.RING, angle=0.0)
+            for i in range(6)
+        ]
+
+    random.seed(4)
+    primeira = _salva()
+    for _ in range(60):  # insiste até o dado cair
+        boss._sortear_premio(primeira)
+        if any(o.prize for o in primeira):
+            break
+    premiada = next(o for o in primeira if o.prize)
+    boss._orbs.extend(primeira)
+
+    # Com ela viva, nenhuma nova é sorteada, por mais que se tente.
+    segunda = _salva()
+    for _ in range(60):
+        boss._sortear_premio(segunda)
+    assert not any(o.prize for o in segunda), "sorteou uma segunda com a primeira viva"
+
+    # Destruída, o sorteio volta a valer.
+    premiada.begin_death()
+    terceira = _salva()
+    for _ in range(60):
+        boss._sortear_premio(terceira)
+        if any(o.prize for o in terceira):
+            break
+    assert any(o.prize for o in terceira), "o bloqueio não soltou depois da morte"

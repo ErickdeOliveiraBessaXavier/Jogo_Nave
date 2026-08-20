@@ -55,12 +55,21 @@ class OrbBehavior(Enum):
     ANCHOR = auto()  # parada, crepita, expira — negação de espaço
     TETHER = auto()  # par ligado por arco elétrico (o arco é o hitbox)
     RING = auto()  # radial, velocidade constante
+    VACUUM = auto()  # sendo puxada para o núcleo — inofensiva, é consumo
 
 
 # ── Tuning por comportamento (px/s no design base 1280×720) ───────────────────
 _SEEKER_SPEED = 190.0
 _SEEKER_TURN_RATE = 1.15  # rad/s — angular, NÃO escala com resolução
 _SEEKER_HOMING_TIME = 1.2  # depois disso desiste e segue reto
+# Ao desistir, ela COMPROMETE: acelera até 2,1× e vai embora. Medido, o teleguiado
+# ficava 7,15s em cena — quase todo esse tempo *depois* de já não representar
+# decisão nenhuma, só flutuando pela arena a 190 px/s (mais devagar que a nave).
+# Projétil que já foi resolvido e não sai do caminho não é dificuldade, é sujeira
+# visual: ele fica sobrepondo as levas seguintes e a fase perde a leitura de
+# ondas. Acelerar também lê bem — "ela se lançou" é a leitura óbvia do gesto.
+_SEEKER_COMMIT_SPEED = 2.1
+_SEEKER_COMMIT_ACCEL = 3.0  # por segundo, até o multiplicador cheio
 
 # ── Chuva: SUBIR → ESTAGNAR → DESCER serpenteando ─────────────────────────────
 # Três tempos, e a pausa no meio é o que faz o ataque ser legível: as esferas
@@ -72,10 +81,26 @@ _SEEKER_HOMING_TIME = 1.2  # depois disso desiste e segue reto
 # A parábola antiga não dava isso: subida e queda eram um movimento só, então a
 # ameaça chegava junto com a leitura.
 _LOB_RISE_TIME = 0.75    # subida, com desaceleração até parar no ponto
-_LOB_HOLD_TIME = 0.55    # estagnação lá em cima — a janela de leitura
+# 1,0s de estagnação. Era 0,55s, e o playtest mostrou que a parte difícil da
+# Chuva não é a queda — é o POSICIONAMENTO: a nave costuma estar lá em cima
+# atirando no chefe, e a formação se montava justo no caminho dela. Com os
+# postos empurrados para o topo da tela (`_CHUVA_TOPO`) e um segundo cheio de
+# pausa, o jogador tem tempo de sair de baixo antes de a queda começar.
+_LOB_HOLD_TIME = 1.00
 _LOB_FALL_SPEED = 125.0  # queda LENTA: dá para atravessar a formação andando
-_LOB_WEAVE_AMP = 42.0    # amplitude do serpenteio na descida
-_LOB_WEAVE_FREQ = 3.1
+_LOB_WEAVE_AMP = 55.0    # amplitude do serpenteio na descida
+_LOB_WEAVE_FREQ = 5.5
+# Entrada da queda. Sem ela a virada "estagnada → caindo" era um TRANCO: a esfera
+# estava parada e no frame seguinte já ia a 125 px/s para baixo e ~147 px/s para
+# o lado. Medido frame a frame, e é isso que se via como um tranco lateral.
+#
+# Pior: a fase do serpenteio era sorteada no construtor, então o primeiro frame
+# da queda calculava `sin(fase_aleatória)` e a esfera podia TELEPORTAR até ±55px
+# de lado. Passava despercebido quando o sorteio caía perto de zero.
+#
+# A rampa resolve as três coisas de uma vez — posição, velocidade lateral e
+# velocidade vertical entram todas em zero e crescem juntas.
+_LOB_FALL_RAMP = 0.45
 
 # ── Âncoras (minas): permanentes ──────────────────────────────────────────────
 # Não expiram. Só somem quando levam tiro ou quando o chefe morre. Vira terreno,
@@ -107,6 +132,15 @@ _ERRATIC_WOBBLE_AMP = 62.0
 
 
 _RING_SPEED = 165.0
+
+# Sucção da Convergência. PÚBLICA porque é contrato entre módulos: o boss usa o
+# mesmo valor como tempo de nascimento da salva de volta, e as duas coisas têm
+# que casar no frame (§1 — nada de o boss ler um privado daqui).
+# Tempo FIXO em vez de aceleração: assim todas chegam ao
+# núcleo no mesmo instante, e a implosão lê como um gesto único do chefe em vez
+# de esferas pingando. É esse mesmo tempo que a salva de volta usa de nascimento,
+# então o estouro sai exatamente quando a última esfera é engolida.
+VACUUM_TIME = 0.55
 
 _TETHER_SAMPLES = 5  # círculos de colisão distribuídos ao longo do arco
 
@@ -166,8 +200,12 @@ class TriadOrb(EnemyHitMixin):
     is_boss: bool = False
     HEALTH: int = 4
     POINTS: int = 0
-    RADIUS: float = 9.0
-    ANCHOR_RADIUS: float = 11.0
+    # 1,15× o tamanho original (9,0 e 11,0). O raio é colisão E desenho ao mesmo
+    # tempo, então isto engorda a área de dano junto com a leitura — que é o
+    # ponto: esferas pequenas demais faziam o jogador julgar o vão entre elas
+    # pelo halo e não pelo corpo, e o halo é maior que a hitbox.
+    RADIUS: float = 10.35
+    ANCHOR_RADIUS: float = 12.65
 
     def __init__(
         self,
@@ -204,6 +242,10 @@ class TriadOrb(EnemyHitMixin):
         # porque a esfera é UMA entidade: subclassear por movimento traria de
         # volta a cascata de tipo que o §5 proíbe.
         self._homing_left = _SEEKER_HOMING_TIME
+        self._commit = 1.0
+        # De qual ataque esta esfera saiu. É o que permite ao chefe saber se uma
+        # salva ainda está em cena antes de repetir o MESMO ataque.
+        self.origin: str = ""
         self._correction_timer = 0.0
         self._wobble_phase = random.uniform(0.0, math.tau)
         self._pulse_phase = random.uniform(0.0, math.tau)
@@ -216,6 +258,15 @@ class TriadOrb(EnemyHitMixin):
         self.spawn = (self.x, self.y)
         self._lob_from = (self.x, self.y)
         self._lob_t = 0.0
+        self._weave_dir = 1.0
+        # Sucção da Convergência (ver `pull_to`).
+        self._vac_from = (self.x, self.y)
+        self._vac_t = 0.0
+        self._consumed = False
+        # Esfera PREMIADA: sai na cor contrária à da fase e larga um power-up ao
+        # ser destruída. Quem marca é o chefe (ele conhece a fase); a esfera só
+        # carrega o contrato. Ver `TriadBoss._sortear_premio`.
+        self.prize: bool = False
         self._phase = _BIRTH
         self._phase_t = 0.0
         self._birth_time = _BIRTH_TIME if birth is None else max(0.05, birth)
@@ -286,7 +337,17 @@ class TriadOrb(EnemyHitMixin):
         É o contrato inteiro do telégrafo: a esfera aparece, é visível, e não
         vale dano até o anel de nascimento encostar no núcleo.
         """
-        return self._phase is _LIVE
+        return self._phase is _LIVE and not self._consumed
+
+    @property
+    def is_collectible(self) -> bool:
+        """Pode ser recolhida pela Convergência: está na arena e ainda é dela.
+
+        Inclui a esfera que ainda está NASCENDO — ela ocupa espaço na tela e o
+        jogador a vê, então conta como "coisa que ele deixou viva". Exclui só o
+        que já está saindo: em animação de morte ou já sendo sugada.
+        """
+        return not self.dead and self._phase is not _DYING and not self._consumed
 
     @property
     def is_hatching(self) -> bool:
@@ -299,7 +360,7 @@ class TriadOrb(EnemyHitMixin):
         Sem isto o teleguiado e o auto-aim gastariam carga numa esfera que já
         está tocando a animação de morte — alvo que não existe mais.
         """
-        return self._phase is not _DYING
+        return self._phase is not _DYING and not self._consumed
 
     def _collision_radius(self) -> float:
         """Zero enquanto morre: some da colisão sem sair da lista de desenho.
@@ -308,7 +369,7 @@ class TriadOrb(EnemyHitMixin):
         absorvendo tiro nem empurrando o avanço de fase. Raio zero nunca
         intersecta, então nenhum sistema precisa saber que esta fase existe.
         """
-        return 0.0 if self._phase is _DYING else self.radius
+        return 0.0 if (self._phase is _DYING or self._consumed) else self.radius
 
     def collision_circle(self) -> tuple[float, float, float]:
         return self.x, self.y, self._collision_radius()
@@ -337,6 +398,33 @@ class TriadOrb(EnemyHitMixin):
         self.health -= amount
         if self.health <= 0:
             self.begin_death()
+
+    def pull_to(self, ponto: Tuple[float, float]) -> None:
+        """Passa a ser SUGADA para `ponto`, inofensiva, e some ao chegar.
+
+        É a única troca de comportamento em tempo de execução do vocabulário, e
+        ela existe porque a Convergência precisa que a esfera ainda seja a MESMA
+        esfera — o jogador tem que ver aquela âncora que ele não limpou sendo
+        engolida e voltando como parte do estouro. Matá-la e criar outra no
+        núcleo contaria a mesma história com um corte no meio.
+
+        Inofensiva a partir daqui: ela cruza a arena depressa e em linha reta, e
+        cobrar dano nesse trajeto seria dano sem esquiva.
+        """
+        if self._phase is _DYING or self.behavior is OrbBehavior.VACUUM:
+            return
+        self.behavior = OrbBehavior.VACUUM
+        self._move = _MOVERS[OrbBehavior.VACUUM]
+        # Corta o nascimento: a esfera está sendo CONSUMIDA, e o anel de
+        # nascimento é telégrafo de ameaça — ela deixou de ser uma. Sem isto,
+        # uma esfera puxada enquanto ainda nascia ficava parada esperando o
+        # próprio telégrafo terminar antes de começar a ser sugada.
+        self._phase = _LIVE
+        self.target = ponto
+        self._vac_from = (self.x, self.y)
+        self._vac_t = 0.0
+        self._consumed = True
+        self._sync_rect()
 
     def begin_death(self) -> None:
         """Entra na animação de morte. Idempotente.
@@ -375,8 +463,31 @@ class TriadOrb(EnemyHitMixin):
                 points=self.get_points_value(),
                 explosion_size=int(self.radius * 1.6),
                 sound=hit_sounds.EXPLOSION_ALIEN,
+                drops=self._drop_do_premio(),
             )
         return HitResult(explosion_size=int(self.radius), sound=hit_sounds.BOSS_DAMAGE)
+
+    def _drop_do_premio(self) -> tuple:
+        """O power-up da esfera premiada — só quando ela é DESTRUÍDA a tiro.
+
+        Não sai por contato com a nave (ali o jogador levou dano, não venceu a
+        esfera) nem quando a Convergência a engole. A recompensa paga a decisão
+        de gastar tiro na esfera certa; entregá-la de graça apagaria a decisão.
+
+        Nasce na posição da esfera, e não no topo da tela como o power-up de
+        spawner: o vínculo entre "atirei naquela ali" e "caiu isto" é o que faz
+        o jogador aprender a procurar a esfera de cor diferente.
+        """
+        if not self.prize:
+            return ()
+        from ....core.config import PowerUpType
+        from ...pickups.powerup import PowerUp
+
+        pu = PowerUp(PowerUpType.SPREAD_SHOT)
+        pu.x = self.x - pu.w * 0.5
+        pu.y = self.y - pu.h * 0.5
+        pu.rect.topleft = (int(pu.x), int(pu.y))
+        return (pu,)
 
     def on_ship_contact(self, _cx: float, _cy: float) -> "HitResult":
         from ....systems import hit_sounds
@@ -596,11 +707,16 @@ def _move_seeker(orb: TriadOrb, dt: float, ctx: "EnemyUpdateContext") -> None:
         orb.angle += max(-step, min(step, diff))
         orb.vx = math.cos(orb.angle) * orb.speed
         orb.vy = math.sin(orb.angle) * orb.speed
+    else:
+        # Desistiu: acelera e sai. O serpenteio some junto — ela deixou de
+        # negociar espaço com o jogador e virou só um corpo indo embora.
+        orb._commit = min(_SEEKER_COMMIT_SPEED, orb._commit + _SEEKER_COMMIT_ACCEL * dt)
     orb._wobble_phase += _SEEKER_WEAVE_FREQ * dt
     lateral = math.cos(orb._wobble_phase) * _SEEKER_WEAVE_AMP * gameplay_scale()
+    lateral /= orb._commit
     nx, ny = -math.sin(orb.angle), math.cos(orb.angle)
-    orb.x += (orb.vx + nx * lateral) * dt
-    orb.y += (orb.vy + ny * lateral) * dt
+    orb.x += (orb.vx * orb._commit + nx * lateral) * dt
+    orb.y += (orb.vy * orb._commit + ny * lateral) * dt
 
 
 def _move_lob(orb: TriadOrb, dt: float, _ctx: "EnemyUpdateContext") -> None:
@@ -632,9 +748,36 @@ def _move_lob(orb: TriadOrb, dt: float, _ctx: "EnemyUpdateContext") -> None:
         return
 
     caindo = orb._lob_t - _LOB_RISE_TIME - _LOB_HOLD_TIME
-    orb._wobble_phase += _LOB_WEAVE_FREQ * dt
-    orb.y = py + _LOB_FALL_SPEED * gameplay_scale() * caindo
-    orb.x = px + math.sin(orb._wobble_phase) * _LOB_WEAVE_AMP * gameplay_scale()
+    sc = gameplay_scale()
+    # Smoothstep, e não `min(1, c/ramp)`: a rampa linear tem um JOELHO no fim —
+    # a derivada dela cai de 1/0,45 para zero de um frame para o outro, e isso
+    # devolvia 75 px/s de degrau lateral bem quando a amplitude satura (medido:
+    # 101 px/s em t=+0,52 da virada, contra ~34 dos frames vizinhos). O
+    # smoothstep chega em 1 com derivada zero, então a entrada do serpenteio é
+    # suave nas DUAS pontas.
+    p = min(1.0, caindo / _LOB_FALL_RAMP)
+    rampa = p * p * (3.0 - 2.0 * p)
+
+    # Vertical: acelera durante a rampa e segue constante. A distância é a
+    # integral da velocidade, então posição E velocidade saem contínuas na
+    # virada — parar de cair de repente ou começar de repente lê igual de mal.
+    if caindo < _LOB_FALL_RAMP:
+        percorrido = _LOB_FALL_SPEED * caindo * caindo / (2.0 * _LOB_FALL_RAMP)
+    else:
+        percorrido = _LOB_FALL_SPEED * (caindo - _LOB_FALL_RAMP * 0.5)
+    orb.y = py + percorrido * sc
+
+    # Lateral: a fase conta do INÍCIO DA QUEDA (não do construtor), então o
+    # primeiro frame tem `sin(0) = 0` e a esfera sai exatamente de onde estava.
+    # A amplitude entra na mesma rampa, o que zera também a velocidade lateral
+    # inicial — só `sin(0)=0` deixaria a esfera partir de lado a ~300 px/s.
+    #
+    # `_weave_dir` espelha os pares: o posto da esquerda serpenteia para o lado
+    # oposto ao da direita, e a formação mantém a simetria enquanto desce. Com
+    # todas no mesmo sentido a formação inteira escorrega junto e a simetria,
+    # que é o ponto do ataque, se perde no meio da queda.
+    lateral = math.sin(_LOB_WEAVE_FREQ * caindo) * _LOB_WEAVE_AMP * rampa
+    orb.x = px + orb._weave_dir * lateral * sc
 
 
 def _move_erratic(orb: TriadOrb, dt: float, ctx: "EnemyUpdateContext") -> None:
@@ -685,6 +828,24 @@ def _move_ring(orb: TriadOrb, dt: float, _ctx: "EnemyUpdateContext") -> None:
     orb.y += orb.vy * dt
 
 
+def _move_vacuum(orb: TriadOrb, dt: float, _ctx: "EnemyUpdateContext") -> None:
+    """Puxada para o núcleo em tempo fixo, acelerando. Some ao chegar.
+
+    Interpolação com `p²` (parte devagar, chega rápido): é a leitura de "está
+    sendo ENGOLIDA", não de "está viajando até lá". Uma velocidade constante
+    pareceria a esfera decidindo voltar por conta própria.
+    """
+    orb._vac_t += dt
+    p = min(1.0, orb._vac_t / VACUUM_TIME)
+    fx, fy = orb._vac_from
+    tx, ty = orb.target if orb.target is not None else (fx, fy)
+    puxa = p * p
+    orb.x = fx + (tx - fx) * puxa
+    orb.y = fy + (ty - fy) * puxa
+    if p >= 1.0:
+        orb.begin_death()
+
+
 _MOVERS: Dict[OrbBehavior, Callable[[TriadOrb, float, "EnemyUpdateContext"], None]] = {
     OrbBehavior.SEEKER: _move_seeker,
     OrbBehavior.LOB: _move_lob,
@@ -692,6 +853,7 @@ _MOVERS: Dict[OrbBehavior, Callable[[TriadOrb, float, "EnemyUpdateContext"], Non
     OrbBehavior.ANCHOR: _move_anchor,
     OrbBehavior.TETHER: _move_tether,
     OrbBehavior.RING: _move_ring,
+    OrbBehavior.VACUUM: _move_vacuum,
 }
 
 # Quantidade de raios por comportamento — a densidade é o "sotaque" de cada um.
@@ -702,6 +864,7 @@ _ARC_COUNT: Dict[OrbBehavior, int] = {
     OrbBehavior.ANCHOR: 8,  # crepita denso e parado: "não chegue perto"
     OrbBehavior.TETHER: 3,
     OrbBehavior.RING: 3,
+    OrbBehavior.VACUUM: 6,  # crepita denso ao ser engolida
 }
 
 
@@ -721,4 +884,6 @@ def make_rain(
     orb = TriadOrb(x, y, OrbBehavior.LOB, color=color, lifetime=16.0, birth=birth)
     orb.target = posto
     orb._lob_from = (x, y)
+    # Espelhado pelo lado do posto: a formação continua simétrica na descida.
+    orb._weave_dir = -1.0 if posto[0] < Config.SCREEN_WIDTH * 0.5 else 1.0
     return orb

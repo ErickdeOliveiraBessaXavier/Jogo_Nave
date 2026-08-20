@@ -11,7 +11,10 @@ Duas encarnações, uma classe só:
   * **Voz** (`head=<TriadHead>`) — não desenha nada por conta própria: a pose
     calculada aqui é copiada pelo boss para a cabeça real, que é quem se desenha.
     A coreografia trata as duas do mesmo jeito, então o roteiro não precisa saber
-    quem é quem (§5).
+    quem é quem (§5). **Hoje ninguém constrói esta forma**: as Vozes reais
+    dissolvem no corpo durante a Sentença inteira (`TriadBoss._VOICE_FADE`) e a
+    marcação `Shot.voice` escolhe só o ROSTO do eco. O caminho fica porque é ele
+    que permitiria a uma cabeça de verdade voltar a atuar sem tocar no roteiro.
 
 **O rosto olha para o feixe.** A mira não é decoração: `aimed_part` gira o sprite
 e `muzzle()` devolve a BOCA já girada, que é a origem que o feixe lê todo frame.

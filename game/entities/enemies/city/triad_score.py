@@ -55,6 +55,29 @@ TAIL: float = 0.90
 # intervalos e deixar os feixes se acumulando.
 SPEEDUP: float = 0.8
 
+# ── Folga entre salvas, por dificuldade ───────────────────────────────────────
+# A troca de uma formação para a seguinte é o momento mais difícil da coreografia:
+# o jogador ainda está saindo da anterior quando a nova acende. Os tempos escritos
+# na partitura são os de HARDCORE — é o que o playtest aprovou como limite. Nas
+# dificuldades menores, cada salva entra um pouco mais tarde que a anterior, o que
+# ALARGA o intervalo sem mexer no interior de salva nenhuma (as durações, as
+# cargas e as varreduras continuam idênticas — só a arena tem mais tempo de
+# esvaziar entre uma e outra).
+#
+# Escalonado por `aggressiveness_multiplier`, que é o eixo que o jogo já usa para
+# "quão rápido o inimigo aperta": 1,20 (Hardcore) e acima não ganham folga; 0,85
+# (Casual) ganha a folga cheia; Normal (1,00) fica no meio.
+FOLGA_MAX: float = 0.70
+_AGG_DURO = 1.20
+_AGG_FACIL = 0.85
+
+
+def folga_por_agressividade(aggressiveness: float) -> float:
+    """Segundos extras acumulados por salva, a partir da agressividade."""
+    faixa = _AGG_DURO - _AGG_FACIL
+    p = (_AGG_DURO - aggressiveness) / faixa if faixa > 0 else 0.0
+    return FOLGA_MAX * max(0.0, min(1.0, p))
+
 Ponto = Tuple[float, float]
 
 
@@ -396,7 +419,7 @@ SCORE: Tuple[Tuple[float, Callable[[float, float], List[Shot]]], ...] = (
 
 
 def build_schedule(
-    sw: float, sh: float, escala: float = 1.0
+    sw: float, sh: float, escala: float = 1.0, folga: float = 0.0
 ) -> Tuple[List[Tuple[float, Shot]], float]:
     """Achata a partitura em `(instante_real, Shot)` ordenado, mais o FIM.
 
@@ -411,11 +434,16 @@ def build_schedule(
     """
     agenda: List[Tuple[float, Shot]] = []
     ultimo = 0.0
-    for inicio, construir in SCORE:
+    for ordem, (inicio, construir) in enumerate(SCORE):
+        # `ordem * folga` empurra cada salva um pouco mais que a anterior: o
+        # efeito é somar `folga` a CADA intervalo, sem alterar nada dentro das
+        # salvas. Aplicado antes da escala, então a 2ª Sentença acelera a folga
+        # junto com o resto e continua sendo "mais rápida, nunca mais densa".
+        atraso = inicio + ordem * folga
         for tiro in construir(sw, sh):
-            quando = (INTRO + inicio + tiro.delay) * escala
+            quando = (INTRO + atraso + tiro.delay) * escala
             agenda.append((quando, tiro))
-            ultimo = max(ultimo, (INTRO + inicio + tiro.end()) * escala)
+            ultimo = max(ultimo, (INTRO + atraso + tiro.end()) * escala)
     agenda.sort(key=lambda par: par[0])
     return agenda, ultimo + TAIL * escala
 
@@ -470,6 +498,8 @@ __all__ = [
     "INTRO",
     "TAIL",
     "SPEEDUP",
+    "FOLGA_MAX",
+    "folga_por_agressividade",
     "Shot",
     "SCORE",
     "build_schedule",
