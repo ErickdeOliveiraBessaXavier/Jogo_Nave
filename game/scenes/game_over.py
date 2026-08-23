@@ -832,9 +832,40 @@ class GameOverScene(Scene):
 
         self.app.go_to(lambda: MainMenuScene(self.app))
 
+    def _boss_fight_active(self) -> bool:
+        """A partida embaixo desta cena parou numa luta de boss?
+
+        Lido do MESMO estado que a `PlayingScene` usava (o boss do
+        `entity_manager`), e não de um flag copiado na morte: o boss continua
+        vivo e desenhado enquanto o reveal roda, então a resposta é a mesma que
+        ele daria no frame anterior à morte — que é justamente a continuidade
+        que este método existe para preservar.
+        """
+        boss = self.playing_scene.entity_manager.boss
+        return boss is not None and not boss.dead
+
     def render(self, surface: pygame.Surface):
         dt = getattr(self.playing_scene, "last_dt", 1.0 / Config.FPS)
-        self.r.background(self.game_surface, dt=dt, speed_multiplier=1.0)
+        # MESMA ordem de camadas do `GameRenderer`: fundo → escurecimento de boss
+        # → entidades. Esta cena redesenha o mundo por conta própria (a partida
+        # continua rodando embaixo dela), então cada camada que ela esquecer
+        # SOME no frame da morte.
+        #
+        # Foi o que aconteceu com o escurecimento de boss: morrer numa luta
+        # clareava a tela de repente — a camada 1b sumia — e só depois o reveal
+        # de 2s a escurecia de novo. O piscada lia como falha de render bem no
+        # beat da morte. O `update` da `PlayingScene` já retornou cedo
+        # (`_game_over_triggered`), então o alpha está CONGELADO no valor da
+        # luta: nada some e nada refaz o fade.
+        self.r.background(
+            self.game_surface,
+            dt=dt,
+            speed_multiplier=1.0,
+            # Celestiais seguem escondidos pelo mesmo motivo: a luta os esconde,
+            # e deixá-los voltar no frame da morte era o mesmo pop com outra cara.
+            draw_celestials=not self._boss_fight_active(),
+        )
+        self.playing_scene.boss_backdrop_dim.draw(self.game_surface)
         self.playing_scene.entity_manager.draw(
             self.game_surface,
             self.playing_scene.ship.rect.centerx,

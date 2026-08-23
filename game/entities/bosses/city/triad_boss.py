@@ -45,6 +45,7 @@ from ...effects.critical_damage import area_from_box
 from ..boss_hit_mixin import BossHitMixin
 from . import triad_pixel_map as pmap
 from .triad_head import TriadHead
+from .triad_recoil import HitRecoil
 from .triad_beam import TriadBeam
 from .triad_caster import TriadCaster
 from . import triad_score as score
@@ -333,6 +334,20 @@ _HEAD_RETURN_SPEED = 4.2
 _VOICE_FADE = 0.55
 
 
+# ── O tronco fantasma ─────────────────────────────────────────────────────────
+# Opacidade do tronco enquanto ele NÃO pode ser ferido. Baixa o bastante para ler
+# como "não está aqui de verdade", alta o bastante para o boss continuar ancorado
+# na tela — é ele que diz onde o chefe está enquanto as Vozes trabalham.
+#
+# Substitui o "MISS": antes o tronco intangível era OPACO e PARAVA o tiro, e um
+# texto explicava que o acerto não contou. Opaco é a aparência de sólido, então a
+# tela dizia "sólido" e o texto dizia "não valeu" — o jogador tinha que aprender
+# uma exceção. Translúcido + tiro atravessando não precisa de texto nenhum: a
+# aparência já é a regra.
+_CROWN_GHOST = 0.35
+_CROWN_GHOST_FADE = 0.22     # s da transição entre sólido e fantasma
+
+
 def _approach(atual: float, alvo: float, vel: float) -> float:
     """Aproximação exponencial de um escalar. `vel` já vem clampado em 1.0."""
     return atual + (alvo - atual) * vel
@@ -387,6 +402,11 @@ class TriadBoss(BossHitMixin):
         self._state: str = _ENTERING
         self._time: float = 0.0
         self._hit_flash: float = 0.0
+        # Recuo da Coroa. Só desenho, como o das Vozes (ver `triad_recoil`) — e
+        # aqui a razão é ainda mais direta: o (x, y) do boss ancora a máscara,
+        # o drift e o spawn de TODOS os ataques. Somar recuo nele faria o boss
+        # atirar de um lugar diferente por ter sido acertado.
+        self._crown_recoil = HitRecoil()
         self._miss_timer: float = 0.0
         self._miss_pos: tuple[float, float] = (0.0, 0.0)
 
@@ -476,8 +496,16 @@ class TriadBoss(BossHitMixin):
         # aparições temporárias. É o que permite oito cabeças disparando sem o
         # boss ter oito Vozes.
         self._sent_casters: List[TriadCaster] = []
-        # Presença das Vozes: 1 em cena, 0 dissolvidas (ver `_VOICE_FADE`).
+        # Presença das Vozes: 1 em cena, 0 dissolvidas (ver `_VOICE_FADE`). Só
+        # delas — o tronco NÃO entra aqui. Ele fica em cena a coreografia inteira,
+        # translúcido pelo `_crown_ghost`: durante a Sentença ele está INTANGÍVEL,
+        # e é isso que a translucidez comunica. Sumir de vez foi a primeira
+        # tentativa e tirava da tela a âncora visual do boss.
         self._voice_veil: float = 1.0
+        # Opacidade do tronco. 1,0 = sólido e ferível; `_CROWN_GHOST` = fantasma
+        # intangível. Animado (nunca degrau) porque nas Fases 1-2 o portão abre e
+        # fecha o tempo todo, e um pulo de opacidade a cada abertura pisca.
+        self._crown_ghost: float = 1.0
         self._home_offsets = [(h.offset_x, h.offset_y) for h in self.heads]
         self._phase: int = 1             # 1, 2 ou 3
         # Agressividade encurta o RESPIRO, nunca o wind-up: o telégrafo é
@@ -528,9 +556,8 @@ class TriadBoss(BossHitMixin):
     def collision_circles(self) -> List[tuple[float, float, float]]:
         """Silhueta real (§8): uma hitbox por cabeça que pode ser atingida.
 
-        A Coroa entra na lista MESMO intangível — é o que permite o tiro parar
-        nela e o "MISS" aparecer, em vez de o projétil atravessar em silêncio e
-        o jogador não descobrir por que não fez dano. Pelo mesmo motivo a Voz em
+        A Coroa entra na lista MESMO intangível — é o que faz o tiro PARAR nela
+        em vez de atravessar e ferir a Voz pela nuca. Pelo mesmo motivo a Voz em
         ESCUDO (Fase 3) entra: o critério é `blocks_shots` (o tiro para?), não
         `damageable` (o tiro fere?).
         """
@@ -620,9 +647,19 @@ class TriadBoss(BossHitMixin):
     def _combined_mask(self) -> pygame.mask.Mask | None:
         """União das máscaras das partes EM CASA — a área de colisão do corpo.
 
-        A Coroa entra MESMO intangível: é o que faz o tiro parar nela e o "MISS"
-        aparecer em vez de o projétil atravessar em silêncio. Cabeça no DOWN não
-        entra, então o soquete vazio é atravessável.
+        O tronco entra SEMPRE, ferível ou não, e isso é o ponto: ele é a PAREDE.
+        O jogador atira de baixo, e a testa de cada Voz se estende para dentro da
+        faixa que o torso cobre — é o torso que impede a Voz de ser ferida pela
+        nuca. Tirá-lo da máscara enquanto fantasma abriu dois corredores até a
+        parte de trás das duas cabeças, e dava para feri-las de uma posição
+        central só, sem o vaivém pela arena que é a dinâmica da fase.
+
+        Intangível ele PARA a bala e não recebe dano (`on_hit` → NO_HIT), com a
+        translucidez do sprite dizendo por quê. Recortar a área da Voz em vez
+        disso foi tentado e apagava o Γ do desenho de referência
+        (`Exemplo_Área_Colisão.jpeg`) — a proteção da nuca é papel do torso.
+
+        Cabeça no DOWN não entra, então o soquete vazio é atravessável.
 
         Todas as partes vivem na MESMA tela de 64×64 escalada, então a união é
         offset (0, 0) e o resultado é cacheável por `_mask_key`. Quem sai do
@@ -734,6 +771,21 @@ class TriadBoss(BossHitMixin):
         return None
 
     # ── Dano ─────────────────────────────────────────────────────────────────
+    @property
+    def crown_tangible(self) -> bool:
+        """O tronco/Coroa pode ser ferido AGORA? Fonte única do estado fantasma.
+
+        Duas coisas o tornam intangível, e as duas têm de responder igual aqui:
+        o portão fechado (uma Voz sólida ainda protege o núcleo) e a Sentença
+        (o boss inteiro é cenário enquanto a coreografia roda).
+
+        Quem consulta: o desenho (translucidez), a máscara de colisão (o tiro
+        atravessa) e o roteamento de dano. Serem a MESMA pergunta é o ponto —
+        enquanto "parece intangível" e "é intangível" eram decisões separadas,
+        dava para o tronco parecer sólido e engolir tiros sem contar.
+        """
+        return self.can_take_damage() and self.gate.crown_vulnerable
+
     def can_take_damage(self) -> bool:
         """Alguma parte pode receber dano agora?
 
@@ -759,10 +811,15 @@ class TriadBoss(BossHitMixin):
             return NO_HIT
 
         if target is self:
-            if not self.gate.crown_vulnerable:
+            if not self.crown_tangible:
+                # A bala PAROU no tronco e não feriu ninguém. O "MISS" é o que
+                # impede isso de ler como projétil sumindo sem motivo — e agora
+                # ele concorda com a tela, porque o tronco está translúcido em
+                # vez de opaco. Era a contradição (parece sólido, não vale) que
+                # tornava o aviso confuso, não o aviso.
                 self._trigger_miss(hit_x, hit_y)
                 return NO_HIT
-            return self._damage_crown(damage)
+            return self._damage_crown(damage, hit_x, hit_y)
         if target.shielding:
             # ESCUDO (Fase 3): o tiro PARA na Voz e não fere ninguém. O mesmo
             # feedback da Coroa intangível — "acertou, não contou" —, porque é a
@@ -771,8 +828,11 @@ class TriadBoss(BossHitMixin):
             # que não existe.
             self._trigger_miss(hit_x, hit_y)
             target.flash()
+            # Recua mesmo sem tomar dano: o escudo PARA o tiro, e parar um tiro
+            # tem peso. Sem isso o impacto no escudo era só texto na tela.
+            target.kick(hit_x, hit_y)
             return NO_HIT
-        return self._damage_head(target, damage)
+        return self._damage_head(target, damage, hit_x, hit_y)
 
     def _fallback_target(self, px: float, py: float) -> "TriadHead | TriadBoss | None":
         """Quem responde quando o impacto não caiu sobre parte nenhuma.
@@ -807,6 +867,13 @@ class TriadBoss(BossHitMixin):
             # traço é da Coroa, sem disputa. Deixar as Vozes competirem aqui
             # devolveria o bug por outra porta — o círculo de uma Voz cobre o
             # oco entre o rosto e o filamento, que é território do corpo.
+            #
+            # Vale MESMO com o tronco fantasma, e é deliberado: estas duas
+            # funções respondem "qual parte está AQUI" — geometria pura. Quem
+            # responde "isso pode ser ferido" é a máscara de colisão (o tiro nem
+            # chega) e o `on_hit` (que devolve NO_HIT). Misturar as perguntas fazia
+            # o dano em área centrado no tronco fantasma ser creditado a uma Voz a
+            # 100px dali — o mesmo bug de roteamento que este caminho corrige.
             return self
 
         best: "TriadHead | None" = None
@@ -852,12 +919,14 @@ class TriadBoss(BossHitMixin):
                 best, best_d2 = head, d2
         return best
 
-    def _damage_crown(self, damage: int) -> "HitResult":
+    def _damage_crown(self, damage: int, hit_x: float, hit_y: float) -> "HitResult":
         from ....systems import hit_sounds
         from ....systems.hit_result import HitResult
 
         self.health -= damage
         self._hit_flash = self._HIT_FLASH_TIME
+        cx, cy, _ = self._crown_circle()
+        self._crown_recoil.kick(cx, cy, hit_x, hit_y)
         if self.health <= 0:
             self.health = 0
             self.dead = True
@@ -870,11 +939,14 @@ class TriadBoss(BossHitMixin):
             )
         return HitResult(explosion_size=15, sound=hit_sounds.BOSS_DAMAGE)
 
-    def _damage_head(self, head: TriadHead, damage: int) -> "HitResult":
+    def _damage_head(
+        self, head: TriadHead, damage: int, hit_x: float, hit_y: float
+    ) -> "HitResult":
         from ....systems import hit_sounds
         from ....systems.hit_result import HitResult
 
         was_ember = self.gate.is_rematerializing(head.slot)
+        head.kick(hit_x, hit_y)
         if not head.take_damage(damage):
             return HitResult(explosion_size=12, sound=hit_sounds.BOSS_DAMAGE)
 
@@ -884,11 +956,25 @@ class TriadBoss(BossHitMixin):
         if was_ember:
             self.gate.head_remat_interrupted(head.slot)
             head.enter_down()
-            return HitResult(explosion_size=25, sound=hit_sounds.BOSS_DAMAGE)
+            return HitResult(
+                explosion_size=25,
+                explosion_type=pmap.VOICE_DEATH_PALETTE,
+                part_death=True,
+                sound=hit_sounds.BOSS_DAMAGE,
+            )
 
         self.gate.head_died(head.slot)
         head.enter_down()
-        return HitResult(explosion_size=60, sound=hit_sounds.EXPLOSION_BOSS)
+        # Burst radial de sempre, só que na cor da Voz: a forma é a explosão
+        # que o jogo inteiro usa, e trocá-la por lascas afastava a queda da
+        # linguagem visual do resto (testado e descartado). O laranja é o que
+        # amarra a morte ao telégrafo — a cor basta, a forma não precisava mudar.
+        return HitResult(
+            explosion_size=60,
+            explosion_type=pmap.VOICE_DEATH_PALETTE,
+            part_death=True,
+            sound=hit_sounds.EXPLOSION_BOSS,
+        )
 
     def take_damage(self, amount: int) -> None:
         """Dano SEM posição (cadeias, alguns AoE). Cobra do portão primeiro.
@@ -954,6 +1040,8 @@ class TriadBoss(BossHitMixin):
         # A área de colisão larga vale por frame: as partes acabaram de andar.
         self._wide_dirty = True
         self._hit_flash = max(0.0, self._hit_flash - dt)
+        self._crown_recoil.update(dt)
+        self._advance_crown_ghost(dt)
         self._miss_timer = max(0.0, self._miss_timer - dt)
         self._pulse_flash = max(0.0, self._pulse_flash - dt / _PULSO_BEAT)
 
@@ -2108,12 +2196,29 @@ class TriadBoss(BossHitMixin):
                 continue
             i += 1
 
+    def _advance_crown_ghost(self, dt: float) -> None:
+        """Aproxima a opacidade do tronco do que a tangibilidade dele pede.
+
+        Alvo derivado do ESTADO a cada frame, como o véu das Vozes: não há
+        começo nem fim a agendar, e a abertura ou o fecho do portão no meio de
+        qualquer outra coisa já é a transição.
+        """
+        alvo = 1.0 if self.crown_tangible else _CROWN_GHOST
+        if self._crown_ghost == alvo:
+            return
+        passo = (1.0 - _CROWN_GHOST) * dt / _CROWN_GHOST_FADE
+        if self._crown_ghost < alvo:
+            self._crown_ghost = min(alvo, self._crown_ghost + passo)
+        else:
+            self._crown_ghost = max(alvo, self._crown_ghost - passo)
+
     def _advance_veil(self, dt: float) -> None:
         """Fecha o véu ao entrar na Sentença e abre ao sair. Um relógio só.
 
-        O alvo é o ESTADO (dissolvida na coreografia, presente fora dela), então
+        O alvo é o ESTADO (dissolvido na coreografia, presente fora dela), então
         não há começo e fim a agendar: entrar na Sentença já é o fade-out e sair
         já é o fade-in, inclusive se a fase mudar no meio.
+
         """
         alvo = 0.0 if self._state == _SENTENCA else 1.0
         if self._voice_veil != alvo:
@@ -2199,25 +2304,70 @@ class TriadBoss(BossHitMixin):
         # ordem fica fixa aqui mesmo assim, porque as fases seguintes deslocam as
         # cabeças (a Sentença manda as laterais para as bordas) e aí a
         # sobreposição passa a existir de verdade.
-        white = self._hit_flash > 0.0
         crown_frame = self._crown.frame(
-            self._frame_index, self._crown_attacking, white=white
+            self._frame_index, self._crown_attacking, white=False
         )
         if crown_frame is not None:
-            surface.blit(crown_frame, origin)
+            recoil_x, recoil_y = self._crown_recoil.offset
+            crown_origin = (origin[0] + recoil_x, origin[1] + recoil_y)
+            self._blit_ghost(surface, crown_frame, crown_origin)
+            # Mesma RAMPA das Vozes (`TriadHead.draw`): o clarão entra por cima
+            # com alpha decaindo, em vez de trocar o sprite inteiro pelo branco.
+            # Um degrau de 0,08s lê como piscada; a rampa lê como golpe.
+            forca = (
+                self._hit_flash / self._HIT_FLASH_TIME if self._hit_flash > 0.0 else 0.0
+            )
+            if forca > 0.0:
+                glow = self._crown.frame(
+                    self._frame_index, self._crown_attacking, white=True
+                )
+                if glow is not None and glow is not crown_frame:
+                    self._blit_ghost(surface, glow, crown_origin, scale=min(1.0, forca))
 
         for head in self.heads:
             head.draw(surface, origin)
 
         # Depois do corpo: o fogo sai POR CIMA do casco, senão o sprite o cobre.
+        # Sem gate nenhum: o tronco nunca mais some da tela (no pior caso fica
+        # fantasma), então não existe o caso de fogo ardendo no vazio.
         self.draw_critical_fx(surface)
-
         self._draw_pulse(surface)
 
         for caster in self._sent_casters:
             caster.draw(surface)
         self._draw_health_bar(surface)
         self._draw_miss_indicator(surface)
+
+    def _blit_ghost(
+        self,
+        surface: pygame.Surface,
+        frame: pygame.Surface,
+        origin: tuple[int, int],
+        scale: float = 1.0,
+    ) -> None:
+        """Blita o tronco com a opacidade que a tangibilidade dele pede.
+
+        `scale` multiplica, para quem já entra translúcido — hoje o clarão de
+        dano, que precisa do fantasma E da própria rampa. Multiplicar mantém os
+        dois independentes: o clarão de um acerto no tronco sólido é forte, o do
+        mesmo acerto num tronco fantasma é fraco, e nenhum dos lados conhece o
+        outro.
+
+        A surface vem do cache compartilhado de `triad_pixel_map`, então o alpha
+        é definido, usado e **devolvido em 255** (§17) — sem cópia. É o mesmo
+        contrato do `_blit_alpha` de `TriadHead`, e ele importa aqui porque o
+        tronco passa a maior parte da luta translúcido: uma cópia de 320×320 por
+        frame seria paga o combate inteiro.
+        """
+        alpha = self._crown_ghost * scale
+        if alpha <= 0.01:
+            return
+        if alpha >= 1.0:
+            surface.blit(frame, origin)
+            return
+        frame.set_alpha(int(255 * alpha))
+        surface.blit(frame, origin)
+        frame.set_alpha(255)
 
     def _draw_pulse(self, surface: pygame.Surface) -> None:
         """A batida do Pulso, vista no núcleo do peito. `draw` só lê (§3).

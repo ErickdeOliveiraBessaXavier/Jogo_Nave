@@ -437,12 +437,12 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Criatura Gelatinosa Alienígena",
         score_multiplier=1.6,
     ),
-    # ── LAYOUTS DOS MID-BOSSES DA CIDADE ─────────────────────────────────────
-    # Estas entradas definem só o LAYOUT handcrafted (adds/score/nome) das fases de
-    # boss intermediárias da Cidade. A CLASSE do chefe vem do WORLD_BOSS_ROADMAP
-    # (world_config.py) via get_boss_for_level e é injetada pelo pipeline — fonte
-    # única. Trocar o boss = editar o roadmap, não aqui. Adds da própria linhagem
-    # CITY (passam pelo allowlist de tema sem fallback).
+    # ── LAYOUTS DAS FASES DE BOSS DA CIDADE ──────────────────────────────────
+    # Estas entradas definem só o LAYOUT handcrafted (adds/score/nome) das três
+    # fases de boss da Cidade (dois mid + o final). A CLASSE do chefe vem do
+    # WORLD_BOSS_ROADMAP (world_config.py) via get_boss_for_level e é injetada
+    # pelo pipeline — fonte única. Trocar o boss = editar o roadmap, não aqui.
+    # Adds da própria linhagem CITY (passam pelo allowlist de tema sem fallback).
     # Nível 30 (estágio 5): City Boss 1
     30: LevelConfig(
         level_number=30,
@@ -473,20 +473,22 @@ FIXED_LEVELS: dict[int, LevelConfig] = {
         theme_name="Colosso Cibernético",
         score_multiplier=1.55,
     ),
-    # Nível 37 (estágio 12): City Boss 3
-    37: LevelConfig(
-        level_number=37,
+    # Nível 40 (estágio 15): City Boss 3 — FINAL do mundo. Tem layout aqui (e não
+    # os adds paramétricos de `_create_world_boss_level`) para o final da Cidade
+    # fechar com a linhagem CITY pura, como as duas fases de boss anteriores.
+    40: LevelConfig(
+        level_number=40,
         enemy_spawn_config={
             CityDrone: 0.9,
             SplitterTank: 10.0,
             TeslaTwin: 11.0,
         },
-        enemies_to_clear=320,
+        enemies_to_clear=340,
         mines_enabled=False,
         formations_enabled=True,
         formation_types=["spiral_circle", "spiral_v", "spiral_square"],
         theme_name="Reator Instável",
-        score_multiplier=1.6,
+        score_multiplier=1.7,
     ),
 }
 

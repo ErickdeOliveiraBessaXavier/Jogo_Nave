@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import colorsys
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
@@ -42,6 +43,17 @@ PART_DIRS: Dict[str, str] = {
     "right": "Cabeça_Direita",
 }
 
+# Subpastas de ANIMAÇÃO dentro da pasta de uma parte. Só as Vozes as têm: a Coroa
+# não morre nem volta em separado — ela É o boss, e a morte dela é a morte da
+# luta. Parte sem a subpasta devolve sequência vazia e o render cai no caminho
+# antigo, sem quebrar (ver `PartSprites`).
+#
+# Elas ficam FORA do `glob("*.png")` da carga dos frames de repouso porque o glob
+# não é recursivo — é o que impede os 8 frames de desintegração de entrarem no
+# loop de respiração como se fossem poses idle.
+DYING_DIR: str = "Morrendo"
+RETURN_DIR: str = "Retorno"
+
 # ── Espaço do sprite (64×64) ──────────────────────────────────────────────────
 FRAME: int = 64
 # 5 = 1,25× a escala original (4). Múltiplo INTEIRO de propósito: escala
@@ -54,6 +66,18 @@ PIXEL_SCALE: int = 5
 # 2,5 fps com o loop de ida e volta (`_pingpong`) dá 1,6s por ciclo — o ritmo
 # de uma criatura serena flutuando.
 ANIM_FPS: float = 2.5
+
+# Cadência da DESINTEGRAÇÃO (`Morrendo`, 8 frames). É ONE-SHOT, não loop: a
+# 12 fps a queda dura 0,67s. Rápida o bastante para não disputar a atenção com a
+# irmã que ainda está viva — a Voz cai enquanto o jogador já mira a outra — e
+# longa o bastante para ele LER a cabeça se desfazendo e entender que aquele
+# soquete ficou vazio, em vez de a peça simplesmente sumir num frame.
+#
+# A remontagem (`Retorno`) NÃO tem cadência própria de propósito: ela é mapeada
+# pelo progresso do REMAT (ver `returning_frame`), então o sprite e o relógio do
+# portão contam a mesma história. Um segundo relógio aqui bateria com o do
+# portão em vez de somar (§14).
+DYING_FPS: float = 12.0
 
 # Caixa de conteúdo: união dos bboxes das três partes. É ela — e não a tela de
 # 64×64 — que define `w`/`h` do boss, para o `rect` não carregar margem vazia
@@ -90,7 +114,14 @@ def _rel(sx: float, sy: float) -> tuple[float, float]:
 # o corpo: o centroide do sprite inteiro cairia no tronco, 6px abaixo do rosto.
 CROWN_HEAD_CENTER = _rel(31.5, 26.4)
 HALO_CENTER = _rel(31.5, 8.0)
-CORE_CENTER = _rel(31.5, 44.0)
+# O núcleo é MEDIDO no aglomerado branco do peito, não estimado pela banda: o
+# losango brilhante ocupa x 30..33, y 47..50 (centroide exato 31,5 / 48,5). O
+# valor antigo (y 44,0) vinha da faixa "núcleo em ~42..46" do comentário acima e
+# caía 4,5px ACIMA da orb — 22px de tela, meio corpo de esfera — então o Pulso, a
+# Chuva e as esferas da Coroa nasciam do metal liso em vez de saírem da luz que o
+# sprite desenha. É o mesmo ponto para o spawn e para o clarão de `_draw_pulse`,
+# que é o que mantém "a fonte pulsa e o anel sai dela" legível como um evento só.
+CORE_CENTER = _rel(31.5, 48.5)
 # As laterais são DERIVADAS da arte por `part_anchor()` — ver a explicação lá.
 
 # Raios em pixels de tela. **Não são mais a área de dano** — essa saiu para a
@@ -120,6 +151,38 @@ CYAN_DIM = (24, 116, 130)
 CYAN_DARK = (12, 42, 49)
 ORANGE = (240, 128, 64)
 ORANGE_DIM = (150, 74, 34)
+# Paleta da explosão de uma Voz, DERIVADA do laranja do telégrafo em vez de
+# repetir números: é o mesmo laranja do frame `Atacando`, e a morte da cabeça
+# precisa fechar o círculo que o wind-up abriu ("laranja = esta Voz está em
+# jogo"). Com a explosão padrão do jogo (amarelo→vermelho) a queda saía na cor
+# de qualquer inimigo comum e não se ligava a nada do boss.
+#
+# Ordem [morte → nascimento]: `Explosion._get_color` indexa por `life_ratio`, e
+# 1.0 é a partícula recém-criada — daí o clarão quente ficar no FIM da lista.
+# DOIS TONS, não três luminosidades do mesmo. A primeira versão empilhava
+# ORANGE_DIM → ORANGE → clarão, que são o MESMO matiz (20,7° / 21,8° / 26,9°:
+# 6,2° de amplitude) — o olho lê isso como uma mancha laranja chapada, não como
+# fogo. A explosão padrão do jogo percorre 60° (amarelo → vermelho), e é essa
+# viagem de matiz que dá volume a ela.
+#
+# Aqui a viagem é de ~29°, entre um vermelho-tijolo de brasa e um âmbar quente,
+# passando pelo laranja do telégrafo. Fica longe o bastante para os dois tons se
+# distinguirem e perto o bastante para nenhum deles virar "amarelo" ou
+# "vermelho" — a explosão tem que continuar sendo reconhecivelmente a cor do
+# frame `Atacando`.
+#
+# `ORANGE` fica no MEIO de propósito: é o tom que domina a leitura (a paleta é
+# interpolada, então o miolo é o que mais aparece), e é ele que amarra a morte
+# da Voz ao wind-up que a anunciava.
+#
+# Ordem [morte → nascimento]: `Explosion._get_color` indexa por `life_ratio`, e
+# 1.0 é a partícula recém-criada.
+VOICE_DEATH_PALETTE: tuple[tuple[int, int, int], ...] = (
+    (158, 44, 16),     # tom ESCURO — brasa vermelho-tijolo, apagando
+    ORANGE,            # o laranja do wind-up, âncora da identidade
+    (255, 202, 116),   # tom CLARO — âmbar do clarão de impacto
+)
+
 GEM_WHITE = (255, 255, 255)
 GEM_HOT = (255, 90, 60)
 
@@ -146,6 +209,22 @@ GEM_HOT = (255, 90, 60)
 # afina nas linhas 35-36. Recortado por máscara, esse vão vira uma FRESTA
 # horizontal atravessável no meio da cabeça — o tiro passa reto e o jogador não
 # tem como saber por quê. Retângulo cheio é previsível, e é o que o desenho pede.
+# Retângulos no espaço do sprite, (x, y, w, h), medidos sobre
+# `Exemplo_Área_Colisão.jpeg` (o desenho de referência alinhou com o sprite a
+# 100%). A da direita saiu da imagem; a da esquerda é o espelho exato (x' = 63-x).
+#
+# **A região é SÓLIDA — não é interseccionada com a máscara do sprite.** A Coroa
+# segue por pixel, as Vozes não, e a diferença é deliberada: o rosto tem um vão de
+# uma linha inteira na altura da "boca" (linha 32, onde só o filamento aparece) e
+# afina nas linhas 35-36. Recortado por máscara, esse vão vira uma FRESTA
+# horizontal atravessável no meio da cabeça — o tiro passa reto e o jogador não
+# tem como saber por quê. Retângulo cheio é previsível, e é o que o desenho pede.
+#
+# **Não recorte isto para "só a coluna externa".** Foi tentado, para impedir que
+# a Voz fosse ferida pela nuca quando o tronco virou atravessável; o efeito foi
+# apagar o Γ que o desenho de referência define — a testa é metade da área de
+# colisão autoral. Quem protege a nuca é o TORSO, parando a bala (ver
+# `TriadBoss.crown_tangible`), não um recorte na Voz.
 HEAD_DAMAGE_RECTS: Dict[str, tuple[tuple[int, int, int, int], ...]] = {
     # testa: x cheio, y 16..19     rosto: coluna EXTERNA, y 20..37
     "left": ((8, 16, 15, 4), (8, 20, 4, 18)),
@@ -211,6 +290,50 @@ class PartSprites:
     # tela e não está aqui. Área de dano e render são contratos separados.
     idle_masks: tuple[pygame.mask.Mask, ...]
     attack_mask: pygame.mask.Mask | None
+    # DESINTEGRAÇÃO e REMONTAGEM — as duas sequências de `Morrendo/` e `Retorno/`.
+    # Não têm máscara própria e isso é deliberado: a área de dano das Vozes é a
+    # região retangular fixa de `HEAD_DAMAGE_RECTS`, igual em todo frame, e nos
+    # dois estados a pergunta de colisão já foi respondida antes de chegar ao
+    # sprite (a cabeça desintegrando não para tiro; a brasa usa a região de
+    # sempre). Área de dano e render seguem contratos separados.
+    dying: tuple[pygame.Surface, ...]
+    returning: tuple[pygame.Surface, ...]
+    # Só a REMONTAGEM ganha cópia de flash: a brasa é atacável, a desintegração
+    # não. Whitenizar os 8 frames de queda seriam ~3 MB de surface por Voz que
+    # nada jamais pediria.
+    white_returning: tuple[pygame.Surface, ...]
+
+    @property
+    def dying_duration(self) -> float:
+        """Segundos da desintegração inteira; 0.0 se a parte não tem a arte."""
+        return len(self.dying) / DYING_FPS
+
+    def dying_frame(self, index: int) -> pygame.Surface | None:
+        """Frame da queda. Sequência ONE-SHOT — sem `%` e sem pingpong.
+
+        O último frame SEGURA se o índice passar do fim, em vez de voltar ao
+        começo: quem chama pode estourar por um frame no arredondamento do dt, e
+        a cabeça reiniciando a explosão nesse frame é bem pior do que ela ficar
+        parada num rastro que já está quase vazio.
+        """
+        if not self.dying:
+            return None
+        return self.dying[min(max(0, index), len(self.dying) - 1)]
+
+    def returning_frame(self, progress: float, white: bool = False) -> pygame.Surface | None:
+        """Frame da remontagem para um PROGRESSO de REMAT (0→1), não para um tempo.
+
+        Mapear pelo progresso é o que faz o sprite ser a mesma barra que o pip da
+        HUD e que o alpha da brasa: os três leem o relógio do portão, então a
+        cabeça termina de se montar exatamente quando ela volta a ser sólida.
+        Um relógio de animação próprio andaria em outro passo e a Voz completaria
+        a arte antes ou depois de fechar o portão.
+        """
+        pool = self.white_returning if white else self.returning
+        if not pool:
+            return None
+        index = int(progress * len(pool))
+        return pool[min(max(0, index), len(pool) - 1)]
 
     def frame(self, index: int, attacking: bool, white: bool = False) -> pygame.Surface | None:
         if attacking:
@@ -255,6 +378,29 @@ def _whiten(surface: pygame.Surface) -> pygame.Surface:
     return white
 
 
+_FRAME_NUMBER = re.compile(r"(\d+)")
+
+
+def _frame_order(path: Path) -> tuple[int, str]:
+    """Chave de ordenação NUMÉRICA para os frames de uma sequência.
+
+    A arte numera entre parênteses (`Cabeça_Direita_Morrendo (1).png` …`(8)`), e
+    ordenar essas strings alfabeticamente só acerta enquanto os números tiverem
+    um dígito: com um `(10)` na pasta, ele viria antes do `(2)` e a animação
+    tocaria embaralhada — sem erro, sem aviso, só uma queda que não faz sentido.
+    O número decide; o nome só desempata.
+    """
+    found = _FRAME_NUMBER.findall(path.stem)
+    return (int(found[-1]) if found else 0, path.stem)
+
+
+def _sequence(directory: Path) -> List[pygame.Surface]:
+    """Frames escalados de uma subpasta de animação, em ordem. Vazio se não existe."""
+    if not directory.is_dir():
+        return []
+    return [_scaled(path) for path in sorted(directory.glob("*.png"), key=_frame_order)]
+
+
 def load_part(part: str) -> PartSprites:
     """Sprites de uma parte, carregados e escalados uma única vez por processo.
 
@@ -280,6 +426,27 @@ def load_part(part: str) -> PartSprites:
 
     # Parte COM região declarada (as Vozes) usa o retângulo cheio; parte sem ela
     # (a Coroa) usa a silhueta por pixel do próprio frame.
+    # As duas sequências vivem em subpastas e por isso escaparam do glob acima.
+    # Elas compartilham a MESMA tela de 64×64 dos frames de repouso (medido: os
+    # bboxes de `Morrendo`/`Retorno` caem sobre o da parte), então o render as
+    # blita na origem de sempre — nenhum offset de animação a calibrar.
+    dying = _sequence(directory / DYING_DIR)
+    # A REMONTAGEM é guardada AO CONTRÁRIO da numeração dos arquivos, e isso não
+    # é engano: as duas sequências da arte foram numeradas no mesmo sentido — o
+    # da DESMONTAGEM. Medido (soma da diferença por pixel contra `01.png`, a pose
+    # de repouso):
+    #
+    #     Morrendo (1) → 14 014      Retorno (1) → 47 538   ← mais perto do repouso
+    #     Morrendo (8) → 93 524      Retorno (4) → 80 085   ← mais desfeito
+    #
+    # Ou seja, `Morrendo` já sai do repouso e se desfaz (toca direto), enquanto
+    # `Retorno` CHEGA ao repouso no frame 1. Tocada na ordem do nome, a volta
+    # seria a cabeça se despedaçando de novo — bem no momento em que ela deveria
+    # estar se recompondo. Invertida aqui, na carga, o resto do código lê a
+    # sequência no sentido da história: índice 0 = brasa crua, último = pronta
+    # para virar sólida.
+    returning = list(reversed(_sequence(directory / RETURN_DIR)))
+
     rects = HEAD_DAMAGE_RECTS.get(part)
     region = _region_mask(rects) if rects else None
 
@@ -293,6 +460,9 @@ def load_part(part: str) -> PartSprites:
         white_attack=_whiten(attack) if attack is not None else None,
         idle_masks=tuple(damage_mask(f) for f in idle),
         attack_mask=damage_mask(attack) if attack is not None else None,
+        dying=tuple(dying),
+        returning=tuple(returning),
+        white_returning=tuple(_whiten(f) for f in returning),
     )
     _part_cache[part] = sprites
     return sprites

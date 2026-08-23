@@ -49,6 +49,23 @@ Write-Host "== Re-encode de MP3 -> ${Kbps}k CBR  |  modo: $modo ==" -ForegroundC
 Write-Host "   (pulando arquivos ja <= ${Kbps} kbps)`n"
 
 $arquivos = Get-ChildItem $Pasta -Recurse -Filter *.mp3
+
+# A musica virou OGG Vorbis (~131k, derivada dos masters do git) e nao ha mais
+# .mp3 aqui. Este script re-encoda MP3->MP3 e portanto nao tem mais o que fazer:
+# sem esta guarda ele imprimiria "0 convertidos" e sairia com sucesso, enquanto
+# o BUILD.md manda roda-lo para "reduzir o tamanho do audio" - o operador
+# acreditaria ter encolhido algo.
+#
+# Se um dia for preciso mudar o tamanho da musica do desktop, NAO re-encode o
+# .ogg do repo (perda sobre perda): re-derive dos masters, que continuam no
+# historico do git sob os caminhos antigos (game/assets/audio/themes/...,
+# game/assets/audio/bosses/...), com ffmpeg -c:a libvorbis -q:a <n>.
+if ($arquivos.Count -eq 0) {
+    Write-Host "Nada a fazer: nao ha .mp3 em $Pasta." -ForegroundColor Yellow
+    Write-Host "A musica agora e OGG Vorbis ~131k, ja em qualidade de distribuicao." -ForegroundColor Yellow
+    Write-Host "Para mudar o alvo, re-derive dos masters no historico do git (ver comentario no topo)." -ForegroundColor DarkGray
+    exit 0
+}
 $tmp = Join-Path $env:TEMP "reencode_tmp.mp3"
 $antesTotal = 0.0; $depoisTotal = 0.0; $convertidos = 0; $pulados = 0
 

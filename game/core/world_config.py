@@ -129,7 +129,7 @@ def _get_worlds() -> dict[int, WorldConfig]:
             primary_color=(150, 50, 200),  # Roxo neon
             secondary_color=(0, 255, 255),  # Cyan elétrico
             start_level=26,
-            end_level=40,  # 15 estágios para acomodar os 4 bosses da Cidade (ver WORLD_BOSS_ROADMAP)
+            end_level=40,  # 15 estágios para acomodar os 3 bosses da Cidade (ver WORLD_BOSS_ROADMAP)
             boss_level=40,  # nível FINAL. Bosses (mid+final) no WORLD_BOSS_ROADMAP.
             # CITY usa a própria linhagem (enemies/city); o tuning de spawn/
             # frequência mora em pipeline.py/procedural.py (_configure_city_spawn,
@@ -215,13 +215,14 @@ def _get_boss_roadmap() -> dict[int, tuple[BossSlot, ...]]:
             BossSlot(20, "Meteoro Gigante", "implemented", GiantMeteorBoss),
             BossSlot(25, "Slime (final)", "implemented", SlimeBoss),
         ),
-        3: (  # CITY — primeiro chefe nativo implementado; resto placeholder
+        3: (  # CITY — 3 bosses: dois nativos + o final ainda placeholder
             BossSlot(
                 30, "Metropolis Overlord", "implemented", MetropolisOverlordBoss
             ),
             BossSlot(34, "A Tríade", "implemented", TriadBoss),
-            BossSlot(37, "City Boss 3", "placeholder", SlimeBoss),
-            BossSlot(40, "City Boss 4 (final)", "placeholder", GiantMeteorBoss),
+            # Nome definitivo já decidido; a classe nativa ainda não existe, por
+            # isso o status segue "placeholder" com o GiantMeteorBoss no lugar.
+            BossSlot(40, "Bobina Zênite (final)", "placeholder", GiantMeteorBoss),
         ),
         4: (  # VOLCANIC — placeholder até o chefe nativo do Vulcão
             BossSlot(50, "Boss do Vulcão (final)", "placeholder", SlimeBoss),
@@ -244,11 +245,15 @@ def _get_procedural_sector_boss(
 
     Reusa os chefes existentes, rotacionando por OCORRÊNCIA do tema (cada 4
     setores o tema se repete → `sector_idx // 4`) para dar variedade entre
-    setores do mesmo tema. CITY e VOLCANIC ainda não têm chefes nativos: usam
-    um placeholder temporário até os definitivos (ver
+    setores do mesmo tema. VOLCANIC ainda não tem chefe nativo: usa um
+    placeholder temporário até o definitivo (ver
     memory/level-progression-review-backlog).
     """
     # Imports locais (mesmo motivo de _get_worlds: evitar import circular).
+    from ..entities.bosses.city.metropolis_overlord_boss import (
+        MetropolisOverlordBoss,
+    )
+    from ..entities.bosses.city.triad_boss import TriadBoss
     from ..entities.bosses.cloud_archmage_boss import CloudArchmageBoss
     from ..entities.bosses.giant_meteor_boss import GiantMeteorBoss
     from ..entities.bosses.mountain_serpent_boss import MountainSerpentBoss
@@ -259,7 +264,11 @@ def _get_procedural_sector_boss(
         # Montanhas tem 3 chefes próprios → rotaciona para variedade entre setores.
         WorldTheme.MOUNTAINS: (StoneGolemBoss, MountainSerpentBoss, CloudArchmageBoss),
         WorldTheme.STARFIELD: (GiantMeteorBoss,),  # chefe espacial (meteoro gigante)
-        WorldTheme.CITY: (GiantMeteorBoss,),  # TEMP até boss nativo do CITY
+        # Cidade: chefes nativos da linhagem CITY. A Bobina Zênite (slot 40) entra
+        # aqui como terceiro quando a classe existir — hoje o mundo nomeado ainda
+        # a resolve por placeholder, e um placeholder não pertence a este roster,
+        # que é de identidade de tema.
+        WorldTheme.CITY: (MetropolisOverlordBoss, TriadBoss),
         WorldTheme.VOLCANIC: (SlimeBoss,),  # TEMP até boss nativo do Vulcão
     }
     roster = rosters.get(theme)
@@ -340,7 +349,7 @@ def get_world_for_level(level_number: int) -> WorldConfig:
 
     Níveis 1-10: Mundo 1 (MOUNTAINS)
     Níveis 11-25: Mundo 2 (STARFIELD)
-    Níveis 26-40: Mundo 3 (CITY) — 15 estágios, 4 bosses
+    Níveis 26-40: Mundo 3 (CITY) — 15 estágios, 3 bosses
     Níveis 41-50: Mundo 4 (VOLCANIC)
     Níveis 51+: Rotação de temas procedurais (MOUNTAINS -> STARFIELD -> CITY -> VOLCANIC -> ...)
     """

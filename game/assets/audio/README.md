@@ -19,7 +19,37 @@ game/assets/audio/
     └── bosses/<BOSS_TYPE_NAME>/#   ataques de um boss específico
 ```
 
-Formatos aceitos em qualquer lugar: `.mp3`, `.ogg`, `.wav`.
+Formatos aceitos em qualquer lugar: `.ogg`, `.wav`, `.mp3` — mas **não use MP3**.
+
+| uso | formato | por quê |
+|---|---|---|
+| música (longa, quase sempre loop) | **`.ogg`** | streamada por `mixer.music`; sem padding de encoder, então o loop fecha exato |
+| SFX curto (< ~2 s) | **`.wav`** | `mixer.Sound` já decodifica tudo na carga; PCM é o mais simples e não pesa |
+| SFX longo ou em loop (sirene, ambiência) | **`.ogg`** | mesma ausência de padding; em WAV a ambiência de 44 s custaria ~7,8 MB |
+
+**Por que MP3 não.** O encoder acolchoa o arquivo com silêncio para fechar o
+último bloco, e esse silêncio **sobrevive à decodificação** — medido aqui com
+`pygame.sndarray` antes da migração:
+
+| arquivo | início | fim | efeito |
+|---|---|---|---|
+| toda música | 23 ms | — | soluço a cada volta do loop |
+| `ui/warning` (sirene em loop) | 50 ms | 85 ms | **135 ms de buraco por volta** |
+| `metropolis_overlord_laser` (loop) | 35 ms | 15 ms | 50 ms por volta |
+| SFX one-shot em geral | ~27 ms | — | atraso no ataque do som |
+
+Hoje o repositório não tem nenhum MP3 e todos os arquivos medem **0,0 ms** de
+borda.
+
+**Ao converter, duas armadilhas:**
+
+1. **`-map 0:a:0 -vn`** — os masters têm capa embutida (ID3 APIC). Sem isso o
+   ffmpeg a transforma num stream **Theora** e o multiplexa no OGG. O `ffprobe`
+   não reclama e o libvorbis lê, mas o `stb_vorbis` do SDL_mixer — que é quem o
+   jogo usa — recusa com `VORBIS_invalid_first_page` e a faixa fica **muda**.
+   Pegou 22 de 28 faixas na primeira tentativa da migração.
+2. **A única verificação que vale é `pygame.mixer.music.load()` / `mixer.Sound()`
+   de verdade.** Nem `ffprobe` nem tamanho de arquivo denunciam o caso acima.
 
 ---
 
@@ -127,11 +157,26 @@ Acrescentar `shot_4.wav` entra na rotação sozinho. Declaradas em `SFX_FAMILIES
 
 ## Build: desktop e web
 
-- **Desktop:** `reencode_audio.ps1` re-encoda os MP3 de **música** para 128 kbps
-  CBR (default `game\assets\audio\music`; os SFX ficam fora de propósito — são
-  curtos e já leves). Trava de segurança: recusa rodar com alteração não
-  commitada na pasta, para o original ficar recuperável no git.
+- **Desktop:** nada a fazer. A música já está em **OGG Vorbis ~131 kbps**
+  (`-q:a 4`), derivada dos masters do histórico do git, e é essa a qualidade de
+  distribuição. O `reencode_audio.ps1` (MP3→MP3 128k) ficou obsoleto e agora
+  avisa em vez de rodar em vazio. Para mudar o alvo, **re-derive dos masters** —
+  re-encodar o `.ogg` do repo é perda sobre perda.
 - **Web (pygbag):** `reencode_audio_web.ps1` converte tudo sob `game\assets` para
-  OGG em `web\assets`, **mantendo a extensão original** (`.mp3`/`.wav`) — o SDL
-  no navegador detecta o formato pelo magic byte `OggS`, então nenhum caminho
-  muda. `web/assets/` é gerado e está no `.gitignore`.
+  OGG leve em `web\assets` (música 48k, SFX 64k). A música entra mesmo já sendo
+  OGG: o repo tem ~131k e o web precisa de 48k. Os SFX (`.mp3`/`.wav`) viram
+  conteúdo OGG — o SDL no navegador detecta pelo magic byte `OggS`.
+  `web/assets/` é gerado e está no `.gitignore`.
+
+> **Por que a música é OGG e não MP3.** O MP3 acolchoa o arquivo com silêncio
+> para fechar o último bloco do encoder — medido aqui: **23 ms** no início de
+> cada faixa (`start_time=0.023021`). Numa trilha de fundo isso é inaudível; num
+> **loop** é um soluço a cada volta, e quase toda faixa deste jogo é loop. Os
+> `.ogg` atuais têm `start_time=0.000000`.
+>
+> **Ao converter, use `-map 0:a:0 -vn`.** Os masters têm capa embutida (ID3
+> APIC); sem isso o ffmpeg a transforma num stream **Theora** e o multiplexa no
+> OGG. O `ffprobe` não reclama e o libvorbis lê — mas o `stb_vorbis` do
+> SDL_mixer, que é quem o jogo usa, recusa com `VORBIS_invalid_first_page` e a
+> faixa fica **muda**. Aconteceu em 22 de 28 faixas na primeira tentativa. A
+> única verificação que pega isso é um `pygame.mixer.music.load()` de verdade.

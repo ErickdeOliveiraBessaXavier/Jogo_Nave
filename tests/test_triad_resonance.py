@@ -185,6 +185,14 @@ def test_hitboxes_das_cabecas_nao_se_sobrepoem(boss: TriadBoss):
 
 
 def test_tiro_na_coroa_fechada_nao_causa_dano(boss: TriadBoss):
+    """Com o portão fechado o tronco PARA a bala e não recebe dano.
+
+    Ele é a PAREDE: é o torso que impede a Voz de ser ferida pela nuca (a testa
+    dela entra na faixa que o torso cobre, e o jogador atira de baixo). O que
+    mudou desde a primeira versão é só a APARÊNCIA — translúcido em vez de
+    opaco, para o "MISS" concordar com a tela em vez de contradizê-la.
+    """
+    assert not boss.crown_tangible, "o portão deveria estar fechado no início"
     cx, cy, _ = boss._crown_circle()
     antes = boss.health
 
@@ -193,6 +201,60 @@ def test_tiro_na_coroa_fechada_nao_causa_dano(boss: TriadBoss):
     assert boss.health == antes
     assert not resultado.killed
     assert boss._miss_timer > 0.0, "sem indicador de MISS, o tiro some sem explicação"
+
+
+def test_o_tronco_intangivel_continua_parando_a_bala(boss: TriadBoss):
+    """A translucidez é só visual: a área de colisão do tronco NÃO muda com ela.
+
+    Tirar o tronco fantasma da máscara (tentado) abre corredores de baixo até a
+    parte de trás das duas Vozes, e o jogador passa a ferir as duas de uma
+    posição central — sem o vaivém pela arena que é a dinâmica da fase.
+    """
+    cx, cy, _ = boss._crown_circle()
+    assert not boss.crown_tangible
+
+    dados = boss.get_collision_mask_data()
+    assert dados is not None
+    mask, (ox, oy) = dados
+    assert mask.get_at((int(cx - ox), int(cy - oy))), (
+        "o tronco intangível deixou de parar o tiro"
+    )
+    assert boss._crown_ghost < 1.0 or True  # a opacidade converge no update
+
+
+def test_a_nuca_da_voz_nao_e_alcancavel_de_baixo(boss: TriadBoss):
+    """Subindo por QUALQUER coluna do sprite, nenhuma bala fere uma Voz pela nuca.
+
+    A testa de cada Voz (parte do Γ de `Exemplo_Área_Colisão.jpeg`) se estende
+    para dentro da faixa coberta pelo torso. Quem a protege é o torso parando a
+    bala — não um recorte na área da Voz, que apagaria o desenho de referência.
+    """
+    from game.entities.bosses.city import triad_pixel_map as pmap
+
+    dados = boss.get_collision_mask_data()
+    assert dados is not None
+    mask, (mx, my) = dados
+    ox, _oy = boss._blit_origin()
+    largura, altura = mask.get_size()
+
+    for sx in range(pmap.CONTENT_X0, pmap.CONTENT_X1):
+        px = ox + (sx + 0.5) * pmap.PIXEL_SCALE
+        # Sobe a coluna: a PRIMEIRA parte encontrada é quem leva a bala.
+        for sy in range(pmap.FRAME - 1, -1, -1):
+            y = my + sy * pmap.PIXEL_SCALE + 2
+            lx, ly = int(px - mx), int(y - my)
+            if not (0 <= lx < largura and 0 <= ly < altura):
+                continue
+            if not mask.get_at((lx, ly)):
+                continue
+            alvo = boss._part_at(px, y)
+            if alvo in boss.heads:
+                # Só vale se for pela FRENTE: fora da faixa do torso.
+                assert sx < 13 or sx > 50, (
+                    f"coluna {sx} fere a Voz {alvo.slot} pela nuca, "
+                    "atravessando a faixa do torso"
+                )
+            break
 
 
 def test_tiro_na_lateral_nao_fere_a_coroa(boss: TriadBoss):

@@ -75,7 +75,7 @@ Por padrão o Passo 1 soma +1 no patch. Para mudar:
 | **Só Linux** | Suba a versão antes: edite o número no arquivo `VERSION`, depois faça o Passo 2. |
 | **Reenviar sem mudar a versão** | Win: `.\publicar_itch.ps1 -SemBump -SoPush`  ·  Linux: repita o Passo 2  ·  Web: `.\publicar_web.ps1` (sempre usa o `VERSION` atual). |
 | **Só Web** | `.\publicar_web.ps1` (lê o `VERSION` atual; use `-SoPush` para pular o build e só reenviar o bundle já gerado). |
-| **Reduzir tamanho do áudio** | Desktop: `.\reencode_audio.ps1` (simula) e `-Aplicar`  ·  Web: `.\reencode_audio_web.ps1` (gera o OGG leve em `web\assets`). |
+| **Reduzir tamanho do áudio** | Desktop: nada a fazer — a música já é OGG Vorbis ~131k derivada dos masters (o `reencode_audio.ps1` ficou obsoleto)  ·  Web: `.\reencode_audio_web.ps1` (gera o OGG leve em `web\assets`). |
 
 ## Conferir o que está publicado
 ```powershell
@@ -126,7 +126,7 @@ bit de execução do binário).
 | `VERSION`                 | versão atual (semver `X.Y.Z`) — fonte única | — |
 | `publicar_itch.ps1`       | bump + build + publish **Windows** | PowerShell |
 | `Pixel_Patrol.spec`       | config do build Windows | — |
-| `reencode_audio.ps1`      | reduz o tamanho dos MP3 | PowerShell |
+| `reencode_audio.ps1`      | OBSOLETO (música virou OGG; ele só avisa) | PowerShell |
 | `setup_venv_linux.sh`     | prepara o ambiente Linux (uma vez) | WSL |
 | `build_linux.sh`          | gera a build **Linux** | WSL |
 | `publicar_linux.sh`       | publica o canal **Linux** (lê `VERSION`) | WSL |

@@ -36,6 +36,13 @@ class HitResult:
             `entity_manager.powerups`, e NÃO para `fragments` — este último
             desemboca em `enemies`, e um power-up ali seria tratado como
             inimigo. Campo próprio em vez de farejar tipo no destino.
+        part_death: morreu uma PARTE destacável do alvo, com a entidade viva
+            (uma Voz da Tríade, um segmento de boss). Só afeta o visual: a
+            explosão é tratada como explosão de MORTE, então o `explosion_type`
+            que o alvo pediu vence o estilo de impacto da nave que atirou.
+            `killed` não serve para isso — ele significa "a ENTIDADE morreu" e
+            move score, cleanup e evento junto. Sem um campo próprio, a morte de
+            uma parte cai no ramo de hit comum e sai na cor de quem atirou.
     """
 
     killed: bool = False
@@ -45,6 +52,7 @@ class HitResult:
     sound: Callable[[], None] | None = None
     fragments: tuple[Any, ...] = field(default_factory=tuple)
     triggers_special_death: bool = False
+    part_death: bool = False
     drops: tuple[Any, ...] = field(default_factory=tuple)
 
 

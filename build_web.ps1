@@ -35,8 +35,8 @@ $sfxWeb = @(Get-ChildItem "web\assets\audio\sfx" -Recurse -File -ErrorAction Sil
 $audioWeb = @(Get-ChildItem "web\assets\audio" -Recurse -File -ErrorAction SilentlyContinue)
 $musWeb = @($audioWeb | Where-Object { $_.FullName -notmatch '\\audio\\sfx\\' })
 
-# MUSICA e obrigatoria transcodificada: sao 99 MB de .mp3/.wav no repo contra
-# 47 MB de .ogg. Nao ha versao "crua aceitavel" - sem o reencode, para aqui.
+# MUSICA e obrigatoria transcodificada: sao 98 MB de OGG ~131k no repo contra
+# ~34 MB a 48k. Nao ha versao "crua aceitavel" - sem o reencode, para aqui.
 if ($musWeb.Count -eq 0) {
     Write-Host "ERRO: musica web ausente em web\assets\audio." -ForegroundColor Red
     Write-Host "      Rode antes: .\reencode_audio_web.ps1 (precisa de ffmpeg)" -ForegroundColor Red
@@ -51,7 +51,8 @@ if ($musWeb.Count -eq 0) {
 $sfxRaw = $sfxWeb.Count -eq 0
 if ($sfxRaw) {
     Write-Host ">> SFX web ausentes: usando os ORIGINAIS de game\assets\audio\sfx (+4 MB)." -ForegroundColor Yellow
-    # O plano B so vale para .WAV. O SDL_mixer do pygbag nao decodifica MP3: e
+    # O plano B so vale para .WAV e .OGG. O SDL_mixer do pygbag nao decodifica
+    # MP3: e
     # por isso que o reencode existe e que passamos --disable-sound-format-error
     # (o desenho original era todo o audio ser OGG por CONTEUDO, mantendo o nome
     # .mp3). Enviar um .mp3 de verdade e publicar um som mudo, e a falha e
@@ -83,8 +84,14 @@ Write-Host ">> Limpando staging..." -ForegroundColor Cyan
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path "$stage\game" | Out-Null
 
-Write-Host ">> Copiando codigo + assets (sem .mp3/.wav e __pycache__)..." -ForegroundColor Cyan
-robocopy game "$stage\game" /E /XD __pycache__ /XF *.pyc *.mp3 *.wav /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+# `.ogg` entra na exclusao junto com `.mp3`/`.wav`, e a razao e a mesma: o audio
+# pesado do repo nao vai para o staging - quem o fornece e o overlay de
+# `web\assets` logo abaixo. Desde a migracao da musica para OGG, deixar `.ogg`
+# fora da lista copiaria 98 MB de trilha em qualidade de DESKTOP; e qualquer
+# faixa que o overlay nao cobrisse seria publicada assim, inflando o bundle sem
+# nada reclamar (o overlay so sobrescreve o que ele mesmo gerou).
+Write-Host ">> Copiando codigo + assets (sem audio pesado e __pycache__)..." -ForegroundColor Cyan
+robocopy game "$stage\game" /E /XD __pycache__ /XF *.pyc *.ogg *.mp3 *.wav /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
 
 # Plano B dos SFX: os originais entram ANTES do overlay. Como `$sfxRaw` so e
 # verdadeiro quando web\assets\audio\sfx esta vazio, os dois nunca coexistem -

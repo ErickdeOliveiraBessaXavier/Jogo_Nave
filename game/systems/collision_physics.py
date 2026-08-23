@@ -226,6 +226,12 @@ class CollisionPhysics:
         preserva a identidade de tema dos hostis, inclusive a de quem morre no
         primeiro tiro. None = efeito genérico de sempre.
 
+        "Não-letal" aqui é `killed` OU `part_death`: um boss com partes
+        destacáveis sobrevive à morte de uma delas, então `killed` é False e a
+        queda cairia no ramo de hit comum — a Voz da Tríade explodia na cor da
+        NAVE em vez da dela. `part_death` é o que diz "a entidade vive, mas isto
+        foi uma morte" sem mover score nem cleanup junto.
+
         `impact_scale` (> 1.0 sob Giant Shot) engorda o burst do impacto da nave
         junto com o tiro aumentado. Só afeta o efeito estético NÃO-letal — a
         explosão de morte do hostil segue no tamanho que ele pede.
@@ -258,7 +264,7 @@ class CollisionPhysics:
         result: HitResult = target.on_hit(damage, hit_x, hit_y)
 
         if result.explosion_size > 0:
-            if impact is not None and not result.killed:
+            if impact is not None and not result.killed and not result.part_death:
                 scaled_size = (
                     result.explosion_size
                     if impact_scale == 1.0

@@ -2,12 +2,14 @@
 #  Gera o AUDIO da build WEB (pygbag) em formato OGG.
 #
 #  O pygbag/SDL-no-navegador NAO aceita MP3 -> exige OGG; e WAV (PCM cru) e
-#  pesado demais para download web. Para nao mexer em nenhum caminho no codigo
-#  (que referencia .mp3/.wav), gravamos CONTEUDO OGG mantendo a extensao
-#  original nos SFX (ffmpeg -f ogg). O SDL detecta o formato pelo conteudo
-#  (magic bytes "OggS"), entao toca normalmente.
+#  pesado demais para download web.
 #
-#  Converte TODO .mp3 E .wav sob game\assets (musica + SFX) ->
+#  A MUSICA do repo ja e OGG Vorbis (~131k, derivada dos masters) desde a
+#  migracao de MP3. Ela entra aqui assim mesmo: o web precisa dela a 48k, e o
+#  ganho e de 98 MB para ~34 MB. Os SFX continuam .mp3/.wav e viram conteudo
+#  OGG (o SDL detecta pelos magic bytes "OggS").
+#
+#  Converte TODO .ogg, .mp3 e .wav sob game\assets (musica + SFX) ->
 #  web\assets\<mesmo caminho>. NAO altera os assets desktop.
 #
 #  MUSICA e SFX tem bitrates SEPARADOS, e a razao e de tamanho, nao de gosto:
@@ -50,9 +52,15 @@ if (-not (Test-Path $Origem)) { Write-Host "ERRO: origem nao existe: $Origem" -F
 Write-Host "== Audio WEB (OGG | musica ${MusicKbps}k, sfx ${SfxKbps}k): $Origem -> $Destino ==" -ForegroundColor Cyan
 
 $srcRoot = (Resolve-Path $Origem).Path
-# Varre .mp3 (musica + SFX) E .wav (SFX). Ambos viram conteudo OGG no destino.
+# Varre .ogg (musica), .mp3 e .wav (SFX). Todos viram OGG leve no destino.
+#
+# O .ogg PRECISA entrar mesmo ja sendo OGG: a musica do repo e Vorbis ~131k
+# (qualidade de desktop, derivada dos masters) e o web precisa dela a 48k. Sem
+# .ogg neste filtro a musica inteira era PULADA, `webssetsudio\music` saia
+# vazia e o `build_web.ps1` abortava - ou, pior, reusava um webssets antigo e
+# publicava a trilha de uma versao anterior.
 $arquivos = Get-ChildItem $Origem -Recurse -File |
-    Where-Object { $_.Extension -in '.mp3', '.wav' }
+    Where-Object { $_.Extension -in '.ogg', '.mp3', '.wav' }
 $antes = 0.0; $depois = 0.0; $n = 0
 $musMB = 0.0; $sfxMB = 0.0
 foreach ($f in $arquivos) {
